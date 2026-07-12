@@ -1,7 +1,23 @@
-# Tauri + React + Typescript
+# Claude Terminal
 
-This template should help get you started developing with Tauri, React and Typescript in Vite.
+Lightweight cross-platform desktop terminal for [Claude Code](https://claude.com/claude-code).
+Built with Tauri 2 — small native builds (~10–25 MB) for Windows, macOS and Linux.
 
-## Recommended IDE Setup
+## Features
 
-- [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
+- **Sidebar sessions** — open Claude tabs and native OS shells side by side
+  (Windows: PowerShell/CMD · macOS: Zsh/Bash · Linux: Bash/Zsh/Fish)
+- **Session history** — browse and resume past Claude Code sessions
+- **Usage meter** — today's token consumption per model
+
+## Development
+
+```sh
+pnpm install
+pnpm tauri dev
+```
+
+Tests: `pnpm test` (frontend) · `pnpm test:rust` (backend).
+Release build: `pnpm tauri build`.
+
+Docs live in [docs/](docs/) — start with [architecture](docs/architecture.md).
