@@ -129,153 +129,161 @@ export default function Sidebar({
   onPickFolder, onToggleCollapse,
 }: SidebarProps) {
   const [expanded, setExpanded] = useState(true);
-
-  if (collapsed) {
-    return (
-      <div className="flex flex-col items-center w-11 bg-card border-r border-border shrink-0 overflow-hidden">
-        <div className="flex items-center justify-center h-10 w-full border-b border-border shrink-0">
-          <button
-            className="flex items-center justify-center w-7 h-7 rounded-sm text-muted-foreground hover:text-foreground hover:bg-white/8 border-none cursor-pointer"
-            onClick={onToggleCollapse}
-            title="Show sidebar"
-          >
-            <PanelLeftOpen size={15} />
-          </button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto overflow-x-hidden w-full py-2 flex flex-col items-center gap-1.5 scrollbar-thin">
-          {tabs.map((tab) => {
-            const isActive = !showHistory && tab.id === activeTabId;
-            return (
-              <button
-                key={tab.id}
-                className={cn(
-                  'relative flex items-center justify-center w-8 h-8 rounded-md border-none cursor-pointer bg-transparent',
-                  'transition-colors duration-100',
-                  isActive ? 'bg-white/8 text-foreground' : 'text-muted-foreground hover:bg-white/5 hover:text-foreground',
-                  tab.exited && 'opacity-50',
-                )}
-                onClick={() => onSelectTab(tab.id)}
-                title={tab.name}
-              >
-                {isActive && <span className="absolute left-0 top-1 bottom-1 w-0.5 rounded-full bg-primary" />}
-                {tab.kind === 'claude'
-                  ? <Sparkles size={14} className="shrink-0" />
-                  : <TerminalSquare size={14} className="shrink-0" />}
-              </button>
-            );
-          })}
-        </div>
-
-        <button
-          data-active={showHistory}
-          className={cn(
-            'flex items-center justify-center w-8 h-8 my-1 rounded-md border-none cursor-pointer bg-transparent shrink-0',
-            showHistory ? 'text-foreground bg-white/8' : 'text-muted-foreground hover:text-foreground hover:bg-white/5',
-          )}
-          onClick={onToggleHistory}
-          title="Browse past sessions"
-        >
-          <History size={15} />
-        </button>
-        <button
-          className="flex items-center justify-center w-8 h-8 mb-2 rounded-md border-none cursor-pointer bg-transparent text-muted-foreground hover:text-foreground hover:bg-white/5 shrink-0"
-          onClick={onPickFolder}
-          title={cwd ?? 'Select folder'}
-        >
-          <Folder size={15} />
-        </button>
-      </div>
-    );
-  }
-
   const hue = cwd ? folderHue(cwd) : 0;
 
+  // A single root element (shared across the collapsed/expanded states) lets
+  // the width change animate — swapping to two separate `if`-return roots
+  // would remount the whole sidebar and skip the transition entirely.
   return (
-    <div className="flex flex-col w-[260px] bg-card border-r border-border shrink-0 overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center gap-1.5 h-10 px-2.5 border-b border-border shrink-0">
-        <TerminalSquare size={15} className="text-primary shrink-0" />
-        <span className="text-[12px] font-semibold tracking-wide text-foreground/90 truncate">Claude Terminal</span>
-        <button
-          className="flex items-center justify-center w-6 h-6 ml-auto rounded-sm text-muted-foreground hover:text-foreground hover:bg-white/8 border-none cursor-pointer shrink-0"
-          onClick={onToggleCollapse}
-          title="Hide sidebar"
-        >
-          <PanelLeftClose size={14} />
-        </button>
-      </div>
-
-      <div className="flex-1 overflow-y-auto overflow-x-hidden py-2 scrollbar-thin">
-        {!cwd && (
-          <button
-            className="flex items-center gap-2 w-[calc(100%-8px)] mx-1 mb-1 px-2.5 py-2 rounded-md border border-dashed border-border text-[11px] text-muted-foreground hover:text-foreground hover:border-[#33363f] bg-transparent cursor-pointer font-inherit"
-            onClick={onPickFolder}
-          >
-            <Folder size={13} className="shrink-0" />
-            <span>Select folder…</span>
-          </button>
-        )}
-
-        {cwd && (
-          <div
-            className="mx-2 mb-2 rounded-md border overflow-hidden transition-colors duration-100"
-            style={{ borderColor: `hsla(${hue}, 55%, 58%, 0.22)`, backgroundColor: `hsla(${hue}, 55%, 58%, 0.05)` }}
-          >
-            <div
-              className="relative flex items-center gap-2 w-full text-left px-2.5 py-2 text-[11px] font-semibold text-foreground/90 cursor-pointer"
-              onClick={() => setExpanded((v) => !v)}
-              title={cwd}
+    <div
+      className={cn(
+        'flex flex-col bg-card border-r border-border shrink-0 overflow-hidden',
+        'transition-[width] duration-200 ease-out',
+        collapsed ? 'w-11 items-center' : 'w-[260px]',
+      )}
+    >
+      {collapsed ? (
+        <>
+          <div className="flex items-center justify-center h-10 w-full border-b border-border shrink-0">
+            <button
+              className="flex items-center justify-center w-7 h-7 rounded-sm text-muted-foreground hover:text-foreground hover:bg-white/8 border-none cursor-pointer"
+              onClick={onToggleCollapse}
+              title="Show sidebar"
             >
-              <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: `hsl(${hue} 55% 50%)` }} />
-              <span className="truncate flex-1">{folderName(cwd)}</span>
-              <button
-                className="flex items-center justify-center w-5 h-5 rounded-sm shrink-0 border-none cursor-pointer bg-transparent text-muted-foreground/60 hover:text-foreground hover:bg-white/10"
-                onClick={(e) => { e.stopPropagation(); onPickFolder(); }}
-                title="Change folder"
-              >
-                <FolderOpen size={12} />
-              </button>
-              <ChevronRight size={12} className={cn('shrink-0 text-muted-foreground/60 transition-transform duration-150', expanded && 'rotate-90')} />
-            </div>
+              <PanelLeftOpen size={15} />
+            </button>
+          </div>
 
-            {expanded && (
-              <div className="pb-1">
-                {tabs.map((tab) => (
-                  <TabRow
-                    key={tab.id}
-                    tab={tab}
-                    isActive={!showHistory && tab.id === activeTabId}
-                    onSelectTab={onSelectTab}
-                    onCloseTab={onCloseTab}
-                  />
-                ))}
-                <NewSessionMenu cwd={cwd} shellOptions={shellOptions} onNewClaudeTab={onNewClaudeTab} onNewShellTab={onNewShellTab} />
+          <div className="flex-1 overflow-y-auto overflow-x-hidden w-full py-2 flex flex-col items-center gap-1.5 scrollbar-thin">
+            {tabs.map((tab) => {
+              const isActive = !showHistory && tab.id === activeTabId;
+              return (
+                <button
+                  key={tab.id}
+                  className={cn(
+                    'relative flex items-center justify-center w-8 h-8 rounded-md border-none cursor-pointer bg-transparent',
+                    'transition-colors duration-100',
+                    isActive ? 'bg-white/8 text-foreground' : 'text-muted-foreground hover:bg-white/5 hover:text-foreground',
+                    tab.exited && 'opacity-50',
+                  )}
+                  onClick={() => onSelectTab(tab.id)}
+                  title={tab.name}
+                >
+                  {isActive && <span className="absolute left-0 top-1 bottom-1 w-0.5 rounded-full bg-primary" />}
+                  {tab.kind === 'claude'
+                    ? <Sparkles size={14} className="shrink-0" />
+                    : <TerminalSquare size={14} className="shrink-0" />}
+                </button>
+              );
+            })}
+          </div>
+
+          <button
+            data-active={showHistory}
+            className={cn(
+              'flex items-center justify-center w-8 h-8 my-1 rounded-md border-none cursor-pointer bg-transparent shrink-0',
+              showHistory ? 'text-foreground bg-white/8' : 'text-muted-foreground hover:text-foreground hover:bg-white/5',
+            )}
+            onClick={onToggleHistory}
+            title="Browse past sessions"
+          >
+            <History size={15} />
+          </button>
+          <button
+            className="flex items-center justify-center w-8 h-8 mb-2 rounded-md border-none cursor-pointer bg-transparent text-muted-foreground hover:text-foreground hover:bg-white/5 shrink-0"
+            onClick={onPickFolder}
+            title={cwd ?? 'Select folder'}
+          >
+            <Folder size={15} />
+          </button>
+        </>
+      ) : (
+        <>
+          {/* Header */}
+          <div className="flex items-center gap-1.5 h-10 px-2.5 border-b border-border shrink-0">
+            <TerminalSquare size={15} className="text-primary shrink-0" />
+            <span className="text-[12px] font-semibold tracking-wide text-foreground/90 truncate">Claude Terminal</span>
+            <button
+              className="flex items-center justify-center w-6 h-6 ml-auto rounded-sm text-muted-foreground hover:text-foreground hover:bg-white/8 border-none cursor-pointer shrink-0"
+              onClick={onToggleCollapse}
+              title="Hide sidebar"
+            >
+              <PanelLeftClose size={14} />
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto overflow-x-hidden py-2 scrollbar-thin">
+            {!cwd && (
+              <button
+                className="flex items-center gap-2 w-[calc(100%-8px)] mx-1 mb-1 px-2.5 py-2 rounded-md border border-dashed border-border text-[11px] text-muted-foreground hover:text-foreground hover:border-[#33363f] bg-transparent cursor-pointer font-inherit"
+                onClick={onPickFolder}
+              >
+                <Folder size={13} className="shrink-0" />
+                <span>Select folder…</span>
+              </button>
+            )}
+
+            {cwd && (
+              <div
+                className="mx-2 mb-2 rounded-md border overflow-hidden transition-colors duration-100"
+                style={{ borderColor: `hsla(${hue}, 55%, 58%, 0.22)`, backgroundColor: `hsla(${hue}, 55%, 58%, 0.05)` }}
+              >
+                <div
+                  className="relative flex items-center gap-2 w-full text-left px-2.5 py-2 text-[11px] font-semibold text-foreground/90 cursor-pointer"
+                  onClick={() => setExpanded((v) => !v)}
+                  title={cwd}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: `hsl(${hue} 55% 50%)` }} />
+                  <span className="truncate flex-1">{folderName(cwd)}</span>
+                  <button
+                    className="flex items-center justify-center w-5 h-5 rounded-sm shrink-0 border-none cursor-pointer bg-transparent text-muted-foreground/60 hover:text-foreground hover:bg-white/10"
+                    onClick={(e) => { e.stopPropagation(); onPickFolder(); }}
+                    title="Change folder"
+                  >
+                    <FolderOpen size={12} />
+                  </button>
+                  <ChevronRight size={12} className={cn('shrink-0 text-muted-foreground/60 transition-transform duration-150', expanded && 'rotate-90')} />
+                </div>
+
+                {expanded && (
+                  <div className="pb-1">
+                    {tabs.map((tab) => (
+                      <TabRow
+                        key={tab.id}
+                        tab={tab}
+                        isActive={!showHistory && tab.id === activeTabId}
+                        onSelectTab={onSelectTab}
+                        onCloseTab={onCloseTab}
+                      />
+                    ))}
+                    <NewSessionMenu cwd={cwd} shellOptions={shellOptions} onNewClaudeTab={onNewClaudeTab} onNewShellTab={onNewShellTab} />
+                  </div>
+                )}
               </div>
             )}
+
+            {!cwd && <NewSessionMenu cwd={cwd} shellOptions={shellOptions} onNewClaudeTab={onNewClaudeTab} onNewShellTab={onNewShellTab} />}
           </div>
-        )}
 
-        {!cwd && <NewSessionMenu cwd={cwd} shellOptions={shellOptions} onNewClaudeTab={onNewClaudeTab} onNewShellTab={onNewShellTab} />}
-      </div>
+          <UsageMeter />
 
-      <UsageMeter />
-
-      {/* Footer: history, bottom-anchored */}
-      <button
-        data-active={showHistory}
-        className={cn(
-          'relative flex items-center gap-2 h-9 px-3 border-t border-border text-[12px] cursor-pointer shrink-0',
-          'bg-transparent border-x-0 border-b-0 font-inherit transition-colors duration-100',
-          showHistory ? 'text-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-white/4',
-        )}
-        onClick={onToggleHistory}
-        title="Browse past sessions"
-      >
-        {showHistory && <span className="absolute left-0 top-1.5 bottom-1.5 w-0.5 bg-primary" />}
-        <History size={14} />
-        <span>History</span>
-      </button>
+          {/* Footer: history, bottom-anchored */}
+          <button
+            data-active={showHistory}
+            className={cn(
+              'relative flex items-center gap-2 h-9 px-3 border-t border-border text-[12px] cursor-pointer shrink-0',
+              'bg-transparent border-x-0 border-b-0 font-inherit transition-colors duration-100',
+              showHistory ? 'text-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-white/4',
+            )}
+            onClick={onToggleHistory}
+            title="Browse past sessions"
+          >
+            {showHistory && <span className="absolute left-0 top-1.5 bottom-1.5 w-0.5 bg-primary" />}
+            <History size={14} />
+            <span>History</span>
+          </button>
+        </>
+      )}
     </div>
   );
 }
