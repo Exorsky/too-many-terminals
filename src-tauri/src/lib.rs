@@ -17,6 +17,7 @@ pub fn run() {
             commands::pty_resize,
             commands::pty_kill,
             commands::list_shells,
+            commands::home_dir,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

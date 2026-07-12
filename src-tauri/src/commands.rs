@@ -85,3 +85,10 @@ pub fn pty_kill(ptys: State<'_, PtyManager>, tab_id: String) {
 pub fn list_shells() -> Vec<ShellOption> {
     all_shell_options(Platform::current())
 }
+
+#[tauri::command]
+pub fn home_dir() -> Result<String, String> {
+    dirs::home_dir()
+        .map(|p| p.to_string_lossy().into_owned())
+        .ok_or_else(|| "could not resolve home directory".to_string())
+}
