@@ -9,6 +9,7 @@ Built with Tauri 2 — small native builds (~10–25 MB) for Windows, macOS and 
   (Windows: PowerShell/CMD · macOS: Zsh/Bash · Linux: Bash/Zsh/Fish)
 - **Session history** — browse and resume past Claude Code sessions
 - **Usage meter** — today's token consumption per model
+- **Workspace persistence** — folder and open tabs continue where you left off next launch
 
 ## Development
 

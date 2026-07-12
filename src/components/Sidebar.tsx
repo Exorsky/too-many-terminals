@@ -1,6 +1,10 @@
-import { Folder, History, PanelLeftClose, PanelLeftOpen, Plus, Sparkles, TerminalSquare, X } from 'lucide-react';
+import { useState } from 'react';
+import {
+  ChevronRight, Folder, FolderOpen, History, PanelLeftClose, PanelLeftOpen,
+  Plus, Sparkles, TerminalSquare, X,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { ShellOption, Tab } from '@/types';
+import { PROJECT_COLORS, type ShellOption, type Tab } from '@/types';
 import UsageMeter from './UsageMeter';
 import {
   DropdownMenu,
@@ -31,11 +35,101 @@ function folderName(cwd: string | null): string | null {
   return cwd.split(/[/\\]/).filter(Boolean).pop() ?? cwd;
 }
 
+/** Stable-per-folder accent color, mirroring the multi-project color scheme
+ *  from the original app (there each project got an assigned hue; here there's
+ *  a single project at a time, so the hue is derived from its path instead). */
+function folderHue(cwd: string): number {
+  let hash = 0;
+  for (let i = 0; i < cwd.length; i++) hash = (hash * 31 + cwd.charCodeAt(i)) >>> 0;
+  return PROJECT_COLORS[hash % PROJECT_COLORS.length].hue;
+}
+
+function NewSessionMenu({ cwd, shellOptions, onNewClaudeTab, onNewShellTab }: {
+  cwd: string | null;
+  shellOptions: ShellOption[];
+  onNewClaudeTab: () => void;
+  onNewShellTab: (shellId: string) => void;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          className={cn(
+            'flex items-center gap-2 w-[calc(100%-8px)] mx-1 my-0.5 px-2 py-1.5 rounded-sm text-[11px] font-inherit',
+            cwd
+              ? 'text-muted-foreground/70 hover:text-foreground hover:bg-white/4 border-none cursor-pointer'
+              : 'text-muted-foreground/30 border-none cursor-not-allowed',
+          )}
+          title={cwd ? 'New session' : 'Select a folder first'}
+          disabled={!cwd}
+        >
+          <Plus size={12} className="shrink-0" />
+          <span>New session</span>
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        <DropdownMenuItem onClick={onNewClaudeTab}>
+          <Sparkles size={13} />
+          <span>Claude</span>
+        </DropdownMenuItem>
+        {shellOptions.length > 0 && <DropdownMenuSeparator />}
+        {shellOptions.map((shell) => (
+          <DropdownMenuItem key={shell.id} onClick={() => onNewShellTab(shell.id)}>
+            <TerminalSquare size={13} />
+            <span>{shell.label}</span>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function TabRow({ tab, isActive, onSelectTab, onCloseTab }: {
+  tab: Tab;
+  isActive: boolean;
+  onSelectTab: (tabId: string) => void;
+  onCloseTab: (tabId: string) => void;
+}) {
+  return (
+    <div
+      className={cn(
+        'group relative flex items-center gap-2 w-[calc(100%-8px)] mx-1 my-0.5 px-2 py-1.5 rounded-sm',
+        'text-[11px] cursor-pointer transition-colors duration-100',
+        isActive
+          ? 'bg-white/8 text-foreground'
+          : 'text-muted-foreground hover:text-foreground hover:bg-white/4',
+        tab.exited && 'opacity-50',
+      )}
+      onClick={() => onSelectTab(tab.id)}
+      title={tab.cwd}
+    >
+      {isActive && <span className="absolute left-0 top-1 bottom-1 w-0.5 rounded-full bg-primary" />}
+      {tab.kind === 'claude'
+        ? <Sparkles size={12} className="shrink-0 text-primary/80" />
+        : <TerminalSquare size={12} className="shrink-0" />}
+      <span className="truncate flex-1">{tab.name}{tab.exited ? ' (exited)' : ''}</span>
+      <button
+        className={cn(
+          'flex items-center justify-center w-4 h-4 rounded-sm shrink-0 border-none cursor-pointer',
+          'bg-transparent text-muted-foreground/60 hover:text-foreground hover:bg-white/10',
+          'opacity-0 group-hover:opacity-100',
+        )}
+        onClick={(e) => { e.stopPropagation(); onCloseTab(tab.id); }}
+        title="Close tab"
+      >
+        <X size={11} />
+      </button>
+    </div>
+  );
+}
+
 export default function Sidebar({
   tabs, activeTabId, shellOptions, showHistory, cwd, collapsed,
   onSelectTab, onCloseTab, onNewClaudeTab, onNewShellTab, onToggleHistory,
   onPickFolder, onToggleCollapse,
 }: SidebarProps) {
+  const [expanded, setExpanded] = useState(true);
+
   if (collapsed) {
     return (
       <div className="flex flex-col items-center w-11 bg-card border-r border-border shrink-0 overflow-hidden">
@@ -95,6 +189,8 @@ export default function Sidebar({
     );
   }
 
+  const hue = cwd ? folderHue(cwd) : 0;
+
   return (
     <div className="flex flex-col w-[260px] bg-card border-r border-border shrink-0 overflow-hidden">
       {/* Header */}
@@ -110,85 +206,57 @@ export default function Sidebar({
         </button>
       </div>
 
-      {/* Current folder */}
-      <button
-        className="flex items-center gap-2 h-8 px-2.5 border-b border-border shrink-0 text-[11px] text-muted-foreground hover:text-foreground hover:bg-white/4 border-none cursor-pointer font-inherit text-left"
-        onClick={onPickFolder}
-        title={cwd ?? 'Select a folder'}
-      >
-        <Folder size={12} className="shrink-0" />
-        <span className="truncate flex-1">{folderName(cwd) ?? 'Select folder…'}</span>
-      </button>
+      <div className="flex-1 overflow-y-auto overflow-x-hidden py-2 scrollbar-thin">
+        {!cwd && (
+          <button
+            className="flex items-center gap-2 w-[calc(100%-8px)] mx-1 mb-1 px-2.5 py-2 rounded-md border border-dashed border-border text-[11px] text-muted-foreground hover:text-foreground hover:border-[#33363f] bg-transparent cursor-pointer font-inherit"
+            onClick={onPickFolder}
+          >
+            <Folder size={13} className="shrink-0" />
+            <span>Select folder…</span>
+          </button>
+        )}
 
-      {/* Session list */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden py-1 scrollbar-thin">
-        {tabs.map((tab) => {
-          const isActive = !showHistory && tab.id === activeTabId;
-          return (
+        {cwd && (
+          <div
+            className="mx-2 mb-2 rounded-md border overflow-hidden transition-colors duration-100"
+            style={{ borderColor: `hsla(${hue}, 55%, 58%, 0.22)`, backgroundColor: `hsla(${hue}, 55%, 58%, 0.05)` }}
+          >
             <div
-              key={tab.id}
-              className={cn(
-                'group relative flex items-center gap-2 w-[calc(100%-8px)] mx-1 my-0.5 px-2 py-1.5 rounded-sm',
-                'text-[11px] cursor-pointer transition-colors duration-100',
-                isActive
-                  ? 'bg-white/8 text-foreground'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-white/4',
-                tab.exited && 'opacity-50',
-              )}
-              onClick={() => onSelectTab(tab.id)}
-              title={tab.cwd}
+              className="relative flex items-center gap-2 w-full text-left px-2.5 py-2 text-[11px] font-semibold text-foreground/90 cursor-pointer"
+              onClick={() => setExpanded((v) => !v)}
+              title={cwd}
             >
-              {isActive && <span className="absolute left-0 top-1 bottom-1 w-0.5 rounded-full bg-primary" />}
-              {tab.kind === 'claude'
-                ? <Sparkles size={12} className="shrink-0 text-primary/80" />
-                : <TerminalSquare size={12} className="shrink-0" />}
-              <span className="truncate flex-1">{tab.name}{tab.exited ? ' (exited)' : ''}</span>
+              <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: `hsl(${hue} 55% 50%)` }} />
+              <span className="truncate flex-1">{folderName(cwd)}</span>
               <button
-                className={cn(
-                  'flex items-center justify-center w-4 h-4 rounded-sm shrink-0 border-none cursor-pointer',
-                  'bg-transparent text-muted-foreground/60 hover:text-foreground hover:bg-white/10',
-                  'opacity-0 group-hover:opacity-100',
-                )}
-                onClick={(e) => { e.stopPropagation(); onCloseTab(tab.id); }}
-                title="Close tab"
+                className="flex items-center justify-center w-5 h-5 rounded-sm shrink-0 border-none cursor-pointer bg-transparent text-muted-foreground/60 hover:text-foreground hover:bg-white/10"
+                onClick={(e) => { e.stopPropagation(); onPickFolder(); }}
+                title="Change folder"
               >
-                <X size={11} />
+                <FolderOpen size={12} />
               </button>
+              <ChevronRight size={12} className={cn('shrink-0 text-muted-foreground/60 transition-transform duration-150', expanded && 'rotate-90')} />
             </div>
-          );
-        })}
 
-        {/* New session */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              className={cn(
-                'flex items-center gap-2 w-[calc(100%-8px)] mx-1 my-0.5 px-2 py-1.5 rounded-sm text-[11px] font-inherit',
-                cwd
-                  ? 'text-muted-foreground/70 hover:text-foreground hover:bg-white/4 border-none cursor-pointer'
-                  : 'text-muted-foreground/30 border-none cursor-not-allowed',
-              )}
-              title={cwd ? 'New session' : 'Select a folder first'}
-              disabled={!cwd}
-            >
-              <Plus size={12} className="shrink-0" />
-              <span>New session</span>
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            <DropdownMenuItem onClick={onNewClaudeTab}>
-              <Sparkles size={13} />
-              <span>Claude</span>
-            </DropdownMenuItem>
-            {shellOptions.length > 0 && <DropdownMenuSeparator />}
-            {shellOptions.map((shell) => (
-              <DropdownMenuItem key={shell.id} onClick={() => onNewShellTab(shell.id)}>
-                <TerminalSquare size={13} />
-                <span>{shell.label}</span>
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+            {expanded && (
+              <div className="pb-1">
+                {tabs.map((tab) => (
+                  <TabRow
+                    key={tab.id}
+                    tab={tab}
+                    isActive={!showHistory && tab.id === activeTabId}
+                    onSelectTab={onSelectTab}
+                    onCloseTab={onCloseTab}
+                  />
+                ))}
+                <NewSessionMenu cwd={cwd} shellOptions={shellOptions} onNewClaudeTab={onNewClaudeTab} onNewShellTab={onNewShellTab} />
+              </div>
+            )}
+          </div>
+        )}
+
+        {!cwd && <NewSessionMenu cwd={cwd} shellOptions={shellOptions} onNewClaudeTab={onNewClaudeTab} onNewShellTab={onNewShellTab} />}
       </div>
 
       <UsageMeter />

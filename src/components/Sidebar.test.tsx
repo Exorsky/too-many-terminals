@@ -92,11 +92,32 @@ describe('Sidebar', () => {
     expect(props.onToggleHistory).toHaveBeenCalled();
   });
 
-  it('shows the current folder name and opens the picker on click', async () => {
+  it('shows the current folder as a card and collapses its tab list on click', async () => {
     const props = renderSidebar({ cwd: 'C:\\Users\\x\\my-project' });
-    const folderButton = screen.getByTitle('C:\\Users\\x\\my-project');
-    expect(folderButton).toHaveTextContent('my-project');
-    await userEvent.click(folderButton);
+    const header = screen.getByTitle('C:\\Users\\x\\my-project');
+    expect(header).toHaveTextContent('my-project');
+
+    // Tabs are visible while the card is expanded (default).
+    expect(screen.getByText('claude-1')).toBeInTheDocument();
+
+    // Clicking the header toggles the accordion, not the folder dialog.
+    await userEvent.click(header);
+    expect(screen.queryByText('claude-1')).not.toBeInTheDocument();
+    expect(props.onPickFolder).not.toHaveBeenCalled();
+
+    await userEvent.click(header);
+    expect(screen.getByText('claude-1')).toBeInTheDocument();
+  });
+
+  it('opens the folder picker only via the dedicated change-folder button', async () => {
+    const props = renderSidebar({ cwd: 'C:\\Users\\x\\my-project' });
+    await userEvent.click(screen.getByTitle('Change folder'));
+    expect(props.onPickFolder).toHaveBeenCalled();
+  });
+
+  it('prompts to select a folder when none is set', async () => {
+    const props = renderSidebar({ cwd: null, tabs: [] });
+    await userEvent.click(screen.getByText('Select folder…'));
     expect(props.onPickFolder).toHaveBeenCalled();
   });
 

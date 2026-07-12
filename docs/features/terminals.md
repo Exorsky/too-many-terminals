@@ -2,10 +2,13 @@
 
 ## Project folder
 
-A working directory must be chosen before any session can start — the sidebar shows
-"Select folder…" (or the current folder's name, with a folder icon) and opens the native
-OS folder picker (`@tauri-apps/plugin-dialog`, `ipc.pickFolder`). "New session" stays
-disabled until a folder is set; every tab spawns with that folder as its `cwd`.
+A working directory must be chosen before any session can start. Once set, the folder
+renders as a card (hue derived from a hash of its path, mirroring the original app's
+per-project color tint) with the tab list as its collapsible body — click the card header
+to expand/collapse, click the dedicated folder icon inside it to reopen the native folder
+picker (`@tauri-apps/plugin-dialog`, `ipc.pickFolder`) and switch projects. Before a folder
+is chosen, a dashed "Select folder…" button takes its place. "New session" stays disabled
+until a folder is set; every tab spawns with that folder as its `cwd`.
 
 ## Sidebar collapse
 
@@ -48,7 +51,11 @@ The sidebar's "New session" menu opens terminal tabs of two kinds:
 ## Tests
 
 - `src/lib/tabs.test.ts` — tab state transitions
-- `src/components/Sidebar.test.tsx` — tab rows, shell menu, folder picker, disabled state, collapse
+- `src/components/Sidebar.test.tsx` — tab rows, shell menu, folder card expand/collapse,
+  change-folder button, disabled state, sidebar collapse
 - `cargo test shell::` / `claude::` — per-platform shell lists and claude command shape
 
 Manual PTY verification checklist: docs/development.md.
+
+See also: [workspace persistence](workspace-persistence.md) for how open tabs survive
+an app restart.
