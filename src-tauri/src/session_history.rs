@@ -1,6 +1,8 @@
+use std::collections::HashSet;
 use std::fs;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 use serde::Serialize;
 use serde_json::Value;
@@ -155,6 +157,48 @@ pub fn delete_session(root: &Path, project_dir: &str, session_id: &str) -> Resul
     }
 }
 
+/// Session ids (jsonl file stems) that already exist for a project — take a
+/// snapshot of this right before spawning a fresh (non-resumed) Claude tab,
+/// then diff against it with `find_new_session` once the CLI has started.
+pub fn existing_session_ids(root: &Path, project_dir: &str) -> HashSet<String> {
+    let dir_path = root.join(encode_project_dir(project_dir));
+    let Ok(entries) = fs::read_dir(&dir_path) else {
+        return HashSet::new();
+    };
+    entries
+        .filter_map(|e| e.ok())
+        .filter(|e| e.path().extension().is_some_and(|ext| ext == "jsonl"))
+        .filter_map(|e| e.path().file_stem().map(|s| s.to_string_lossy().into_owned()))
+        .collect()
+}
+
+/// Finds the session a freshly spawned (non-resumed) Claude tab was assigned,
+/// by looking for a transcript file that didn't exist in `existing` and was
+/// modified at or after `after`. Claude Code creates the file promptly once
+/// the CLI starts, so callers poll this a few times after spawning.
+pub fn find_new_session(
+    root: &Path,
+    project_dir: &str,
+    existing: &HashSet<String>,
+    after: SystemTime,
+) -> Option<String> {
+    let dir_path = root.join(encode_project_dir(project_dir));
+    let entries = fs::read_dir(&dir_path).ok()?;
+    entries
+        .filter_map(|e| e.ok())
+        .filter(|e| e.path().extension().is_some_and(|ext| ext == "jsonl"))
+        .filter_map(|e| {
+            let stem = e.path().file_stem()?.to_string_lossy().into_owned();
+            if existing.contains(&stem) {
+                return None;
+            }
+            let mtime = e.metadata().ok()?.modified().ok()?;
+            (mtime >= after).then_some((stem, mtime))
+        })
+        .max_by_key(|(_, mtime)| *mtime)
+        .map(|(stem, _)| stem)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -275,5 +319,33 @@ mod tests {
         assert!(!path.exists());
         // second delete: already gone, still ok
         assert!(delete_session(tmp.path(), "/p", "gone").is_ok());
+    }
+
+    #[test]
+    fn finds_a_newly_created_session_not_in_the_snapshot() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_session(tmp.path(), "/p", "old", &[r#"{"type":"user","message":{"content":"x"}}"#]);
+        let existing = existing_session_ids(tmp.path(), "/p");
+        assert_eq!(existing.len(), 1);
+
+        let after = SystemTime::now();
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        write_session(tmp.path(), "/p", "new", &[r#"{"type":"user","message":{"content":"y"}}"#]);
+
+        assert_eq!(find_new_session(tmp.path(), "/p", &existing, after), Some("new".to_string()));
+    }
+
+    #[test]
+    fn ignores_files_older_than_after_or_already_known() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_session(tmp.path(), "/p", "old", &[r#"{"type":"user","message":{"content":"x"}}"#]);
+        let existing = existing_session_ids(tmp.path(), "/p");
+
+        // Same file exists but is already in the snapshot — must be ignored.
+        assert_eq!(find_new_session(tmp.path(), "/p", &existing, SystemTime::UNIX_EPOCH), None);
+
+        // A file older than `after` (in the future) must be ignored too.
+        let far_future = SystemTime::now() + std::time::Duration::from_secs(3600);
+        assert_eq!(find_new_session(tmp.path(), "/p", &HashSet::new(), far_future), None);
     }
 }

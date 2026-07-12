@@ -5,10 +5,11 @@ import Terminal from '@/components/Terminal';
 import { disposeTerminal, writeToTerminal } from '@/components/terminalCache';
 import * as ipc from '@/lib/ipc';
 import { initialTabsState, tabsReducer } from '@/lib/tabs';
-import type { SessionHistoryEntry, ShellOption, Tab } from '@/types';
+import type { SavedTab, SessionHistoryEntry, ShellOption, Tab, TabKind } from '@/types';
 
 const INITIAL_COLS = 120;
 const INITIAL_ROWS = 40;
+const SAVE_DEBOUNCE_MS = 300;
 
 export default function App() {
   const [state, dispatch] = useReducer(tabsReducer, initialTabsState);
@@ -17,6 +18,7 @@ export default function App() {
   const [homeDir, setHomeDir] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  const [workspaceLoaded, setWorkspaceLoaded] = useState(false);
 
   useEffect(() => {
     ipc.listShells().then(setShellOptions).catch(() => {});
@@ -34,32 +36,82 @@ export default function App() {
     return () => { unlisten.then((fn) => fn()); };
   }, []);
 
-  const spawnTab = useCallback(
-    (kind: 'claude' | 'shell', shellId: string | null, name: string, resumeSessionId?: string) => {
-      if (!cwd) return;
+  useEffect(() => {
+    const unlisten = ipc.onClaudeSessionResolved((tabId, sessionId) =>
+      dispatch({ type: 'sessionResolved', tabId, sessionId }));
+    return () => { unlisten.then((fn) => fn()); };
+  }, []);
+
+  /** Spawns a tab at an explicit cwd — used both for user-initiated new
+   *  sessions (current cwd) and for restoring the previous workspace (a cwd
+   *  loaded from disk, which hasn't reached React state yet at that point). */
+  const spawnTabAt = useCallback(
+    (atCwd: string, kind: TabKind, shellId: string | null, name: string, resumeSessionId?: string | null) => {
       const tab: Tab = {
         id: crypto.randomUUID(),
         kind,
         name,
         shellId,
-        cwd,
+        cwd: atCwd,
         resumeSessionId: resumeSessionId ?? null,
         exited: false,
       };
       dispatch({ type: 'add', tab });
-      setShowHistory(false);
       ipc.spawnPty({
         tabId: tab.id,
         kind: kind === 'claude' ? 'claude' : shellId!,
-        cwd,
+        cwd: atCwd,
         resumeSessionId: tab.resumeSessionId,
         cols: INITIAL_COLS,
         rows: INITIAL_ROWS,
         onData: (data) => writeToTerminal(tab.id, data),
       }).catch(() => dispatch({ type: 'exited', tabId: tab.id }));
     },
-    [cwd],
+    [],
   );
+
+  const spawnTab = useCallback(
+    (kind: TabKind, shellId: string | null, name: string, resumeSessionId?: string) => {
+      if (!cwd) return;
+      setShowHistory(false);
+      spawnTabAt(cwd, kind, shellId, name, resumeSessionId);
+    },
+    [cwd, spawnTabAt],
+  );
+
+  // Restore the previous workspace (folder + open tabs) once on startup.
+  useEffect(() => {
+    let cancelled = false;
+    ipc.loadWorkspace().then((ws) => {
+      if (cancelled) return;
+      setCollapsed(ws.collapsed);
+      if (ws.cwd) {
+        setCwd(ws.cwd);
+        for (const saved of ws.tabs) {
+          spawnTabAt(ws.cwd, saved.kind, saved.shellId, saved.name, saved.resumeSessionId);
+        }
+      }
+    }).catch(() => {}).finally(() => {
+      if (!cancelled) setWorkspaceLoaded(true);
+    });
+    return () => { cancelled = true; };
+    // Runs once on mount; spawnTabAt has no reactive dependencies.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Persist the workspace (debounced) whenever it changes, once the initial
+  // load has finished — otherwise this would overwrite the saved state with
+  // the empty pre-load state.
+  useEffect(() => {
+    if (!workspaceLoaded) return;
+    const timer = setTimeout(() => {
+      const tabs: SavedTab[] = state.tabs
+        .filter((t) => !t.exited)
+        .map((t) => ({ kind: t.kind, name: t.name, shellId: t.shellId, resumeSessionId: t.resumeSessionId }));
+      ipc.saveWorkspace({ cwd, collapsed, tabs }).catch(() => {});
+    }, SAVE_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [workspaceLoaded, state.tabs, cwd, collapsed]);
 
   const handleNewClaudeTab = useCallback(() => spawnTab('claude', null, 'Claude'), [spawnTab]);
 

@@ -57,3 +57,18 @@ export interface SessionHistoryEntry {
   /** ISO timestamp of the session file's last write. */
   lastUsedIso: string;
 }
+
+// --- Workspace persistence (restores open tabs across app launches) ---
+
+export interface SavedTab {
+  kind: TabKind;
+  name: string;
+  shellId: string | null;
+  resumeSessionId: string | null;
+}
+
+export interface WorkspaceState {
+  cwd: string | null;
+  collapsed: boolean;
+  tabs: SavedTab[];
+}

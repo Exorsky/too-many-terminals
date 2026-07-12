@@ -11,6 +11,7 @@ Feature and architecture docs live in `docs/` — **keep them updated when featu
 - [docs/features/terminals.md](docs/features/terminals.md) — sidebar, tabs, PTY spawning per OS
 - [docs/features/session-history.md](docs/features/session-history.md) — past-session browsing/resume
 - [docs/features/usage-meter.md](docs/features/usage-meter.md) — daily token counter
+- [docs/features/workspace-persistence.md](docs/features/workspace-persistence.md) — restoring folder/tabs across restarts
 - [docs/development.md](docs/development.md) — dev/test/build commands, release process
 
 ## Commands

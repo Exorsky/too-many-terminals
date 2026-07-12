@@ -77,4 +77,11 @@ describe('tabsReducer', () => {
     expect(state.tabs[0].exited).toBe(true);
     expect(state.tabs).toHaveLength(1);
   });
+
+  it('sessionResolved records the learned session id on only that tab', () => {
+    let state = stateWith('a', 'b');
+    state = tabsReducer(state, { type: 'sessionResolved', tabId: 'a', sessionId: 'sess-1' });
+    expect(state.tabs[0].resumeSessionId).toBe('sess-1');
+    expect(state.tabs[1].resumeSessionId).toBeNull();
+  });
 });

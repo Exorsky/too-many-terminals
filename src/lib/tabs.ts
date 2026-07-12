@@ -12,7 +12,8 @@ export type TabsAction =
   | { type: 'close'; tabId: string }
   | { type: 'select'; tabId: string }
   | { type: 'rename'; tabId: string; name: string }
-  | { type: 'exited'; tabId: string };
+  | { type: 'exited'; tabId: string }
+  | { type: 'sessionResolved'; tabId: string; sessionId: string };
 
 export function tabsReducer(state: TabsState, action: TabsAction): TabsState {
   switch (action.type) {
@@ -51,6 +52,14 @@ export function tabsReducer(state: TabsState, action: TabsAction): TabsState {
         ...state,
         tabs: state.tabs.map((t) =>
           t.id === action.tabId ? { ...t, exited: true } : t,
+        ),
+      };
+
+    case 'sessionResolved':
+      return {
+        ...state,
+        tabs: state.tabs.map((t) =>
+          t.id === action.tabId ? { ...t, resumeSessionId: action.sessionId } : t,
         ),
       };
   }

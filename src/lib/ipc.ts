@@ -8,7 +8,7 @@ import { invoke, Channel } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
-import type { SessionHistoryEntry, ShellOption, UsageStats } from '@/types';
+import type { SessionHistoryEntry, ShellOption, UsageStats, WorkspaceState } from '@/types';
 
 export interface SpawnPtyOptions {
   tabId: string;
@@ -51,6 +51,15 @@ export function onPtyExit(callback: (tabId: string) => void): Promise<UnlistenFn
   return listen<{ tabId: string }>('pty-exit', (event) => callback(event.payload.tabId));
 }
 
+/** Fired once a freshly spawned (non-resumed) Claude tab's session id is
+ *  learned from its transcript file, so it can be persisted for `--resume`. */
+export function onClaudeSessionResolved(
+  callback: (tabId: string, sessionId: string) => void,
+): Promise<UnlistenFn> {
+  return listen<{ tabId: string; sessionId: string }>('claude-session-resolved', (event) =>
+    callback(event.payload.tabId, event.payload.sessionId));
+}
+
 export function listShells(): Promise<ShellOption[]> {
   return invoke('list_shells');
 }
@@ -79,4 +88,12 @@ export function getUsageStats(): Promise<UsageStats> {
 
 export function openExternal(url: string): void {
   void openUrl(url);
+}
+
+export function loadWorkspace(): Promise<WorkspaceState> {
+  return invoke('load_workspace');
+}
+
+export function saveWorkspace(state: WorkspaceState): Promise<void> {
+  return invoke('save_workspace', { state });
 }
