@@ -5,6 +5,7 @@ use tauri::{AppHandle, Emitter, State};
 
 use crate::claude::{claude_command, login_shell_path, resume_flags};
 use crate::pty::PtyManager;
+use crate::session_history::{projects_root, SessionHistoryEntry};
 use crate::shell::{all_shell_options, shell_option, Platform, ShellOption};
 
 #[derive(Serialize, Clone)]
@@ -84,6 +85,18 @@ pub fn pty_kill(ptys: State<'_, PtyManager>, tab_id: String) {
 #[tauri::command]
 pub fn list_shells() -> Vec<ShellOption> {
     all_shell_options(Platform::current())
+}
+
+#[tauri::command(async)]
+pub fn list_sessions(project_dir: String) -> Result<Vec<SessionHistoryEntry>, String> {
+    let root = projects_root().ok_or("could not resolve home directory")?;
+    Ok(crate::session_history::list_sessions(&root, &project_dir))
+}
+
+#[tauri::command(async)]
+pub fn delete_session(project_dir: String, session_id: String) -> Result<(), String> {
+    let root = projects_root().ok_or("could not resolve home directory")?;
+    crate::session_history::delete_session(&root, &project_dir, &session_id)
 }
 
 #[tauri::command]

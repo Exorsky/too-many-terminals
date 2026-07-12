@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useReducer, useState } from 'react';
+import SessionHistoryPanel from '@/components/SessionHistoryPanel';
 import Sidebar from '@/components/Sidebar';
 import Terminal from '@/components/Terminal';
 import { disposeTerminal, writeToTerminal } from '@/components/terminalCache';
 import * as ipc from '@/lib/ipc';
 import { initialTabsState, tabsReducer } from '@/lib/tabs';
-import type { ShellOption, Tab } from '@/types';
+import type { SessionHistoryEntry, ShellOption, Tab } from '@/types';
 
 const INITIAL_COLS = 120;
 const INITIAL_ROWS = 40;
@@ -73,6 +74,14 @@ export default function App() {
     dispatch({ type: 'select', tabId });
   }, []);
 
+  const handleResumeSession = useCallback(
+    (entry: SessionHistoryEntry) => {
+      const name = entry.preview.slice(0, 30) || 'Claude';
+      spawnTab('claude', null, name, entry.sessionId);
+    },
+    [spawnTab],
+  );
+
   return (
     <div className="flex h-screen bg-background text-foreground">
       <Sidebar
@@ -94,6 +103,11 @@ export default function App() {
             isVisible={!showHistory && tab.id === state.activeTabId}
           />
         ))}
+        {showHistory && cwd && (
+          <div className="absolute inset-0 bg-background">
+            <SessionHistoryPanel projectDir={cwd} onResume={handleResumeSession} />
+          </div>
+        )}
         {!showHistory && state.tabs.length === 0 && (
           <div className="absolute inset-0 flex items-center justify-center text-muted-foreground text-[12px]">
             Create a session from the sidebar to get started
