@@ -99,6 +99,12 @@ pub fn delete_session(project_dir: String, session_id: String) -> Result<(), Str
     crate::session_history::delete_session(&root, &project_dir, &session_id)
 }
 
+#[tauri::command(async)]
+pub fn get_usage_stats() -> Result<crate::usage::UsageStats, String> {
+    let root = projects_root().ok_or("could not resolve home directory")?;
+    Ok(crate::usage::usage_stats(&root))
+}
+
 #[tauri::command]
 pub fn home_dir() -> Result<String, String> {
     dirs::home_dir()

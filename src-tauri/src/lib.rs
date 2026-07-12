@@ -3,6 +3,7 @@ mod commands;
 mod pty;
 mod session_history;
 mod shell;
+mod usage;
 
 use pty::PtyManager;
 use tauri::Manager;
@@ -21,6 +22,7 @@ pub fn run() {
             commands::home_dir,
             commands::list_sessions,
             commands::delete_session,
+            commands::get_usage_stats,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
