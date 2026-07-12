@@ -32,11 +32,15 @@ function renderSidebar(overrides: Partial<React.ComponentProps<typeof Sidebar>> 
     activeTabId: 'claude-1',
     shellOptions: SHELLS,
     showHistory: false,
+    cwd: 'C:\\Users\\x\\project',
+    collapsed: false,
     onSelectTab: vi.fn(),
     onCloseTab: vi.fn(),
     onNewClaudeTab: vi.fn(),
     onNewShellTab: vi.fn(),
     onToggleHistory: vi.fn(),
+    onPickFolder: vi.fn(),
+    onToggleCollapse: vi.fn(),
     ...overrides,
   };
   render(<Sidebar {...props} />);
@@ -86,5 +90,28 @@ describe('Sidebar', () => {
     const props = renderSidebar();
     await userEvent.click(screen.getByText('History'));
     expect(props.onToggleHistory).toHaveBeenCalled();
+  });
+
+  it('shows the current folder name and opens the picker on click', async () => {
+    const props = renderSidebar({ cwd: 'C:\\Users\\x\\my-project' });
+    const folderButton = screen.getByTitle('C:\\Users\\x\\my-project');
+    expect(folderButton).toHaveTextContent('my-project');
+    await userEvent.click(folderButton);
+    expect(props.onPickFolder).toHaveBeenCalled();
+  });
+
+  it('disables New session until a folder is selected', async () => {
+    const props = renderSidebar({ tabs: [], cwd: null });
+    const button = screen.getByText('New session').closest('button')!;
+    expect(button).toBeDisabled();
+    await userEvent.click(button);
+    expect(props.onNewClaudeTab).not.toHaveBeenCalled();
+  });
+
+  it('collapses to an icon rail and back', async () => {
+    const props = renderSidebar({ collapsed: true });
+    expect(screen.queryByText('New session')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByTitle('Show sidebar'));
+    expect(props.onToggleCollapse).toHaveBeenCalled();
   });
 });

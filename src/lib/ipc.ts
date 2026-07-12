@@ -7,6 +7,7 @@
 import { invoke, Channel } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
+import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import type { SessionHistoryEntry, ShellOption, UsageStats } from '@/types';
 
 export interface SpawnPtyOptions {
@@ -56,6 +57,12 @@ export function listShells(): Promise<ShellOption[]> {
 
 export function homeDir(): Promise<string> {
   return invoke('home_dir');
+}
+
+/** Native folder picker. Resolves null if the user cancels. */
+export async function pickFolder(defaultPath?: string | null): Promise<string | null> {
+  const result = await openDialog({ directory: true, multiple: false, defaultPath: defaultPath ?? undefined });
+  return typeof result === 'string' ? result : null;
 }
 
 export function listSessions(projectDir: string): Promise<SessionHistoryEntry[]> {

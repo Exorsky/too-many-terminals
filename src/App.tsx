@@ -14,12 +14,20 @@ export default function App() {
   const [state, dispatch] = useReducer(tabsReducer, initialTabsState);
   const [shellOptions, setShellOptions] = useState<ShellOption[]>([]);
   const [cwd, setCwd] = useState<string | null>(null);
+  const [homeDir, setHomeDir] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
     ipc.listShells().then(setShellOptions).catch(() => {});
-    ipc.homeDir().then(setCwd).catch(() => {});
+    ipc.homeDir().then(setHomeDir).catch(() => {});
   }, []);
+
+  const handlePickFolder = useCallback(() => {
+    ipc.pickFolder(cwd ?? homeDir).then((picked) => {
+      if (picked) setCwd(picked);
+    }).catch(() => {});
+  }, [cwd, homeDir]);
 
   useEffect(() => {
     const unlisten = ipc.onPtyExit((tabId) => dispatch({ type: 'exited', tabId }));
@@ -89,11 +97,15 @@ export default function App() {
         activeTabId={state.activeTabId}
         shellOptions={shellOptions}
         showHistory={showHistory}
+        cwd={cwd}
+        collapsed={collapsed}
         onSelectTab={handleSelectTab}
         onCloseTab={handleCloseTab}
         onNewClaudeTab={handleNewClaudeTab}
         onNewShellTab={handleNewShellTab}
         onToggleHistory={() => setShowHistory((v) => !v)}
+        onPickFolder={handlePickFolder}
+        onToggleCollapse={() => setCollapsed((v) => !v)}
       />
       <main className="relative flex-1 min-w-0" data-terminal-area>
         {state.tabs.map((tab) => (
@@ -108,7 +120,18 @@ export default function App() {
             <SessionHistoryPanel projectDir={cwd} onResume={handleResumeSession} />
           </div>
         )}
-        {!showHistory && state.tabs.length === 0 && (
+        {!showHistory && state.tabs.length === 0 && !cwd && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-muted-foreground text-[12px]">
+            <span>Select a folder to start a session</span>
+            <button
+              className="px-3 py-1.5 rounded-sm border border-border bg-card text-foreground text-[12px] cursor-pointer hover:bg-white/5"
+              onClick={handlePickFolder}
+            >
+              Choose folder…
+            </button>
+          </div>
+        )}
+        {!showHistory && state.tabs.length === 0 && cwd && (
           <div className="absolute inset-0 flex items-center justify-center text-muted-foreground text-[12px]">
             Create a session from the sidebar to get started
           </div>

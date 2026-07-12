@@ -1,5 +1,18 @@
 # Terminals
 
+## Project folder
+
+A working directory must be chosen before any session can start — the sidebar shows
+"Select folder…" (or the current folder's name, with a folder icon) and opens the native
+OS folder picker (`@tauri-apps/plugin-dialog`, `ipc.pickFolder`). "New session" stays
+disabled until a folder is set; every tab spawns with that folder as its `cwd`.
+
+## Sidebar collapse
+
+The sidebar can be hidden to an 11px icon rail (`PanelLeftClose`/`PanelLeftOpen` toggle,
+`App.tsx` `collapsed` state) — tabs render as icon-only buttons, History and the folder
+picker stay reachable. Matches the original Electron app's collapse behavior.
+
 The sidebar's "New session" menu opens terminal tabs of two kinds:
 
 - **Claude** — runs the `claude` CLI (Claude Code) in a pty.
@@ -35,7 +48,7 @@ The sidebar's "New session" menu opens terminal tabs of two kinds:
 ## Tests
 
 - `src/lib/tabs.test.ts` — tab state transitions
-- `src/components/Sidebar.test.tsx` — tab rows, shell menu
+- `src/components/Sidebar.test.tsx` — tab rows, shell menu, folder picker, disabled state, collapse
 - `cargo test shell::` / `claude::` — per-platform shell lists and claude command shape
 
 Manual PTY verification checklist: docs/development.md.
