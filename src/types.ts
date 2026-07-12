@@ -65,10 +65,13 @@ export interface SavedTab {
   name: string;
   shellId: string | null;
   resumeSessionId: string | null;
+  /** Which open project this tab belongs to. */
+  cwd: string;
 }
 
 export interface WorkspaceState {
-  cwd: string | null;
+  /** Open project folders, in the order they were added. */
+  projects: string[];
   collapsed: boolean;
   tabs: SavedTab[];
 }

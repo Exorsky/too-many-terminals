@@ -5,13 +5,22 @@ import { relativeTime } from '@/lib/relative-time';
 import * as ipc from '@/lib/ipc';
 import { cn } from '@/lib/utils';
 
-interface SessionHistoryPanelProps {
+interface HistoryEntry extends SessionHistoryEntry {
+  /** Which open project this session belongs to. */
   projectDir: string;
-  onResume: (entry: SessionHistoryEntry) => void;
+}
+
+interface SessionHistoryPanelProps {
+  projects: string[];
+  onResume: (projectDir: string, entry: SessionHistoryEntry) => void;
 }
 
 type DayGroup = 'Today' | 'Yesterday' | 'Earlier';
 const DAY_GROUPS: DayGroup[] = ['Today', 'Yesterday', 'Earlier'];
+
+function folderName(dir: string): string {
+  return dir.split(/[/\\]/).filter(Boolean).pop() ?? dir;
+}
 
 function startOfDay(d: Date): number {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
@@ -56,10 +65,11 @@ function highlightMatch(text: string, query: string): React.ReactNode {
   );
 }
 
-export default function SessionHistoryPanel({ projectDir, onResume }: SessionHistoryPanelProps) {
-  const [entries, setEntries] = useState<SessionHistoryEntry[] | null>(null);
+export default function SessionHistoryPanel({ projects, onResume }: SessionHistoryPanelProps) {
+  const [entries, setEntries] = useState<HistoryEntry[] | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
+  const [projectFilter, setProjectFilter] = useState<string>('all');
   const [activeIndex, setActiveIndex] = useState(-1);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -70,25 +80,31 @@ export default function SessionHistoryPanel({ projectDir, onResume }: SessionHis
   useEffect(() => {
     let cancelled = false;
     setEntries(null);
-    ipc.listSessions(projectDir).then((list) => {
-      if (!cancelled) setEntries(list);
-    }).catch(() => {
-      if (!cancelled) setEntries([]);
-    });
+    Promise.all(projects.map((dir) =>
+      ipc.listSessions(dir).then((list) => list.map((e): HistoryEntry => ({ ...e, projectDir: dir })))))
+      .then((lists) => {
+        if (cancelled) return;
+        const merged = lists.flat().sort((a, b) => b.lastUsedIso.localeCompare(a.lastUsedIso));
+        setEntries(merged);
+      })
+      .catch(() => { if (!cancelled) setEntries([]); });
     return () => { cancelled = true; };
-  }, [projectDir]);
+  }, [projects]);
 
   const filteredEntries = useMemo(() => {
     if (!entries) return [];
     const q = query.trim().toLowerCase();
-    if (!q) return entries;
-    return entries.filter((entry) => entry.preview.toLowerCase().includes(q));
-  }, [entries, query]);
+    return entries.filter((entry) => {
+      if (projectFilter !== 'all' && entry.projectDir !== projectFilter) return false;
+      if (!q) return true;
+      return entry.preview.toLowerCase().includes(q) || folderName(entry.projectDir).toLowerCase().includes(q);
+    });
+  }, [entries, query, projectFilter]);
 
   // Entries arrive pre-sorted most-recent-first, so a flat filtered list
   // already matches the Today/Yesterday/Earlier render order below.
   const groupedEntries = useMemo(() => {
-    const map = new Map<DayGroup, SessionHistoryEntry[]>();
+    const map = new Map<DayGroup, HistoryEntry[]>();
     for (const entry of filteredEntries) {
       const g = dayGroup(entry.lastUsedIso, now);
       (map.get(g) ?? map.set(g, []).get(g)!).push(entry);
@@ -98,7 +114,7 @@ export default function SessionHistoryPanel({ projectDir, onResume }: SessionHis
 
   useEffect(() => {
     setActiveIndex(-1);
-  }, [query]);
+  }, [query, projectFilter]);
 
   useEffect(() => {
     if (activeIndex < 0) return;
@@ -106,11 +122,11 @@ export default function SessionHistoryPanel({ projectDir, onResume }: SessionHis
     if (entry) rowRefs.current.get(entry.sessionId)?.scrollIntoView({ block: 'nearest' });
   }, [activeIndex, filteredEntries]);
 
-  const handleDelete = useCallback(async (entry: SessionHistoryEntry) => {
+  const handleDelete = useCallback(async (entry: HistoryEntry) => {
     setPendingDeleteId(null);
     setEntries((prev) => prev?.filter((e) => e.sessionId !== entry.sessionId) ?? prev);
-    await ipc.deleteSession(projectDir, entry.sessionId).catch(() => {});
-  }, [projectDir]);
+    await ipc.deleteSession(entry.projectDir, entry.sessionId).catch(() => {});
+  }, []);
 
   const moveActive = useCallback((delta: number) => {
     setActiveIndex((i) => {
@@ -150,7 +166,7 @@ export default function SessionHistoryPanel({ projectDir, onResume }: SessionHis
         moveActive(-1);
         break;
       case 'Enter':
-        if (active && pendingDeleteId !== active.sessionId) onResume(active);
+        if (active && pendingDeleteId !== active.sessionId) onResume(active.projectDir, active);
         break;
       case 'Delete':
       case 'Backspace':
@@ -164,7 +180,7 @@ export default function SessionHistoryPanel({ projectDir, onResume }: SessionHis
 
   const totalCount = entries?.length ?? 0;
   const shownCount = filteredEntries.length;
-  const isFiltering = query.trim().length > 0;
+  const isFiltering = query.trim().length > 0 || projectFilter !== 'all';
 
   return (
     <div className="flex flex-col h-full overflow-hidden" onKeyDown={handlePanelKeyDown}>
@@ -198,7 +214,7 @@ export default function SessionHistoryPanel({ projectDir, onResume }: SessionHis
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search sessions…"
+              placeholder="Search sessions or folders…"
               autoComplete="off"
               spellCheck={false}
               className="flex-1 min-w-0 bg-transparent border-none outline-none text-[12px] text-foreground placeholder:text-muted-foreground font-inherit"
@@ -213,6 +229,39 @@ export default function SessionHistoryPanel({ projectDir, onResume }: SessionHis
               </button>
             )}
           </div>
+
+          {projects.length > 1 && (
+            <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-thin">
+              <button
+                className={cn(
+                  'shrink-0 whitespace-nowrap text-[11px] rounded-full border px-2.5 py-[3px] cursor-pointer font-inherit transition-colors',
+                  projectFilter === 'all'
+                    ? 'border-primary/40 bg-primary/10 text-foreground'
+                    : 'border-border text-muted-foreground hover:text-foreground hover:border-[#33363f]',
+                )}
+                onClick={() => setProjectFilter('all')}
+              >
+                All folders
+              </button>
+              {projects.map((dir) => {
+                const isActive = projectFilter === dir;
+                return (
+                  <button
+                    key={dir}
+                    className={cn(
+                      'shrink-0 whitespace-nowrap text-[11px] rounded-full border px-2.5 py-[3px] cursor-pointer font-inherit transition-colors',
+                      isActive
+                        ? 'border-primary/40 bg-primary/10 text-foreground'
+                        : 'border-border text-muted-foreground hover:text-foreground hover:border-[#33363f]',
+                    )}
+                    onClick={() => setProjectFilter(isActive ? 'all' : dir)}
+                  >
+                    {folderName(dir)}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
@@ -237,15 +286,17 @@ export default function SessionHistoryPanel({ projectDir, onResume }: SessionHis
         {entries !== null && entries.length > 0 && filteredEntries.length === 0 && (
           <div className="flex flex-col items-center gap-1.5 text-center px-6 py-14 text-muted-foreground">
             <Search size={20} className="text-[#33363f] mb-1" />
-            <div className="text-[12.5px] text-foreground">No sessions match "{query}"</div>
+            <div className="text-[12.5px] text-foreground">
+              No sessions match {query ? `"${query}"` : 'this filter'}
+            </div>
             <div className="text-[11px] max-w-[34ch] leading-relaxed">
-              Try a different search term, or clear the search to see everything.
+              Try a different search term, or clear the filter to see everything.
             </div>
             <button
               className="mt-1 text-[11px] text-primary hover:bg-primary/10 bg-transparent border-none cursor-pointer px-2 py-1 rounded-sm font-inherit"
-              onClick={() => setQuery('')}
+              onClick={() => { setQuery(''); setProjectFilter('all'); }}
             >
-              Clear search
+              Clear filters
             </button>
           </div>
         )}
@@ -275,7 +326,7 @@ export default function SessionHistoryPanel({ projectDir, onResume }: SessionHis
                       isActive && 'bg-white/[0.03]',
                       'hover:bg-white/[0.03]',
                     )}
-                    onClick={() => { if (!confirming) onResume(entry); }}
+                    onClick={() => { if (!confirming) onResume(entry.projectDir, entry); }}
                     onFocus={() => setActiveIndex(globalIndex)}
                   >
                     <span
@@ -289,6 +340,12 @@ export default function SessionHistoryPanel({ projectDir, onResume }: SessionHis
                         {highlightMatch(entry.preview, query)}
                       </div>
                       <div className="flex items-center gap-1.5 text-[10.5px] text-muted-foreground min-w-0">
+                        {projects.length > 1 && (
+                          <>
+                            <span className="truncate shrink text-[#9297a3]">{folderName(entry.projectDir)}</span>
+                            <span className="shrink-0 opacity-50">·</span>
+                          </>
+                        )}
                         <span
                           className="shrink-0 text-[10px] px-1 rounded-sm border border-border bg-white/[0.04]"
                           title={entry.sessionId}
@@ -328,7 +385,7 @@ export default function SessionHistoryPanel({ projectDir, onResume }: SessionHis
                           <button
                             className="flex items-center justify-center w-5 h-5 rounded-sm bg-transparent border-none cursor-pointer text-muted-foreground/60 hover:text-foreground hover:bg-white/[0.07]"
                             title="Resume this session"
-                            onClick={(e) => { e.stopPropagation(); onResume(entry); }}
+                            onClick={(e) => { e.stopPropagation(); onResume(entry.projectDir, entry); }}
                           >
                             <ArrowRight size={12} />
                           </button>

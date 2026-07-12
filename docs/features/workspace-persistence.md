@@ -1,7 +1,8 @@
 # Workspace persistence
 
-The app remembers the current folder, sidebar collapse state, and open tabs across
-restarts, so closing and reopening the app continues where you left off.
+The app remembers every open folder, sidebar collapse state, and every open tab (with
+which folder it belongs to) across restarts, so closing and reopening the app continues
+where you left off.
 
 ## What's saved
 
@@ -10,22 +11,24 @@ restarts, so closing and reopening the app continues where you left off.
 
 ```json
 {
-  "cwd": "C:\\Users\\me\\project",
+  "projects": ["C:\\Users\\me\\project", "C:\\Users\\me\\other"],
   "collapsed": false,
   "tabs": [
-    { "kind": "claude", "name": "Claude", "shellId": null, "resumeSessionId": "…" },
-    { "kind": "powershell", "name": "PowerShell", "shellId": "powershell", "resumeSessionId": null }
+    { "kind": "claude", "name": "Claude", "shellId": null, "resumeSessionId": "…", "cwd": "C:\\Users\\me\\project" },
+    { "kind": "powershell", "name": "PowerShell", "shellId": "powershell", "resumeSessionId": null, "cwd": "C:\\Users\\me\\other" }
   ]
 }
 ```
 
-Exited tabs are dropped before saving. The frontend (`App.tsx`) debounces writes 300ms
-after any change to tabs/cwd/collapsed, via `ipc.saveWorkspace`.
+`projects` is stored separately from `tabs` so a folder with zero open tabs still
+reappears as an (empty) card next launch. Exited tabs are dropped before saving. The
+frontend (`App.tsx`) debounces writes 300ms after any change to tabs/projects/collapsed,
+via `ipc.saveWorkspace`.
 
 ## Restoring on launch
 
-On startup `App.tsx` calls `ipc.loadWorkspace()` once; if a folder was saved, it respawns
-every saved tab at that folder:
+On startup `App.tsx` calls `ipc.loadWorkspace()` once, sets `projects` from the saved
+list, and respawns every saved tab at its own saved `cwd`:
 
 - **Shell tabs** just start fresh (there's no shell state to resume).
 - **Claude tabs** pass `resumeSessionId` as `--resume <id>` if one was captured, so the

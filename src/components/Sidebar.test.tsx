@@ -13,13 +13,15 @@ const SHELLS: ShellOption[] = [
   { id: 'cmd', label: 'Command Prompt', command: 'cmd.exe' },
 ];
 
+const PROJECT = 'C:\\Users\\x\\project';
+
 function makeTab(id: string, overrides: Partial<Tab> = {}): Tab {
   return {
     id,
     kind: 'claude',
     name: id,
     shellId: null,
-    cwd: 'C:\\Users\\x',
+    cwd: PROJECT,
     resumeSessionId: null,
     exited: false,
     ...overrides,
@@ -32,14 +34,15 @@ function renderSidebar(overrides: Partial<React.ComponentProps<typeof Sidebar>> 
     activeTabId: 'claude-1',
     shellOptions: SHELLS,
     showHistory: false,
-    cwd: 'C:\\Users\\x\\project',
+    projects: [PROJECT],
     collapsed: false,
     onSelectTab: vi.fn(),
     onCloseTab: vi.fn(),
     onNewClaudeTab: vi.fn(),
     onNewShellTab: vi.fn(),
     onToggleHistory: vi.fn(),
-    onPickFolder: vi.fn(),
+    onAddProject: vi.fn(),
+    onRemoveProject: vi.fn(),
     onToggleCollapse: vi.fn(),
     ...overrides,
   };
@@ -74,7 +77,7 @@ describe('Sidebar', () => {
     expect(props.onSelectTab).toHaveBeenCalledTimes(1); // close must not also select
   });
 
-  it('offers Claude and every OS shell in the New session menu', async () => {
+  it('offers Claude and every OS shell in the New session menu, scoped to the project', async () => {
     const props = renderSidebar({ tabs: [] });
 
     await userEvent.click(screen.getByText('New session'));
@@ -83,7 +86,7 @@ describe('Sidebar', () => {
     expect(screen.getByText('Command Prompt')).toBeInTheDocument();
 
     await userEvent.click(screen.getByText('Command Prompt'));
-    expect(props.onNewShellTab).toHaveBeenCalledWith('cmd');
+    expect(props.onNewShellTab).toHaveBeenCalledWith(PROJECT, 'cmd');
   });
 
   it('toggles the history panel from the footer', async () => {
@@ -92,10 +95,11 @@ describe('Sidebar', () => {
     expect(props.onToggleHistory).toHaveBeenCalled();
   });
 
-  it('shows the current folder as a card and collapses its tab list on click', async () => {
-    const props = renderSidebar({ cwd: 'C:\\Users\\x\\my-project' });
-    const header = screen.getByTitle('C:\\Users\\x\\my-project');
-    expect(header).toHaveTextContent('my-project');
+  it('shows each folder as its own card and collapses its tab list on click', async () => {
+    renderSidebar();
+    // The card header's folder-name span, not a TabRow (which also has
+    // title=tab.cwd and would collide with a getByTitle query here).
+    const header = screen.getByText('project');
 
     // Tabs are visible while the card is expanded (default).
     expect(screen.getByText('claude-1')).toBeInTheDocument();
@@ -103,30 +107,42 @@ describe('Sidebar', () => {
     // Clicking the header toggles the accordion, not the folder dialog.
     await userEvent.click(header);
     expect(screen.queryByText('claude-1')).not.toBeInTheDocument();
-    expect(props.onPickFolder).not.toHaveBeenCalled();
 
     await userEvent.click(header);
     expect(screen.getByText('claude-1')).toBeInTheDocument();
   });
 
-  it('opens the folder picker only via the dedicated change-folder button', async () => {
-    const props = renderSidebar({ cwd: 'C:\\Users\\x\\my-project' });
-    await userEvent.click(screen.getByTitle('Change folder'));
-    expect(props.onPickFolder).toHaveBeenCalled();
+  it('renders a card per open folder, each scoped to its own tabs', () => {
+    const other = 'C:\\Users\\x\\other';
+    renderSidebar({
+      projects: [PROJECT, other],
+      tabs: [makeTab('a', { cwd: PROJECT }), makeTab('b', { cwd: other })],
+    });
+    expect(screen.getByText('project')).toBeInTheDocument();
+    expect(screen.getByText('other')).toBeInTheDocument();
+    expect(screen.getByText('a')).toBeInTheDocument();
+    expect(screen.getByText('b')).toBeInTheDocument();
   });
 
-  it('prompts to select a folder when none is set', async () => {
-    const props = renderSidebar({ cwd: null, tabs: [] });
+  it('removes a folder via its card button without touching the dialog', async () => {
+    const props = renderSidebar();
+    await userEvent.click(screen.getByTitle('Remove folder'));
+    expect(props.onRemoveProject).toHaveBeenCalledWith(PROJECT);
+    expect(props.onAddProject).not.toHaveBeenCalled();
+  });
+
+  it('offers to add another folder alongside existing ones', async () => {
+    const props = renderSidebar();
+    await userEvent.click(screen.getByText('Add folder…'));
+    expect(props.onAddProject).toHaveBeenCalled();
+  });
+
+  it('prompts to select a folder when none is open', async () => {
+    const props = renderSidebar({ projects: [], tabs: [] });
+    expect(screen.getByText('No folders open')).toBeInTheDocument();
+    expect(screen.queryByText('New session')).not.toBeInTheDocument();
     await userEvent.click(screen.getByText('Select folder…'));
-    expect(props.onPickFolder).toHaveBeenCalled();
-  });
-
-  it('disables New session until a folder is selected', async () => {
-    const props = renderSidebar({ tabs: [], cwd: null });
-    const button = screen.getByText('New session').closest('button')!;
-    expect(button).toBeDisabled();
-    await userEvent.click(button);
-    expect(props.onNewClaudeTab).not.toHaveBeenCalled();
+    expect(props.onAddProject).toHaveBeenCalled();
   });
 
   it('collapses to an icon rail and back', async () => {

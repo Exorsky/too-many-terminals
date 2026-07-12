@@ -14,7 +14,7 @@ const SAVE_DEBOUNCE_MS = 300;
 export default function App() {
   const [state, dispatch] = useReducer(tabsReducer, initialTabsState);
   const [shellOptions, setShellOptions] = useState<ShellOption[]>([]);
-  const [cwd, setCwd] = useState<string | null>(null);
+  const [projects, setProjects] = useState<string[]>([]);
   const [homeDir, setHomeDir] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
@@ -25,11 +25,22 @@ export default function App() {
     ipc.homeDir().then(setHomeDir).catch(() => {});
   }, []);
 
-  const handlePickFolder = useCallback(() => {
-    ipc.pickFolder(cwd ?? homeDir).then((picked) => {
-      if (picked) setCwd(picked);
+  const handleAddProject = useCallback(() => {
+    ipc.pickFolder(projects[projects.length - 1] ?? homeDir).then((picked) => {
+      if (picked) setProjects((prev) => (prev.includes(picked) ? prev : [...prev, picked]));
     }).catch(() => {});
-  }, [cwd, homeDir]);
+  }, [projects, homeDir]);
+
+  const handleRemoveProject = useCallback((dir: string) => {
+    for (const tab of state.tabs) {
+      if (tab.cwd === dir) {
+        ipc.killPty(tab.id);
+        disposeTerminal(tab.id);
+        dispatch({ type: 'close', tabId: tab.id });
+      }
+    }
+    setProjects((prev) => prev.filter((p) => p !== dir));
+  }, [state.tabs]);
 
   useEffect(() => {
     const unlisten = ipc.onPtyExit((tabId) => dispatch({ type: 'exited', tabId }));
@@ -42,9 +53,9 @@ export default function App() {
     return () => { unlisten.then((fn) => fn()); };
   }, []);
 
-  /** Spawns a tab at an explicit cwd — used both for user-initiated new
-   *  sessions (current cwd) and for restoring the previous workspace (a cwd
-   *  loaded from disk, which hasn't reached React state yet at that point). */
+  /** Spawns a tab at an explicit project folder — used for user-initiated new
+   *  sessions and for restoring the previous workspace (folders loaded from
+   *  disk, which haven't reached React state yet at that point). */
   const spawnTabAt = useCallback(
     (atCwd: string, kind: TabKind, shellId: string | null, name: string, resumeSessionId?: string | null) => {
       const tab: Tab = {
@@ -57,6 +68,7 @@ export default function App() {
         exited: false,
       };
       dispatch({ type: 'add', tab });
+      setShowHistory(false);
       ipc.spawnPty({
         tabId: tab.id,
         kind: kind === 'claude' ? 'claude' : shellId!,
@@ -70,26 +82,15 @@ export default function App() {
     [],
   );
 
-  const spawnTab = useCallback(
-    (kind: TabKind, shellId: string | null, name: string, resumeSessionId?: string) => {
-      if (!cwd) return;
-      setShowHistory(false);
-      spawnTabAt(cwd, kind, shellId, name, resumeSessionId);
-    },
-    [cwd, spawnTabAt],
-  );
-
-  // Restore the previous workspace (folder + open tabs) once on startup.
+  // Restore the previous workspace (projects + open tabs) once on startup.
   useEffect(() => {
     let cancelled = false;
     ipc.loadWorkspace().then((ws) => {
       if (cancelled) return;
       setCollapsed(ws.collapsed);
-      if (ws.cwd) {
-        setCwd(ws.cwd);
-        for (const saved of ws.tabs) {
-          spawnTabAt(ws.cwd, saved.kind, saved.shellId, saved.name, saved.resumeSessionId);
-        }
+      setProjects(ws.projects);
+      for (const saved of ws.tabs) {
+        spawnTabAt(saved.cwd, saved.kind, saved.shellId, saved.name, saved.resumeSessionId);
       }
     }).catch(() => {}).finally(() => {
       if (!cancelled) setWorkspaceLoaded(true);
@@ -107,20 +108,23 @@ export default function App() {
     const timer = setTimeout(() => {
       const tabs: SavedTab[] = state.tabs
         .filter((t) => !t.exited)
-        .map((t) => ({ kind: t.kind, name: t.name, shellId: t.shellId, resumeSessionId: t.resumeSessionId }));
-      ipc.saveWorkspace({ cwd, collapsed, tabs }).catch(() => {});
+        .map((t) => ({ kind: t.kind, name: t.name, shellId: t.shellId, resumeSessionId: t.resumeSessionId, cwd: t.cwd }));
+      ipc.saveWorkspace({ projects, collapsed, tabs }).catch(() => {});
     }, SAVE_DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [workspaceLoaded, state.tabs, cwd, collapsed]);
+  }, [workspaceLoaded, state.tabs, projects, collapsed]);
 
-  const handleNewClaudeTab = useCallback(() => spawnTab('claude', null, 'Claude'), [spawnTab]);
+  const handleNewClaudeTab = useCallback(
+    (dir: string) => spawnTabAt(dir, 'claude', null, 'Claude'),
+    [spawnTabAt],
+  );
 
   const handleNewShellTab = useCallback(
-    (shellId: string) => {
+    (dir: string, shellId: string) => {
       const label = shellOptions.find((s) => s.id === shellId)?.label ?? shellId;
-      spawnTab('shell', shellId, label);
+      spawnTabAt(dir, 'shell', shellId, label);
     },
-    [spawnTab, shellOptions],
+    [spawnTabAt, shellOptions],
   );
 
   const handleCloseTab = useCallback((tabId: string) => {
@@ -135,11 +139,11 @@ export default function App() {
   }, []);
 
   const handleResumeSession = useCallback(
-    (entry: SessionHistoryEntry) => {
+    (dir: string, entry: SessionHistoryEntry) => {
       const name = entry.preview.slice(0, 30) || 'Claude';
-      spawnTab('claude', null, name, entry.sessionId);
+      spawnTabAt(dir, 'claude', null, name, entry.sessionId);
     },
-    [spawnTab],
+    [spawnTabAt],
   );
 
   return (
@@ -149,14 +153,15 @@ export default function App() {
         activeTabId={state.activeTabId}
         shellOptions={shellOptions}
         showHistory={showHistory}
-        cwd={cwd}
+        projects={projects}
         collapsed={collapsed}
         onSelectTab={handleSelectTab}
         onCloseTab={handleCloseTab}
         onNewClaudeTab={handleNewClaudeTab}
         onNewShellTab={handleNewShellTab}
         onToggleHistory={() => setShowHistory((v) => !v)}
-        onPickFolder={handlePickFolder}
+        onAddProject={handleAddProject}
+        onRemoveProject={handleRemoveProject}
         onToggleCollapse={() => setCollapsed((v) => !v)}
       />
       <main className="relative flex-1 min-w-0" data-terminal-area>
@@ -167,23 +172,23 @@ export default function App() {
             isVisible={!showHistory && tab.id === state.activeTabId}
           />
         ))}
-        {showHistory && cwd && (
+        {showHistory && projects.length > 0 && (
           <div className="absolute inset-0 bg-background">
-            <SessionHistoryPanel projectDir={cwd} onResume={handleResumeSession} />
+            <SessionHistoryPanel projects={projects} onResume={handleResumeSession} />
           </div>
         )}
-        {!showHistory && state.tabs.length === 0 && !cwd && (
+        {!showHistory && state.tabs.length === 0 && projects.length === 0 && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-muted-foreground text-[12px]">
             <span>Select a folder to start a session</span>
             <button
               className="px-3 py-1.5 rounded-sm border border-border bg-card text-foreground text-[12px] cursor-pointer hover:bg-white/5"
-              onClick={handlePickFolder}
+              onClick={handleAddProject}
             >
               Choose folder…
             </button>
           </div>
         )}
-        {!showHistory && state.tabs.length === 0 && cwd && (
+        {!showHistory && state.tabs.length === 0 && projects.length > 0 && (
           <div className="absolute inset-0 flex items-center justify-center text-muted-foreground text-[12px]">
             Create a session from the sidebar to get started
           </div>

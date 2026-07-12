@@ -1,20 +1,25 @@
 # Terminals
 
-## Project folder
+## Project folders
 
-A working directory must be chosen before any session can start. Once set, the folder
-renders as a card (hue derived from a hash of its path, mirroring the original app's
-per-project color tint) with the tab list as its collapsible body — click the card header
-to expand/collapse, click the dedicated folder icon inside it to reopen the native folder
-picker (`@tauri-apps/plugin-dialog`, `ipc.pickFolder`) and switch projects. Before a folder
-is chosen, a dashed "Select folder…" button takes its place. "New session" stays disabled
-until a folder is set; every tab spawns with that folder as its `cwd`.
+Any number of folders can be open at once (`App.tsx` `projects: string[]`), each rendered
+as its own card in the sidebar — hue assigned sequentially in the order folders were added
+(`projectHue(index)`, same scheme as the original multi-project app), tab list as its
+collapsible body. Click a card's header to expand/collapse just that folder's tabs; click
+the X inside it to remove the folder (kills its open tabs, no confirmation — closing tabs
+isn't destructive, transcripts stay on disk). "Add folder…" (dashed button below the cards,
+or the folder-plus icon in the collapsed rail) opens the native picker
+(`@tauri-apps/plugin-dialog`, `ipc.pickFolder`) and appends a new project; picking an
+already-open folder is a no-op. Each project's "New session" menu is scoped to that
+project — every tab spawns with its owning folder as `cwd`.
 
 ## Sidebar collapse
 
 The sidebar can be hidden to an 11px icon rail (`PanelLeftClose`/`PanelLeftOpen` toggle,
-`App.tsx` `collapsed` state) — tabs render as icon-only buttons, History and the folder
-picker stay reachable. Matches the original Electron app's collapse behavior.
+`App.tsx` `collapsed` state) — tabs render as icon-only buttons (flat across all projects),
+History and "Add folder" stay reachable. Matches the original Electron app's collapse
+behavior, including the width transition (`transition-[width]` on a single shared root
+element — swapping between two early-return roots would remount instead of animating).
 
 The sidebar's "New session" menu opens terminal tabs of two kinds:
 
@@ -51,8 +56,8 @@ The sidebar's "New session" menu opens terminal tabs of two kinds:
 ## Tests
 
 - `src/lib/tabs.test.ts` — tab state transitions
-- `src/components/Sidebar.test.tsx` — tab rows, shell menu, folder card expand/collapse,
-  change-folder button, disabled state, sidebar collapse
+- `src/components/Sidebar.test.tsx` — tab rows, per-project shell menu, card expand/collapse,
+  add/remove folder, multiple simultaneous project cards, empty state, sidebar collapse
 - `cargo test shell::` / `claude::` — per-platform shell lists and claude command shape
 
 Manual PTY verification checklist: docs/development.md.

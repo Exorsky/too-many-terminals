@@ -13,12 +13,16 @@ pub struct SavedTab {
     /// Set once a fresh Claude tab's session id is learned, or copied through
     /// when resuming a past session — lets the tab continue on next launch.
     pub resume_session_id: Option<String>,
+    /// Which open project this tab belongs to (multiple folders can be open
+    /// at once, each with its own tabs).
+    pub cwd: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceState {
-    pub cwd: Option<String>,
+    /// Open project folders, in the order they were added.
+    pub projects: Vec<String>,
     pub collapsed: bool,
     pub tabs: Vec<SavedTab>,
 }
@@ -72,7 +76,7 @@ mod tests {
     fn round_trips_through_save_and_load() {
         let tmp = tempfile::tempdir().unwrap();
         let state = WorkspaceState {
-            cwd: Some("/home/x/project".to_string()),
+            projects: vec!["/home/x/project".to_string(), "/home/x/other".to_string()],
             collapsed: true,
             tabs: vec![
                 SavedTab {
@@ -80,12 +84,14 @@ mod tests {
                     name: "Claude".to_string(),
                     shell_id: None,
                     resume_session_id: Some("sess-1".to_string()),
+                    cwd: "/home/x/project".to_string(),
                 },
                 SavedTab {
                     kind: "powershell".to_string(),
                     name: "PowerShell".to_string(),
                     shell_id: Some("powershell".to_string()),
                     resume_session_id: None,
+                    cwd: "/home/x/other".to_string(),
                 },
             ],
         };

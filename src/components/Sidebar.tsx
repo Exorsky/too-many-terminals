@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  ChevronRight, Folder, FolderOpen, History, PanelLeftClose, PanelLeftOpen,
+  ChevronRight, Folder, FolderPlus, History, PanelLeftClose, PanelLeftOpen,
   Plus, Sparkles, TerminalSquare, X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -19,62 +19,53 @@ interface SidebarProps {
   activeTabId: string | null;
   shellOptions: ShellOption[];
   showHistory: boolean;
-  cwd: string | null;
+  projects: string[];
   collapsed: boolean;
   onSelectTab: (tabId: string) => void;
   onCloseTab: (tabId: string) => void;
-  onNewClaudeTab: () => void;
-  onNewShellTab: (shellId: string) => void;
+  onNewClaudeTab: (dir: string) => void;
+  onNewShellTab: (dir: string, shellId: string) => void;
   onToggleHistory: () => void;
-  onPickFolder: () => void;
+  onAddProject: () => void;
+  onRemoveProject: (dir: string) => void;
   onToggleCollapse: () => void;
 }
 
-function folderName(cwd: string | null): string | null {
-  if (!cwd) return null;
-  return cwd.split(/[/\\]/).filter(Boolean).pop() ?? cwd;
+function folderName(dir: string): string {
+  return dir.split(/[/\\]/).filter(Boolean).pop() ?? dir;
 }
 
-/** Stable-per-folder accent color, mirroring the multi-project color scheme
- *  from the original app (there each project got an assigned hue; here there's
- *  a single project at a time, so the hue is derived from its path instead). */
-function folderHue(cwd: string): number {
-  let hash = 0;
-  for (let i = 0; i < cwd.length; i++) hash = (hash * 31 + cwd.charCodeAt(i)) >>> 0;
-  return PROJECT_COLORS[hash % PROJECT_COLORS.length].hue;
+/** Sequential per-project accent color, in the order folders were added —
+ *  same scheme the original multi-project app used. */
+function projectHue(index: number): number {
+  return PROJECT_COLORS[index % PROJECT_COLORS.length].hue;
 }
 
-function NewSessionMenu({ cwd, shellOptions, onNewClaudeTab, onNewShellTab }: {
-  cwd: string | null;
+function NewSessionMenu({ dir, shellOptions, onNewClaudeTab, onNewShellTab }: {
+  dir: string;
   shellOptions: ShellOption[];
-  onNewClaudeTab: () => void;
-  onNewShellTab: (shellId: string) => void;
+  onNewClaudeTab: (dir: string) => void;
+  onNewShellTab: (dir: string, shellId: string) => void;
 }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button
-          className={cn(
-            'flex items-center gap-2 w-[calc(100%-8px)] mx-1 my-0.5 px-2 py-1.5 rounded-sm text-[11px] font-inherit',
-            cwd
-              ? 'text-muted-foreground/70 hover:text-foreground hover:bg-white/4 border-none cursor-pointer'
-              : 'text-muted-foreground/30 border-none cursor-not-allowed',
-          )}
-          title={cwd ? 'New session' : 'Select a folder first'}
-          disabled={!cwd}
+          className="flex items-center gap-2 w-[calc(100%-8px)] mx-1 my-0.5 px-2 py-1.5 rounded-sm text-[11px] text-muted-foreground/70 hover:text-foreground hover:bg-white/4 border-none cursor-pointer font-inherit"
+          title="New session"
         >
           <Plus size={12} className="shrink-0" />
           <span>New session</span>
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start">
-        <DropdownMenuItem onClick={onNewClaudeTab}>
+        <DropdownMenuItem onClick={() => onNewClaudeTab(dir)}>
           <Sparkles size={13} />
           <span>Claude</span>
         </DropdownMenuItem>
         {shellOptions.length > 0 && <DropdownMenuSeparator />}
         {shellOptions.map((shell) => (
-          <DropdownMenuItem key={shell.id} onClick={() => onNewShellTab(shell.id)}>
+          <DropdownMenuItem key={shell.id} onClick={() => onNewShellTab(dir, shell.id)}>
             <TerminalSquare size={13} />
             <span>{shell.label}</span>
           </DropdownMenuItem>
@@ -123,14 +114,69 @@ function TabRow({ tab, isActive, onSelectTab, onCloseTab }: {
   );
 }
 
-export default function Sidebar({
-  tabs, activeTabId, shellOptions, showHistory, cwd, collapsed,
-  onSelectTab, onCloseTab, onNewClaudeTab, onNewShellTab, onToggleHistory,
-  onPickFolder, onToggleCollapse,
-}: SidebarProps) {
+function ProjectCard({
+  dir, hue, tabs, activeTabId, showHistory, shellOptions,
+  onSelectTab, onCloseTab, onNewClaudeTab, onNewShellTab, onRemoveProject,
+}: {
+  dir: string;
+  hue: number;
+  tabs: Tab[];
+  activeTabId: string | null;
+  showHistory: boolean;
+  shellOptions: ShellOption[];
+  onSelectTab: (tabId: string) => void;
+  onCloseTab: (tabId: string) => void;
+  onNewClaudeTab: (dir: string) => void;
+  onNewShellTab: (dir: string, shellId: string) => void;
+  onRemoveProject: (dir: string) => void;
+}) {
   const [expanded, setExpanded] = useState(true);
-  const hue = cwd ? folderHue(cwd) : 0;
 
+  return (
+    <div
+      className="mx-2 mb-2 rounded-md border overflow-hidden transition-colors duration-100"
+      style={{ borderColor: `hsla(${hue}, 55%, 58%, 0.22)`, backgroundColor: `hsla(${hue}, 55%, 58%, 0.05)` }}
+    >
+      <div
+        className="group/card relative flex items-center gap-2 w-full text-left px-2.5 py-2 text-[11px] font-semibold text-foreground/90 cursor-pointer"
+        onClick={() => setExpanded((v) => !v)}
+        title={dir}
+      >
+        <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: `hsl(${hue} 55% 50%)` }} />
+        <span className="truncate flex-1">{folderName(dir)}</span>
+        <button
+          className="flex items-center justify-center w-5 h-5 rounded-sm shrink-0 border-none cursor-pointer bg-transparent text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover/card:opacity-100"
+          onClick={(e) => { e.stopPropagation(); onRemoveProject(dir); }}
+          title="Remove folder"
+        >
+          <X size={12} />
+        </button>
+        <ChevronRight size={12} className={cn('shrink-0 text-muted-foreground/60 transition-transform duration-150', expanded && 'rotate-90')} />
+      </div>
+
+      {expanded && (
+        <div className="pb-1">
+          {tabs.map((tab) => (
+            <TabRow
+              key={tab.id}
+              tab={tab}
+              isActive={!showHistory && tab.id === activeTabId}
+              onSelectTab={onSelectTab}
+              onCloseTab={onCloseTab}
+            />
+          ))}
+          <NewSessionMenu dir={dir} shellOptions={shellOptions} onNewClaudeTab={onNewClaudeTab} onNewShellTab={onNewShellTab} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function Sidebar({
+  tabs, activeTabId, shellOptions, showHistory, projects, collapsed,
+  onSelectTab, onCloseTab, onNewClaudeTab, onNewShellTab, onToggleHistory,
+  onAddProject, onRemoveProject, onToggleCollapse,
+}: SidebarProps) {
   // A single root element (shared across the collapsed/expanded states) lets
   // the width change animate — swapping to two separate `if`-return roots
   // would remount the whole sidebar and skip the transition entirely.
@@ -191,10 +237,10 @@ export default function Sidebar({
           </button>
           <button
             className="flex items-center justify-center w-8 h-8 mb-2 rounded-md border-none cursor-pointer bg-transparent text-muted-foreground hover:text-foreground hover:bg-white/5 shrink-0"
-            onClick={onPickFolder}
-            title={cwd ?? 'Select folder'}
+            onClick={onAddProject}
+            title="Add folder"
           >
-            <Folder size={15} />
+            <FolderPlus size={15} />
           </button>
         </>
       ) : (
@@ -213,56 +259,37 @@ export default function Sidebar({
           </div>
 
           <div className="flex-1 overflow-y-auto overflow-x-hidden py-2 scrollbar-thin">
-            {!cwd && (
-              <button
-                className="flex items-center gap-2 w-[calc(100%-8px)] mx-1 mb-1 px-2.5 py-2 rounded-md border border-dashed border-border text-[11px] text-muted-foreground hover:text-foreground hover:border-[#33363f] bg-transparent cursor-pointer font-inherit"
-                onClick={onPickFolder}
-              >
-                <Folder size={13} className="shrink-0" />
-                <span>Select folder…</span>
-              </button>
-            )}
-
-            {cwd && (
-              <div
-                className="mx-2 mb-2 rounded-md border overflow-hidden transition-colors duration-100"
-                style={{ borderColor: `hsla(${hue}, 55%, 58%, 0.22)`, backgroundColor: `hsla(${hue}, 55%, 58%, 0.05)` }}
-              >
-                <div
-                  className="relative flex items-center gap-2 w-full text-left px-2.5 py-2 text-[11px] font-semibold text-foreground/90 cursor-pointer"
-                  onClick={() => setExpanded((v) => !v)}
-                  title={cwd}
-                >
-                  <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: `hsl(${hue} 55% 50%)` }} />
-                  <span className="truncate flex-1">{folderName(cwd)}</span>
-                  <button
-                    className="flex items-center justify-center w-5 h-5 rounded-sm shrink-0 border-none cursor-pointer bg-transparent text-muted-foreground/60 hover:text-foreground hover:bg-white/10"
-                    onClick={(e) => { e.stopPropagation(); onPickFolder(); }}
-                    title="Change folder"
-                  >
-                    <FolderOpen size={12} />
-                  </button>
-                  <ChevronRight size={12} className={cn('shrink-0 text-muted-foreground/60 transition-transform duration-150', expanded && 'rotate-90')} />
-                </div>
-
-                {expanded && (
-                  <div className="pb-1">
-                    {tabs.map((tab) => (
-                      <TabRow
-                        key={tab.id}
-                        tab={tab}
-                        isActive={!showHistory && tab.id === activeTabId}
-                        onSelectTab={onSelectTab}
-                        onCloseTab={onCloseTab}
-                      />
-                    ))}
-                    <NewSessionMenu cwd={cwd} shellOptions={shellOptions} onNewClaudeTab={onNewClaudeTab} onNewShellTab={onNewShellTab} />
-                  </div>
-                )}
+            {projects.length === 0 && (
+              <div className="flex flex-col items-center gap-1.5 text-center px-4 py-8 text-muted-foreground">
+                <Folder size={18} className="text-[#33363f]" />
+                <div className="text-[11px]">No folders open</div>
               </div>
             )}
 
-            {!cwd && <NewSessionMenu cwd={cwd} shellOptions={shellOptions} onNewClaudeTab={onNewClaudeTab} onNewShellTab={onNewShellTab} />}
+            {projects.map((dir, index) => (
+              <ProjectCard
+                key={dir}
+                dir={dir}
+                hue={projectHue(index)}
+                tabs={tabs.filter((t) => t.cwd === dir)}
+                activeTabId={activeTabId}
+                showHistory={showHistory}
+                shellOptions={shellOptions}
+                onSelectTab={onSelectTab}
+                onCloseTab={onCloseTab}
+                onNewClaudeTab={onNewClaudeTab}
+                onNewShellTab={onNewShellTab}
+                onRemoveProject={onRemoveProject}
+              />
+            ))}
+
+            <button
+              className="flex items-center gap-2 w-[calc(100%-8px)] mx-1 mb-1 px-2.5 py-2 rounded-md border border-dashed border-border text-[11px] text-muted-foreground hover:text-foreground hover:border-[#33363f] bg-transparent cursor-pointer font-inherit"
+              onClick={onAddProject}
+            >
+              <FolderPlus size={13} className="shrink-0" />
+              <span>{projects.length === 0 ? 'Select folder…' : 'Add folder…'}</span>
+            </button>
           </div>
 
           <UsageMeter />
