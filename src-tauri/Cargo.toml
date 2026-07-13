@@ -1,6 +1,6 @@
 [package]
 name = "too-many-terminals"
-version = "0.5.0"
+version = "0.6.0"
 description = "Lightweight cross-platform terminal for Claude Code"
 authors = ["Exorsky"]
 edition = "2021"
