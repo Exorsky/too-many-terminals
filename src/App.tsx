@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useReducer, useState } from 'react';
 import SessionHistoryPanel from '@/components/SessionHistoryPanel';
+import SettingsView from '@/components/SettingsView';
 import Sidebar from '@/components/Sidebar';
 import Terminal from '@/components/Terminal';
 import { disposeTerminal, writeToTerminal } from '@/components/terminalCache';
@@ -17,6 +18,7 @@ export default function App() {
   const [projects, setProjects] = useState<string[]>([]);
   const [homeDir, setHomeDir] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [workspaceLoaded, setWorkspaceLoaded] = useState(false);
 
@@ -83,6 +85,7 @@ export default function App() {
       };
       dispatch({ type: 'add', tab });
       setShowHistory(false);
+      setShowSettings(false);
       ipc.spawnPty({
         tabId: tab.id,
         kind: kind === 'claude' ? 'claude' : shellId!,
@@ -149,6 +152,7 @@ export default function App() {
 
   const handleSelectTab = useCallback((tabId: string) => {
     setShowHistory(false);
+    setShowSettings(false);
     dispatch({ type: 'select', tabId });
   }, []);
 
@@ -171,6 +175,7 @@ export default function App() {
         activeTabId={state.activeTabId}
         shellOptions={shellOptions}
         showHistory={showHistory}
+        showSettings={showSettings}
         projects={projects}
         collapsed={collapsed}
         onSelectTab={handleSelectTab}
@@ -178,7 +183,8 @@ export default function App() {
         onNewClaudeTab={handleNewClaudeTab}
         onNewShellTab={handleNewShellTab}
         onRenameTab={handleRenameTab}
-        onToggleHistory={() => setShowHistory((v) => !v)}
+        onToggleHistory={() => { setShowHistory((v) => !v); setShowSettings(false); }}
+        onToggleSettings={() => { setShowSettings((v) => !v); setShowHistory(false); }}
         onAddProject={handleAddProject}
         onRemoveProject={handleRemoveProject}
         onToggleCollapse={() => setCollapsed((v) => !v)}
@@ -188,7 +194,7 @@ export default function App() {
           <Terminal
             key={tab.id}
             tabId={tab.id}
-            isVisible={!showHistory && tab.id === state.activeTabId}
+            isVisible={!showHistory && !showSettings && tab.id === state.activeTabId}
           />
         ))}
         {showHistory && projects.length > 0 && (
@@ -196,7 +202,12 @@ export default function App() {
             <SessionHistoryPanel projects={projects} onResume={handleResumeSession} />
           </div>
         )}
-        {!showHistory && state.tabs.length === 0 && projects.length === 0 && (
+        {showSettings && (
+          <div className="absolute inset-0 bg-background">
+            <SettingsView />
+          </div>
+        )}
+        {!showHistory && !showSettings && state.tabs.length === 0 && projects.length === 0 && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-muted-foreground text-[12px]">
             <span>Select a folder to start a session</span>
             <button
@@ -207,7 +218,7 @@ export default function App() {
             </button>
           </div>
         )}
-        {!showHistory && state.tabs.length === 0 && projects.length > 0 && (
+        {!showHistory && !showSettings && state.tabs.length === 0 && projects.length > 0 && (
           <div className="absolute inset-0 flex items-center justify-center text-muted-foreground text-[12px]">
             Create a session from the sidebar to get started
           </div>

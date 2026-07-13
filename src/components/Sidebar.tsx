@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   CheckCircle2, ChevronRight, Circle, Folder, FolderPlus, History, Loader2,
-  MessageCircle, PanelLeftClose, PanelLeftOpen, Plus, Sparkles, TerminalSquare, X,
+  MessageCircle, PanelLeftClose, PanelLeftOpen, Plus, Settings, Sparkles, TerminalSquare, X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { PROJECT_COLORS, type ShellOption, type Tab, type TabStatus } from '@/types';
@@ -19,6 +19,7 @@ interface SidebarProps {
   activeTabId: string | null;
   shellOptions: ShellOption[];
   showHistory: boolean;
+  showSettings: boolean;
   projects: string[];
   collapsed: boolean;
   onSelectTab: (tabId: string) => void;
@@ -27,6 +28,7 @@ interface SidebarProps {
   onNewShellTab: (dir: string, shellId: string) => void;
   onRenameTab: (tabId: string, name: string) => void;
   onToggleHistory: () => void;
+  onToggleSettings: () => void;
   onAddProject: () => void;
   onRemoveProject: (dir: string) => void;
   onToggleCollapse: () => void;
@@ -233,8 +235,8 @@ function ProjectCard({
 }
 
 export default function Sidebar({
-  tabs, activeTabId, shellOptions, showHistory, projects, collapsed,
-  onSelectTab, onCloseTab, onNewClaudeTab, onNewShellTab, onRenameTab, onToggleHistory,
+  tabs, activeTabId, shellOptions, showHistory, showSettings, projects, collapsed,
+  onSelectTab, onCloseTab, onNewClaudeTab, onNewShellTab, onRenameTab, onToggleHistory, onToggleSettings,
   onAddProject, onRemoveProject, onToggleCollapse,
 }: SidebarProps) {
   // A single root element (shared across the collapsed/expanded states) lets
@@ -296,11 +298,22 @@ export default function Sidebar({
             <History size={15} />
           </button>
           <button
-            className="flex items-center justify-center w-8 h-8 mb-2 rounded-md border-none cursor-pointer bg-transparent text-muted-foreground hover:text-foreground hover:bg-white/5 shrink-0"
+            className="flex items-center justify-center w-8 h-8 rounded-md border-none cursor-pointer bg-transparent text-muted-foreground hover:text-foreground hover:bg-white/5 shrink-0"
             onClick={onAddProject}
             title="Add folder"
           >
             <FolderPlus size={15} />
+          </button>
+          <button
+            data-active={showSettings}
+            className={cn(
+              'flex items-center justify-center w-8 h-8 mb-2 rounded-md border-none cursor-pointer bg-transparent shrink-0',
+              showSettings ? 'text-foreground bg-white/8' : 'text-muted-foreground hover:text-foreground hover:bg-white/5',
+            )}
+            onClick={onToggleSettings}
+            title="Settings"
+          >
+            <Settings size={15} />
           </button>
         </>
       ) : (
@@ -355,21 +368,36 @@ export default function Sidebar({
 
           <UsageMeter />
 
-          {/* Footer: history, bottom-anchored */}
-          <button
-            data-active={showHistory}
-            className={cn(
-              'relative flex items-center gap-2 h-9 px-3 border-t border-border text-[12px] cursor-pointer shrink-0',
-              'bg-transparent border-x-0 border-b-0 font-inherit transition-colors duration-100',
-              showHistory ? 'text-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-white/4',
-            )}
-            onClick={onToggleHistory}
-            title="Browse past sessions"
-          >
-            {showHistory && <span className="absolute left-0 top-1.5 bottom-1.5 w-0.5 bg-primary" />}
-            <History size={14} />
-            <span>History</span>
-          </button>
+          {/* Footer: history + settings, bottom-anchored */}
+          <div className="flex border-t border-border shrink-0">
+            <button
+              data-active={showHistory}
+              className={cn(
+                'relative flex items-center gap-2 h-9 px-3 flex-1 text-[12px] cursor-pointer',
+                'bg-transparent border-none font-inherit transition-colors duration-100',
+                showHistory ? 'text-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-white/4',
+              )}
+              onClick={onToggleHistory}
+              title="Browse past sessions"
+            >
+              {showHistory && <span className="absolute left-0 top-1.5 bottom-1.5 w-0.5 bg-primary" />}
+              <History size={14} />
+              <span>History</span>
+            </button>
+            <button
+              data-active={showSettings}
+              className={cn(
+                'relative flex items-center justify-center w-9 h-9 text-[12px] cursor-pointer shrink-0',
+                'bg-transparent border-none border-l border-l-border font-inherit transition-colors duration-100',
+                showSettings ? 'text-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-white/4',
+              )}
+              onClick={onToggleSettings}
+              title="Settings"
+            >
+              {showSettings && <span className="absolute left-0 top-1.5 bottom-1.5 w-0.5 bg-primary" />}
+              <Settings size={14} />
+            </button>
+          </div>
         </>
       )}
     </div>

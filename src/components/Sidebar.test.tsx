@@ -35,6 +35,7 @@ function renderSidebar(overrides: Partial<React.ComponentProps<typeof Sidebar>> 
     activeTabId: 'claude-1',
     shellOptions: SHELLS,
     showHistory: false,
+    showSettings: false,
     projects: [PROJECT],
     collapsed: false,
     onSelectTab: vi.fn(),
@@ -43,6 +44,7 @@ function renderSidebar(overrides: Partial<React.ComponentProps<typeof Sidebar>> 
     onNewShellTab: vi.fn(),
     onRenameTab: vi.fn(),
     onToggleHistory: vi.fn(),
+    onToggleSettings: vi.fn(),
     onAddProject: vi.fn(),
     onRemoveProject: vi.fn(),
     onToggleCollapse: vi.fn(),
@@ -95,6 +97,12 @@ describe('Sidebar', () => {
     const props = renderSidebar();
     await userEvent.click(screen.getByText('History'));
     expect(props.onToggleHistory).toHaveBeenCalled();
+  });
+
+  it('toggles settings from the footer', async () => {
+    const props = renderSidebar();
+    await userEvent.click(screen.getByTitle('Settings'));
+    expect(props.onToggleSettings).toHaveBeenCalled();
   });
 
   it('shows each folder as its own card and collapses its tab list on click', async () => {
