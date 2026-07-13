@@ -53,6 +53,12 @@ fixes/docs/internal → patch.
   matrix jobs), Linux, and Windows using `tauri-apps/tauri-action`, then creates a
   **draft** GitHub release with all bundles attached — review and publish it manually
   from the GitHub UI.
+  - When triggered manually via "Run workflow", the `tag` job first creates and pushes
+    the `vX.Y.Z` tag (from `tauri.conf.json`) so the tag ref exists *before* you publish
+    the draft. This is deliberate: a GitHub draft release only creates its git tag when
+    published, so without the up-front tag, publishing the draft would fire `push:tags`
+    and trigger a **second, duplicate** release. (Pushing the tag with the built-in
+    `GITHUB_TOKEN` does not re-trigger the workflow, so the manual run isn't doubled.)
 - Builds are **unsigned**: macOS `.dmg` triggers Gatekeeper (right-click → Open on
   first launch), Windows `.exe`/`.msi` triggers SmartScreen ("More info" → "Run
   anyway"). No code-signing certificates are configured since this is a personal app.

@@ -12,7 +12,36 @@ on:
   workflow_dispatch:
 
 jobs:
+  # On manual dispatch, create and push the vX.Y.Z tag (from tauri.conf.json's
+  # version) BEFORE building. This makes the tag ref exist up-front, so
+  # publishing the resulting draft release later does NOT create the tag — which
+  # would otherwise re-trigger this workflow via push:tags and produce a second,
+  # duplicate release. Pushing with the default GITHUB_TOKEN also doesn't
+  # re-trigger push:tags (GitHub's recursion guard), so this run isn't doubled
+  # either. On the tag-push path this job is skipped (the tag already exists).
+  tag:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: 🏷️ Create and push tag from version
+        run: |
+          VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          TAG="v$VERSION"
+          if git ls-remote --tags origin | grep -q "refs/tags/$TAG$"; then
+            echo "Tag $TAG already exists — skipping create/push."
+          else
+            git tag "$TAG"
+            git push origin "$TAG"
+          fi
+
   publish-tauri:
+    needs: [tag]
+    # Run after `tag` on dispatch, and also on the tag-push path where `tag` is
+    # skipped. Only bail if `tag` actually failed or was cancelled.
+    if: ${{ always() && !failure() && !cancelled() }}
     permissions:
       contents: write
     strategy:
