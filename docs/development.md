@@ -37,9 +37,22 @@ Version source of truth: `src-tauri/tauri.conf.json` → `version`.
 1. Bump the version in **three** files: `src-tauri/tauri.conf.json`, `package.json`,
    `src-tauri/Cargo.toml` (keep them identical).
 2. Commit: `chore(release): vX.Y.Z`
-3. Tag: `git tag vX.Y.Z`
-4. Build per platform: `pnpm tauri build` (bundles land in
-   `src-tauri/target/release/bundle/`).
+3. Tag and push: `git tag vX.Y.Z && git push origin vX.Y.Z` — this triggers
+   `.github/workflows/release.yml` (see below), or build locally with
+   `pnpm tauri build` (bundles land in `src-tauri/target/release/bundle/`).
 
 Bump rules: breaking behavior/config changes → major; new features → minor;
 fixes/docs/internal → patch.
+
+## CI/CD
+
+- `.github/workflows/ci.yml` — runs on every push to `main` and on pull requests:
+  typecheck + frontend build (`pnpm build`), `pnpm test`, `pnpm test:rust`.
+- `.github/workflows/release.yml` — runs when a `vX.Y.Z` tag is pushed (or manually via
+  "Run workflow"). Builds installers for macOS (Apple Silicon + Intel, as separate
+  matrix jobs), Linux, and Windows using `tauri-apps/tauri-action`, then creates a
+  **draft** GitHub release with all bundles attached — review and publish it manually
+  from the GitHub UI.
+- Builds are **unsigned**: macOS `.dmg` triggers Gatekeeper (right-click → Open on
+  first launch), Windows `.exe`/`.msi` triggers SmartScreen ("More info" → "Run
+  anyway"). No code-signing certificates are configured since this is a personal app.
