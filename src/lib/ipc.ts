@@ -8,6 +8,11 @@ import { invoke, Channel } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
+import {
+  isPermissionGranted,
+  requestPermission,
+  sendNotification,
+} from '@tauri-apps/plugin-notification';
 import type { AppSettings, SessionHistoryEntry, ShellOption, TabStatus, TranscriptTurn, UsageStats, WorkspaceState } from '@/types';
 
 export interface SpawnPtyOptions {
@@ -111,6 +116,32 @@ export function getUsageStats(): Promise<UsageStats> {
 
 export function openExternal(url: string): void {
   void openUrl(url);
+}
+
+/** Ensures the OS notification permission is granted, asking once if needed.
+ *  Cached after the first resolution. Resolves false if denied or unavailable. */
+let notificationPermission: boolean | null = null;
+export async function ensureNotificationPermission(): Promise<boolean> {
+  if (notificationPermission !== null) return notificationPermission;
+  try {
+    let granted = await isPermissionGranted();
+    if (!granted) granted = (await requestPermission()) === 'granted';
+    notificationPermission = granted;
+  } catch {
+    notificationPermission = false;
+  }
+  return notificationPermission;
+}
+
+/** Fires a desktop notification. No-ops (swallows) if permission isn't granted
+ *  or the platform can't deliver it. */
+export async function notify(title: string, body: string): Promise<void> {
+  if (!(await ensureNotificationPermission())) return;
+  try {
+    sendNotification({ title, body });
+  } catch {
+    /* delivery is best-effort */
+  }
 }
 
 export function loadWorkspace(): Promise<WorkspaceState> {

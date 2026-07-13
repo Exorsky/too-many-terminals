@@ -17,6 +17,9 @@ pub struct AppSettings {
     pub show_session_bar: bool,
     /// Show the Terminal/Markdown toggle within the session bar.
     pub show_markdown_toggle: bool,
+    /// Fire a desktop notification when an unfocused Claude session needs input
+    /// or finishes. Defaults to true (opt-out) so it works out of the box.
+    pub notifications_enabled: bool,
 }
 
 impl Default for AppSettings {
@@ -26,6 +29,7 @@ impl Default for AppSettings {
             custom_themes: Vec::new(),
             show_session_bar: true,
             show_markdown_toggle: true,
+            notifications_enabled: true,
         }
     }
 }
@@ -80,6 +84,7 @@ mod tests {
             })],
             show_session_bar: false,
             show_markdown_toggle: true,
+            notifications_enabled: false,
         };
 
         save_settings(tmp.path(), &settings).unwrap();
@@ -94,6 +99,7 @@ mod tests {
         assert_eq!(settings.selected_theme_id, "amber");
         assert!(settings.show_session_bar);
         assert!(settings.show_markdown_toggle);
+        assert!(settings.notifications_enabled);
     }
 
     #[test]

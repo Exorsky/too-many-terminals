@@ -19,6 +19,10 @@ Two switches gate the [session bar](session-reader.md):
 
 Both default to `true` (opt-out) and persist in `settings.json`.
 
+A **Notifications** section adds one more switch — **Notify when a session
+needs you** (`notificationsEnabled`, default `true`) — gating the desktop
+notifications described in [notifications.md](notifications.md).
+
 ## Settings store
 
 All settings reads/writes go through `src/lib/settings-store.ts` — a small

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import CommandPalette from '@/components/CommandPalette';
 import SessionBar, { type MarkdownView, type SessionMode } from '@/components/SessionBar';
 import SessionHistoryPanel from '@/components/SessionHistoryPanel';
@@ -14,7 +14,7 @@ import { useSettings } from '@/lib/settings-store';
 import { initialTabsState, tabsReducer } from '@/lib/tabs';
 import { transcriptToMarkdown } from '@/lib/transcript';
 import { useTranscript } from '@/lib/use-transcript';
-import type { SavedTab, SessionHistoryEntry, ShellOption, Tab, TabKind } from '@/types';
+import type { SavedTab, SessionHistoryEntry, ShellOption, Tab, TabKind, TabStatus } from '@/types';
 
 const INITIAL_COLS = 120;
 const INITIAL_ROWS = 40;
@@ -88,12 +88,42 @@ export default function App() {
     return () => { unlisten.then((fn) => fn()); };
   }, []);
 
+  // Latest tabs + notification pref, read by the once-registered status
+  // listener below without re-subscribing on every change.
+  const tabsRef = useRef(state.tabs);
+  tabsRef.current = state.tabs;
+  const notificationsRef = useRef(settings.notificationsEnabled);
+  notificationsRef.current = settings.notificationsEnabled;
+  // Last status we saw per tab, to detect the transition (not just the state).
+  const prevStatusRef = useRef<Map<string, TabStatus>>(new Map());
+
+  // Ask for notification permission once, up front, if the pref is on.
+  useEffect(() => {
+    if (settings.notificationsEnabled) void ipc.ensureNotificationPermission();
+  }, [settings.notificationsEnabled]);
+
+  /** Notify only when the app isn't focused (otherwise the status dot / inbox
+   *  already tells you), and only on a real transition — Claude asking for
+   *  input, or finishing a run (working → idle). Skips the first status of a
+   *  tab so restoring a workspace doesn't fire a burst. */
+  const maybeNotify = useCallback((tabId: string, prev: TabStatus | undefined, status: TabStatus) => {
+    if (!notificationsRef.current || prev === undefined || document.hasFocus()) return;
+    const name = tabsRef.current.find((t) => t.id === tabId)?.name ?? 'Claude';
+    if (status === 'requires_response') void ipc.notify(name, 'Needs your input');
+    else if (status === 'idle' && prev === 'working') void ipc.notify(name, 'Finished');
+  }, []);
+
   // Claude Code's own hooks report live tab state (idle/working/awaiting
   // input) and, once the first prompt is submitted, a generated title.
   useEffect(() => {
-    const unlisten = ipc.onTabStatus((tabId, status) => dispatch({ type: 'status', tabId, status }));
+    const unlisten = ipc.onTabStatus((tabId, status) => {
+      const prev = prevStatusRef.current.get(tabId);
+      prevStatusRef.current.set(tabId, status);
+      dispatch({ type: 'status', tabId, status });
+      maybeNotify(tabId, prev, status);
+    });
     return () => { unlisten.then((fn) => fn()); };
-  }, []);
+  }, [maybeNotify]);
 
   useEffect(() => {
     const unlisten = ipc.onTabNamed((tabId, name) => dispatch({ type: 'rename', tabId, name }));

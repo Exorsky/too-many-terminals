@@ -10,7 +10,7 @@ vi.mock('@/lib/ipc');
 beforeEach(() => {
   resetSettingsForTest();
   vi.mocked(ipc.loadSettings).mockResolvedValue({
-    selectedThemeId: 'default', customThemes: [], showSessionBar: true, showMarkdownToggle: true,
+    selectedThemeId: 'default', customThemes: [], showSessionBar: true, showMarkdownToggle: true, notificationsEnabled: true,
   });
   vi.mocked(ipc.saveSettings).mockResolvedValue(undefined);
 });
@@ -37,6 +37,12 @@ describe('SettingsView', () => {
     render(<SettingsView />);
     await userEvent.click(screen.getByRole('switch', { name: 'Show the session bar' }));
     expect(screen.getByRole('switch', { name: 'Show the Markdown toggle' })).toBeDisabled();
+  });
+
+  it('toggles the notification preference', async () => {
+    render(<SettingsView />);
+    await userEvent.click(screen.getByRole('switch', { name: 'Notify when a session needs you' }));
+    expect(ipc.saveSettings).toHaveBeenCalledWith(expect.objectContaining({ notificationsEnabled: false }));
   });
 
   it('switches to the Customize tab on click', async () => {

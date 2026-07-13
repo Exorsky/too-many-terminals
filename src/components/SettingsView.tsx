@@ -78,6 +78,16 @@ function GeneralTab() {
         disabled={!settings.showSessionBar}
         onChange={(v) => patchSettings({ showMarkdownToggle: v })}
       />
+
+      <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground pt-4 pb-1">
+        Notifications
+      </div>
+      <SettingRow
+        title="Notify when a session needs you"
+        description="A desktop notification when a Claude session asks for input or finishes while the app isn't focused."
+        checked={settings.notificationsEnabled}
+        onChange={(v) => patchSettings({ notificationsEnabled: v })}
+      />
     </div>
   );
 }

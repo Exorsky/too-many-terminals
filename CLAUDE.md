@@ -11,6 +11,7 @@ Feature and architecture docs live in `docs/` — **keep them updated when featu
 - [docs/features/terminals.md](docs/features/terminals.md) — sidebar, tabs, PTY spawning per OS
 - [docs/features/attention-inbox.md](docs/features/attention-inbox.md) — "Waiting on you" strip: sessions blocked on you
 - [docs/features/command-palette.md](docs/features/command-palette.md) — Ctrl+Shift+P fuzzy jump to any open terminal
+- [docs/features/notifications.md](docs/features/notifications.md) — desktop notifications when an unfocused session needs you
 - [docs/features/session-history.md](docs/features/session-history.md) — past-session browsing/resume
 - [docs/features/session-reader.md](docs/features/session-reader.md) — reading a past session as rendered Markdown
 - [docs/features/usage-meter.md](docs/features/usage-meter.md) — daily token counter

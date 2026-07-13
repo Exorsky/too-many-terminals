@@ -17,6 +17,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   customThemes: [],
   showSessionBar: true,
   showMarkdownToggle: true,
+  notificationsEnabled: true,
 };
 
 let current: AppSettings = { ...DEFAULT_SETTINGS };

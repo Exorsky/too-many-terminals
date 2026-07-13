@@ -107,4 +107,6 @@ export interface AppSettings {
   showSessionBar: boolean;
   /** Show the Terminal/Markdown toggle within the session bar. */
   showMarkdownToggle: boolean;
+  /** Fire a desktop notification when an unfocused session needs input or finishes. */
+  notificationsEnabled: boolean;
 }
