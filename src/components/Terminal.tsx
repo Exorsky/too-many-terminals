@@ -121,21 +121,6 @@ const Terminal = React.memo(function Terminal({ tabId, isVisible }: TerminalProp
       attachedRef.current = tabId;
     }
 
-    // Right-click: copy selection if any, otherwise paste from clipboard
-    const handleContextMenu = (e: MouseEvent) => {
-      e.preventDefault();
-      const selection = term.getSelection();
-      if (selection) {
-        navigator.clipboard.writeText(selection);
-        term.clearSelection();
-      } else {
-        navigator.clipboard.readText().then((text) => {
-          if (text) term.paste(text);
-        });
-      }
-    };
-    container.addEventListener('contextmenu', handleContextMenu);
-
     // Defer initial fit to next frame so the container has final layout dimensions
     const rafId = requestAnimationFrame(() => {
       fitAndSync();
@@ -154,7 +139,6 @@ const Terminal = React.memo(function Terminal({ tabId, isVisible }: TerminalProp
       cancelAnimationFrame(rafId);
       clearTimeout(resizeTimeout);
       resizeObserver.disconnect();
-      container.removeEventListener('contextmenu', handleContextMenu);
     };
   }, [tabId, isVisible]);
 

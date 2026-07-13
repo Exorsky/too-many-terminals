@@ -32,6 +32,24 @@ The sidebar's "New session" menu opens terminal tabs of two kinds:
   The list is static per platform (a shell may not be installed; spawning then fails and
   the tab is marked exited).
 
+## Renaming a tab
+
+Double-click a tab's name to rename it in place (`Sidebar.tsx` `TabRow`, local `editing`
+state) — Enter commits, Escape reverts, blur commits, an empty/whitespace-only name is
+discarded. Renames go through the same `tabsReducer` `rename` action session history used
+internally, and persist like anything else in the workspace (see
+[workspace persistence](workspace-persistence.md)). Not tied to any context menu — see
+below.
+
+## No native/web context menu
+
+Right-click is disabled app-wide (`main.tsx`, a single `document`-level
+`contextmenu` listener that calls `preventDefault()`) instead of showing the
+webview's default browser-style menu (Inspect/Reload — out of place in a desktop app).
+The terminal used to silently copy-on-select/paste-on-right-click; that's removed too, so
+right-click currently does nothing anywhere. An app-native context menu (with real Copy/
+Paste/Rename/Close items) is a planned follow-up, not implemented yet.
+
 ## Flow
 
 1. `App.tsx` `spawnTab()` creates a `Tab` (id = `crypto.randomUUID()`), dispatches `add`,
@@ -42,22 +60,23 @@ The sidebar's "New session" menu opens terminal tabs of two kinds:
    (portable-pty), and starts a reader thread streaming raw bytes over the channel.
 3. `Terminal.tsx` lazily creates one xterm instance per tab, cached in
    `terminalCache.ts` across React unmounts so hidden tabs keep buffering output.
-   Fit-on-resize (ResizeObserver → `pty_resize`), right-click copy/paste, Ctrl+V paste,
-   links open externally via the opener plugin.
+   Fit-on-resize (ResizeObserver → `pty_resize`), Ctrl+V paste, links open externally via
+   the opener plugin.
 4. Closing a tab calls `pty_kill` (Windows: `taskkill /T`), disposes the xterm instance,
    and removes the tab. Backend `pty-exit` events mark tabs whose process died on its own.
 
 ## Files
 
 - `src/App.tsx`, `src/components/Sidebar.tsx`, `src/components/Terminal.tsx`,
-  `src/components/terminalCache.ts`, `src/lib/tabs.ts`
+  `src/components/terminalCache.ts`, `src/lib/tabs.ts`, `src/main.tsx` (global contextmenu suppression)
 - `src-tauri/src/pty.rs`, `shell.rs`, `claude.rs`, `commands.rs`
 
 ## Tests
 
-- `src/lib/tabs.test.ts` — tab state transitions
+- `src/lib/tabs.test.ts` — tab state transitions, including `rename`
 - `src/components/Sidebar.test.tsx` — tab rows, per-project shell menu, card expand/collapse,
-  add/remove folder, multiple simultaneous project cards, empty state, sidebar collapse
+  add/remove folder, multiple simultaneous project cards, empty state, sidebar collapse,
+  double-click rename (commit/cancel/empty-name-discard)
 - `cargo test shell::` / `claude::` — per-platform shell lists and claude command shape
 
 Manual PTY verification checklist: docs/development.md.

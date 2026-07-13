@@ -40,6 +40,7 @@ function renderSidebar(overrides: Partial<React.ComponentProps<typeof Sidebar>> 
     onCloseTab: vi.fn(),
     onNewClaudeTab: vi.fn(),
     onNewShellTab: vi.fn(),
+    onRenameTab: vi.fn(),
     onToggleHistory: vi.fn(),
     onAddProject: vi.fn(),
     onRemoveProject: vi.fn(),
@@ -110,6 +111,39 @@ describe('Sidebar', () => {
 
     await userEvent.click(header);
     expect(screen.getByText('claude-1')).toBeInTheDocument();
+  });
+
+  it('renames a tab via double-click, committing on Enter', async () => {
+    const props = renderSidebar();
+    await userEvent.dblClick(screen.getByText('claude-1'));
+
+    const input = screen.getByDisplayValue('claude-1');
+    await userEvent.clear(input);
+    await userEvent.type(input, 'My session{Enter}');
+
+    expect(props.onRenameTab).toHaveBeenCalledWith('claude-1', 'My session');
+  });
+
+  it('cancels a rename on Escape without committing', async () => {
+    const props = renderSidebar();
+    await userEvent.dblClick(screen.getByText('claude-1'));
+
+    const input = screen.getByDisplayValue('claude-1');
+    await userEvent.type(input, ' renamed{Escape}');
+
+    expect(props.onRenameTab).not.toHaveBeenCalled();
+    expect(screen.getByText('claude-1')).toBeInTheDocument();
+  });
+
+  it('discards a rename that trims to empty', async () => {
+    const props = renderSidebar();
+    await userEvent.dblClick(screen.getByText('claude-1'));
+
+    const input = screen.getByDisplayValue('claude-1');
+    await userEvent.clear(input);
+    await userEvent.type(input, '   {Enter}');
+
+    expect(props.onRenameTab).not.toHaveBeenCalled();
   });
 
   it('renders a card per open folder, each scoped to its own tabs', () => {

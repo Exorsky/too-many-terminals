@@ -138,6 +138,10 @@ export default function App() {
     dispatch({ type: 'select', tabId });
   }, []);
 
+  const handleRenameTab = useCallback((tabId: string, name: string) => {
+    dispatch({ type: 'rename', tabId, name });
+  }, []);
+
   const handleResumeSession = useCallback(
     (dir: string, entry: SessionHistoryEntry) => {
       const name = entry.preview.slice(0, 30) || 'Claude';
@@ -159,6 +163,7 @@ export default function App() {
         onCloseTab={handleCloseTab}
         onNewClaudeTab={handleNewClaudeTab}
         onNewShellTab={handleNewShellTab}
+        onRenameTab={handleRenameTab}
         onToggleHistory={() => setShowHistory((v) => !v)}
         onAddProject={handleAddProject}
         onRemoveProject={handleRemoveProject}

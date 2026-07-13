@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ChevronRight, Folder, FolderPlus, History, PanelLeftClose, PanelLeftOpen,
   Plus, Sparkles, TerminalSquare, X,
@@ -25,6 +25,7 @@ interface SidebarProps {
   onCloseTab: (tabId: string) => void;
   onNewClaudeTab: (dir: string) => void;
   onNewShellTab: (dir: string, shellId: string) => void;
+  onRenameTab: (tabId: string, name: string) => void;
   onToggleHistory: () => void;
   onAddProject: () => void;
   onRemoveProject: (dir: string) => void;
@@ -75,29 +76,72 @@ function NewSessionMenu({ dir, shellOptions, onNewClaudeTab, onNewShellTab }: {
   );
 }
 
-function TabRow({ tab, isActive, onSelectTab, onCloseTab }: {
+function TabRow({ tab, isActive, onSelectTab, onCloseTab, onRenameTab }: {
   tab: Tab;
   isActive: boolean;
   onSelectTab: (tabId: string) => void;
   onCloseTab: (tabId: string) => void;
+  onRenameTab: (tabId: string, name: string) => void;
 }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(tab.name);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editing) {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }
+  }, [editing]);
+
+  const commit = () => {
+    const trimmed = draft.trim();
+    if (trimmed && trimmed !== tab.name) onRenameTab(tab.id, trimmed);
+    setEditing(false);
+  };
+
+  const rowClass = cn(
+    'group relative flex items-center gap-2 w-[calc(100%-8px)] mx-1 my-0.5 px-2 py-1.5 rounded-sm',
+    'text-[11px] transition-colors duration-100',
+    isActive
+      ? 'bg-white/8 text-foreground'
+      : 'text-muted-foreground hover:text-foreground hover:bg-white/4',
+    tab.exited && 'opacity-50',
+  );
+  const icon = tab.kind === 'claude'
+    ? <Sparkles size={12} className="shrink-0 text-primary/80" />
+    : <TerminalSquare size={12} className="shrink-0" />;
+
+  if (editing) {
+    return (
+      <div className={cn(rowClass, 'cursor-text')}>
+        {isActive && <span className="absolute left-0 top-1 bottom-1 w-0.5 rounded-full bg-primary" />}
+        {icon}
+        <input
+          ref={inputRef}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); commit(); }
+            else if (e.key === 'Escape') { e.preventDefault(); setDraft(tab.name); setEditing(false); }
+            e.stopPropagation();
+          }}
+          className="flex-1 min-w-0 bg-transparent border-none outline-none text-[11px] text-foreground font-inherit"
+        />
+      </div>
+    );
+  }
+
   return (
     <div
-      className={cn(
-        'group relative flex items-center gap-2 w-[calc(100%-8px)] mx-1 my-0.5 px-2 py-1.5 rounded-sm',
-        'text-[11px] cursor-pointer transition-colors duration-100',
-        isActive
-          ? 'bg-white/8 text-foreground'
-          : 'text-muted-foreground hover:text-foreground hover:bg-white/4',
-        tab.exited && 'opacity-50',
-      )}
+      className={cn(rowClass, 'cursor-pointer')}
       onClick={() => onSelectTab(tab.id)}
+      onDoubleClick={() => { setDraft(tab.name); setEditing(true); }}
       title={tab.cwd}
     >
       {isActive && <span className="absolute left-0 top-1 bottom-1 w-0.5 rounded-full bg-primary" />}
-      {tab.kind === 'claude'
-        ? <Sparkles size={12} className="shrink-0 text-primary/80" />
-        : <TerminalSquare size={12} className="shrink-0" />}
+      {icon}
       <span className="truncate flex-1">{tab.name}{tab.exited ? ' (exited)' : ''}</span>
       <button
         className={cn(
@@ -116,7 +160,7 @@ function TabRow({ tab, isActive, onSelectTab, onCloseTab }: {
 
 function ProjectCard({
   dir, hue, tabs, activeTabId, showHistory, shellOptions,
-  onSelectTab, onCloseTab, onNewClaudeTab, onNewShellTab, onRemoveProject,
+  onSelectTab, onCloseTab, onRenameTab, onNewClaudeTab, onNewShellTab, onRemoveProject,
 }: {
   dir: string;
   hue: number;
@@ -126,6 +170,7 @@ function ProjectCard({
   shellOptions: ShellOption[];
   onSelectTab: (tabId: string) => void;
   onCloseTab: (tabId: string) => void;
+  onRenameTab: (tabId: string, name: string) => void;
   onNewClaudeTab: (dir: string) => void;
   onNewShellTab: (dir: string, shellId: string) => void;
   onRemoveProject: (dir: string) => void;
@@ -163,6 +208,7 @@ function ProjectCard({
               isActive={!showHistory && tab.id === activeTabId}
               onSelectTab={onSelectTab}
               onCloseTab={onCloseTab}
+              onRenameTab={onRenameTab}
             />
           ))}
           <NewSessionMenu dir={dir} shellOptions={shellOptions} onNewClaudeTab={onNewClaudeTab} onNewShellTab={onNewShellTab} />
@@ -174,7 +220,7 @@ function ProjectCard({
 
 export default function Sidebar({
   tabs, activeTabId, shellOptions, showHistory, projects, collapsed,
-  onSelectTab, onCloseTab, onNewClaudeTab, onNewShellTab, onToggleHistory,
+  onSelectTab, onCloseTab, onNewClaudeTab, onNewShellTab, onRenameTab, onToggleHistory,
   onAddProject, onRemoveProject, onToggleCollapse,
 }: SidebarProps) {
   // A single root element (shared across the collapsed/expanded states) lets
@@ -277,6 +323,7 @@ export default function Sidebar({
                 shellOptions={shellOptions}
                 onSelectTab={onSelectTab}
                 onCloseTab={onCloseTab}
+                onRenameTab={onRenameTab}
                 onNewClaudeTab={onNewClaudeTab}
                 onNewShellTab={onNewShellTab}
                 onRemoveProject={onRemoveProject}
