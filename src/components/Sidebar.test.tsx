@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ShellOption, Tab } from '@/types';
@@ -101,6 +101,52 @@ describe('Sidebar', () => {
     await userEvent.click(readButtons[0]);
     expect(props.onReadTab).toHaveBeenCalledWith(expect.objectContaining({ id: 'resolved' }));
     expect(props.onSelectTab).not.toHaveBeenCalled(); // read must not also select
+  });
+
+  describe('“Waiting on you” strip', () => {
+    it('is absent when no session needs input', () => {
+      renderSidebar({ tabs: [makeTab('a', { status: 'working' }), makeTab('b', { status: 'idle' })] });
+      expect(screen.queryByText('Waiting on you')).not.toBeInTheDocument();
+    });
+
+    it('lists every session that needs input, with a count, across folders', () => {
+      const OTHER = 'C:\\Users\\x\\other';
+      renderSidebar({
+        projects: [PROJECT, OTHER],
+        tabs: [
+          makeTab('needs-here', { status: 'requires_response' }),
+          makeTab('needs-there', { status: 'requires_response', cwd: OTHER }),
+          makeTab('busy', { status: 'working' }),
+        ],
+      });
+      const strip = screen.getByText('Waiting on you').parentElement!.parentElement!;
+      expect(within(strip).getByText('needs-here')).toBeInTheDocument();
+      expect(within(strip).getByText('needs-there')).toBeInTheDocument();
+      expect(within(strip).queryByText('busy')).not.toBeInTheDocument();
+      expect(within(strip).getByText('2')).toBeInTheDocument();
+    });
+
+    it('excludes shells and exited sessions', () => {
+      renderSidebar({
+        tabs: [
+          makeTab('claude-waiting', { status: 'requires_response' }),
+          makeTab('shell-waiting', { kind: 'shell', status: 'requires_response' }),
+          makeTab('dead', { status: 'requires_response', exited: true }),
+        ],
+      });
+      const strip = screen.getByText('Waiting on you').parentElement!.parentElement!;
+      expect(within(strip).getByText('claude-waiting')).toBeInTheDocument();
+      expect(within(strip).queryByText('shell-waiting')).not.toBeInTheDocument();
+      expect(within(strip).queryByText('dead')).not.toBeInTheDocument();
+      expect(within(strip).getByText('1')).toBeInTheDocument();
+    });
+
+    it('selects a waiting session when its strip row is clicked', async () => {
+      const props = renderSidebar({ tabs: [makeTab('needs-me', { status: 'requires_response' })] });
+      const strip = screen.getByText('Waiting on you').parentElement!.parentElement!;
+      await userEvent.click(within(strip).getByText('needs-me'));
+      expect(props.onSelectTab).toHaveBeenCalledWith('needs-me');
+    });
   });
 
   it('offers Claude and every OS shell in the New session menu, scoped to the project', async () => {

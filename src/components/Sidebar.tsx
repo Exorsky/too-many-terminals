@@ -104,6 +104,67 @@ function TabIndicator({ status, size = 12 }: { status: TabStatus; size?: number 
   }
 }
 
+/** The pinned "Waiting on you" strip above the project cards: every Claude
+ *  session that stopped and is blocked on you (status `requires_response`),
+ *  gathered across *all* folders so you never have to hunt for the one that's
+ *  asking. Collapses to nothing when the queue is empty — the only place a
+ *  session is allowed to chase you. See docs/features/attention-inbox.md. */
+function AttentionStrip({ tabs, projects, activeTabId, showHistory, onSelectTab }: {
+  tabs: Tab[];
+  projects: string[];
+  activeTabId: string | null;
+  showHistory: boolean;
+  onSelectTab: (tabId: string) => void;
+}) {
+  const waiting = tabs.filter(
+    (t) => t.kind === 'claude' && t.status === 'requires_response' && !t.exited,
+  );
+  if (waiting.length === 0) return null;
+
+  return (
+    <div
+      className="mx-2 mt-2 mb-1 rounded-md border overflow-hidden shrink-0"
+      style={{ borderColor: 'rgba(255,159,90,0.28)', backgroundColor: 'rgba(255,159,90,0.05)' }}
+    >
+      <div className="flex items-center gap-1.5 px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-attention">
+        <MessageCircle size={11} className="shrink-0 animate-pulse" />
+        <span>Waiting on you</span>
+        <span className="ml-auto flex items-center justify-center min-w-4 h-4 px-1 rounded-full bg-attention text-[10px] font-bold text-background">
+          {waiting.length}
+        </span>
+      </div>
+      <div className="max-h-[38vh] overflow-y-auto scrollbar-thin pb-1">
+        {waiting.map((tab) => {
+          const idx = projects.indexOf(tab.cwd);
+          const hue = projectHue(idx < 0 ? 0 : idx);
+          const isActive = !showHistory && tab.id === activeTabId;
+          return (
+            <button
+              key={tab.id}
+              className={cn(
+                'relative flex items-center gap-2 w-[calc(100%-8px)] mx-1 my-0.5 px-2 py-1.5 rounded-sm',
+                'text-[11px] text-left border-none cursor-pointer font-inherit transition-colors duration-100',
+                isActive
+                  ? 'bg-white/8 text-foreground'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-white/4',
+              )}
+              onClick={() => onSelectTab(tab.id)}
+              title={tab.cwd}
+            >
+              <MessageCircle size={12} className="shrink-0 text-attention animate-pulse" />
+              <span className="truncate flex-1">{tab.name}</span>
+              <span className="flex items-center gap-1 shrink-0 max-w-[45%] text-[10px] text-muted-foreground/70">
+                <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: `hsl(${hue} 55% 50%)` }} />
+                <span className="truncate">{folderName(tab.cwd)}</span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function NewSessionMenu({ dir, shellOptions, onNewClaudeTab, onNewShellTab }: {
   dir: string;
   shellOptions: ShellOption[];
@@ -463,6 +524,14 @@ export default function Sidebar({
               <PanelLeftClose size={14} />
             </button>
           </div>
+
+          <AttentionStrip
+            tabs={tabs}
+            projects={projects}
+            activeTabId={activeTabId}
+            showHistory={showHistory}
+            onSelectTab={onSelectTab}
+          />
 
           <div className="flex-1 overflow-y-auto overflow-x-hidden py-2 scrollbar-thin">
             {projects.length === 0 && (
