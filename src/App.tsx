@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
+import CommandPalette from '@/components/CommandPalette';
 import SessionBar, { type MarkdownView, type SessionMode } from '@/components/SessionBar';
 import SessionHistoryPanel from '@/components/SessionHistoryPanel';
 import SessionReader from '@/components/SessionReader';
@@ -28,6 +29,7 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [readerTarget, setReaderTarget] = useState<{ projectDir: string; entry: SessionHistoryEntry } | null>(null);
   const [collapsed, setCollapsed] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const [workspaceLoaded, setWorkspaceLoaded] = useState(false);
   const settings = useSettings();
   // Tabs currently showing the in-place markdown reader (remembered per tab).
@@ -202,6 +204,20 @@ export default function App() {
     dispatch({ type: 'select', tabId });
   }, []);
 
+  // Command palette — Ctrl/Cmd+Shift+P from anywhere. Capture phase so it fires
+  // before the focused xterm swallows the key; Shift+P (not Ctrl+K) to avoid
+  // colliding with readline's kill-to-end-of-line inside a shell.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'P' || e.key === 'p')) {
+        e.preventDefault();
+        setPaletteOpen((v) => !v);
+      }
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, []);
+
   const handleRenameTab = useCallback((tabId: string, name: string) => {
     dispatch({ type: 'rename', tabId, name });
   }, []);
@@ -337,6 +353,12 @@ export default function App() {
           )}
         </div>
       </main>
+      <CommandPalette
+        open={paletteOpen}
+        tabs={state.tabs}
+        onClose={() => setPaletteOpen(false)}
+        onSelectTab={handleSelectTab}
+      />
     </div>
   );
 }

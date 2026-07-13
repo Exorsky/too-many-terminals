@@ -91,7 +91,7 @@ function DropLine({ pos, flush = false }: { pos: DropPos; flush?: boolean }) {
 }
 
 /** Live status of a Claude tab, learned from Claude Code's own hooks. */
-function TabIndicator({ status, size = 12 }: { status: TabStatus; size?: number }) {
+export function TabIndicator({ status, size = 12 }: { status: TabStatus; size?: number }) {
   switch (status) {
     case 'working':
       return <Loader2 size={size} className="shrink-0 text-warning animate-spin" />;
