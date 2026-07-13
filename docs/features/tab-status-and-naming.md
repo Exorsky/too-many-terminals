@@ -63,7 +63,10 @@ Status/session-id/naming-result reach the frontend as Tauri events
 `namer.rs` shells out to `claude -p --no-session-persistence --model
 claude-haiku-4-5-20251001 --tools "" --setting-sources ""` (same `claude_command`
 platform wrapping as regular tabs), prompt on stdin, reply on stdout, run from `$HOME`
-so no project `CLAUDE.md` leaks into context. A 30s timeout kills the child
+so no project `CLAUDE.md` leaks into context. The subprocess gets the login shell's
+PATH (`login_shell_path()`, same as pty children) — GUI apps launched from
+Finder/dock on macOS/Linux otherwise inherit a minimal PATH without `claude`, which
+silently broke auto-naming there. A 30s timeout kills the child
 (tree-kill via `taskkill` on Windows, since `cmd.exe` wraps `claude`; plain `kill -9`
 elsewhere) and gives up silently. Calls are serialized through a single worker thread
 (`NamingQueue`, spawned once in `lib.rs`'s `.setup()`) — concurrent `claude -p` calls

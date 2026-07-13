@@ -12,7 +12,7 @@ use std::time::Duration;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
-use crate::claude::claude_command;
+use crate::claude::{claude_command, login_shell_path};
 use crate::shell::Platform;
 
 const NAMING_MODEL: &str = "claude-haiku-4-5-20251001";
@@ -51,14 +51,20 @@ pub fn run_naming_subprocess(prompt: &str) -> Option<String> {
     let (program, args) = claude_command(Platform::current(), &naming_flags());
     let home = dirs::home_dir()?;
 
-    let mut child = Command::new(&program)
+    let mut command = Command::new(&program);
+    command
         .args(&args)
         .current_dir(&home)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()
-        .ok()?;
+        .stderr(Stdio::null());
+    // GUI apps launched from Finder/dock inherit a minimal PATH without
+    // `claude` — same problem pty_spawn solves for its children. On Unix,
+    // Command resolves the program via the child's PATH when one is set.
+    if let Some(path) = login_shell_path() {
+        command.env("PATH", path);
+    }
+    let mut child = command.spawn().ok()?;
 
     if let Some(mut stdin) = child.stdin.take() {
         let _ = stdin.write_all(prompt.as_bytes());
