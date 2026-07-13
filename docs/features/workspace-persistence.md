@@ -6,7 +6,7 @@ where you left off.
 
 ## What's saved
 
-`src-tauri/src/workspace.rs` writes `<config dir>/claude-terminal/workspace.json`
+`src-tauri/src/workspace.rs` writes `<config dir>/too-many-terminals/workspace.json`
 (`dirs::config_dir()` — `%APPDATA%` / `~/Library/Application Support` / `~/.config`):
 
 ```json

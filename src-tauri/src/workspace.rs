@@ -30,11 +30,33 @@ pub struct WorkspaceState {
 /// Directory the workspace file lives in (config dir keeps it out of the way
 /// of transcripts under the home-relative `~/.claude`).
 pub fn config_dir() -> Option<PathBuf> {
+    dirs::config_dir().map(|d| d.join("too-many-terminals"))
+}
+
+/// Config dir used before the app was renamed to Too Many Terminals. A saved
+/// workspace here is migrated once into [`config_dir`] on first load.
+pub fn legacy_config_dir() -> Option<PathBuf> {
     dirs::config_dir().map(|d| d.join("claude-terminal"))
 }
 
 fn workspace_path(root: &Path) -> PathBuf {
     root.join("workspace.json")
+}
+
+/// One-time migration after the rename: if `new_root` has no workspace file yet
+/// but `legacy_root` does, copy it over so restarting doesn't lose the user's
+/// saved folders/tabs. The legacy file is left in place (harmless). Returns
+/// whether a copy happened.
+pub fn migrate_legacy_workspace(new_root: &Path, legacy_root: &Path) -> bool {
+    let new_path = workspace_path(new_root);
+    let legacy_path = workspace_path(legacy_root);
+    if new_path.exists() || !legacy_path.exists() {
+        return false;
+    }
+    if fs::create_dir_all(new_root).is_err() {
+        return false;
+    }
+    fs::copy(&legacy_path, &new_path).is_ok()
 }
 
 /// Reads the saved workspace, or the default (empty) state if there's none
@@ -98,6 +120,47 @@ mod tests {
 
         save_workspace(tmp.path(), &state).unwrap();
         assert_eq!(load_workspace(tmp.path()), state);
+    }
+
+    #[test]
+    fn migrates_legacy_workspace_when_new_is_absent() {
+        let tmp = tempfile::tempdir().unwrap();
+        let legacy = tmp.path().join("claude-terminal");
+        let new = tmp.path().join("too-many-terminals");
+        let state = WorkspaceState {
+            projects: vec!["/home/x/project".to_string()],
+            collapsed: false,
+            tabs: vec![],
+        };
+        save_workspace(&legacy, &state).unwrap();
+
+        assert!(migrate_legacy_workspace(&new, &legacy));
+        assert_eq!(load_workspace(&new), state);
+        // Legacy file is left in place.
+        assert!(workspace_path(&legacy).exists());
+    }
+
+    #[test]
+    fn migration_does_not_overwrite_existing_new_workspace() {
+        let tmp = tempfile::tempdir().unwrap();
+        let legacy = tmp.path().join("claude-terminal");
+        let new = tmp.path().join("too-many-terminals");
+        let legacy_state = WorkspaceState { collapsed: true, ..Default::default() };
+        let new_state = WorkspaceState { collapsed: false, ..Default::default() };
+        save_workspace(&legacy, &legacy_state).unwrap();
+        save_workspace(&new, &new_state).unwrap();
+
+        assert!(!migrate_legacy_workspace(&new, &legacy));
+        assert_eq!(load_workspace(&new), new_state);
+    }
+
+    #[test]
+    fn migration_is_a_noop_when_legacy_is_missing() {
+        let tmp = tempfile::tempdir().unwrap();
+        let legacy = tmp.path().join("claude-terminal");
+        let new = tmp.path().join("too-many-terminals");
+        assert!(!migrate_legacy_workspace(&new, &legacy));
+        assert!(!workspace_path(&new).exists());
     }
 
     #[test]

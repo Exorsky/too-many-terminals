@@ -1,7 +1,7 @@
 //! Installs Claude Code's own lifecycle hooks (SessionStart, PreToolUse, Stop,
 //! Notification, SessionEnd, UserPromptSubmit) into a project's
 //! `.claude/settings.local.json`, pointing them back at this same executable
-//! invoked with `--claude-terminal-hook <event>`. That invocation runs
+//! invoked with `--too-many-terminals-hook <event>`. That invocation runs
 //! [`run_hook_client`] instead of launching the GUI — it reads the hook's
 //! stdin JSON, forwards a small message over the hook pipe (see
 //! `hook_server.rs`), and exits. No bundled Node.js runtime needed.
@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{json, Value};
 
-/// (Claude Code hook name, argument we pass ourselves via `--claude-terminal-hook`).
+/// (Claude Code hook name, argument we pass ourselves via `--too-many-terminals-hook`).
 const HOOK_EVENTS: [(&str, &str); 6] = [
     ("SessionStart", "session-start"),
     ("UserPromptSubmit", "prompt-submit"),
@@ -25,7 +25,12 @@ const HOOK_EVENTS: [(&str, &str); 6] = [
 /// Substring that marks a hook command entry as ours, regardless of where the
 /// executable is installed — lets us find-and-replace our own entries without
 /// disturbing hooks the user configured themselves.
-const HOOK_MARKER: &str = "--claude-terminal-hook";
+const HOOK_MARKER: &str = "--too-many-terminals-hook";
+
+/// Marker used before the app was renamed to Too Many Terminals. Still
+/// recognized as ours so re-registration strips stale entries left in
+/// projects instrumented by an older build.
+const LEGACY_HOOK_MARKER: &str = "--claude-terminal-hook";
 
 fn settings_path(cwd: &Path) -> PathBuf {
     cwd.join(".claude").join("settings.local.json")
@@ -36,7 +41,7 @@ fn build_hook_command(exe: &str, event_arg: &str) -> String {
 }
 
 fn is_our_hook(command: &str) -> bool {
-    command.contains(HOOK_MARKER)
+    command.contains(HOOK_MARKER) || command.contains(LEGACY_HOOK_MARKER)
 }
 
 fn is_our_group(group: &Value) -> bool {
@@ -159,7 +164,7 @@ pub fn uninstall_hooks(cwd: &Path) -> Result<(), String> {
 /// `std::env::temp_dir()` — no env var needed to share it, since the hook
 /// client inherits the same TMP/TMPDIR as its parent.
 pub fn naming_flag_path(tab_id: &str) -> PathBuf {
-    std::env::temp_dir().join(format!("claude-terminal-named-{tab_id}"))
+    std::env::temp_dir().join(format!("too-many-terminals-named-{tab_id}"))
 }
 
 pub fn mark_named(tab_id: &str) {
@@ -178,10 +183,10 @@ pub fn reset_naming_flag(tab_id: &str) {
 /// missing (i.e. `claude` was invoked outside this app) or the pipe is
 /// unreachable — hook failures must never block the user's Claude session.
 pub fn run_hook_client(event_arg: &str) {
-    let Ok(tab_id) = std::env::var("CLAUDE_TERMINAL_TAB_ID") else {
+    let Ok(tab_id) = std::env::var("TOO_MANY_TERMINALS_TAB_ID") else {
         return;
     };
-    let Ok(pipe) = std::env::var("CLAUDE_TERMINAL_PIPE") else {
+    let Ok(pipe) = std::env::var("TOO_MANY_TERMINALS_PIPE") else {
         return;
     };
 
@@ -260,7 +265,7 @@ mod tests {
     fn installs_all_six_events_pointing_at_our_exe() {
         let settings = merge_settings(json!({}), "/path/to/exe");
         for (event, arg) in HOOK_EVENTS {
-            assert_eq!(command_of(&settings, event), format!("\"/path/to/exe\" --claude-terminal-hook {arg}"));
+            assert_eq!(command_of(&settings, event), format!("\"/path/to/exe\" --too-many-terminals-hook {arg}"));
         }
     }
 
@@ -270,7 +275,7 @@ mod tests {
         let second = merge_settings(first, "/new/exe");
         let group = second["hooks"]["Stop"].as_array().unwrap();
         assert_eq!(group.len(), 1, "should replace, not duplicate, our own entry");
-        assert_eq!(command_of(&second, "Stop"), "\"/new/exe\" --claude-terminal-hook stop");
+        assert_eq!(command_of(&second, "Stop"), "\"/new/exe\" --too-many-terminals-hook stop");
     }
 
     #[test]
@@ -295,7 +300,16 @@ mod tests {
     }
 
     #[test]
+    fn is_our_hook_recognizes_current_and_legacy_markers() {
+        assert!(is_our_hook("\"/exe\" --too-many-terminals-hook stop"));
+        assert!(is_our_hook("\"/exe\" --claude-terminal-hook stop"));
+        assert!(!is_our_hook("echo user-hook"));
+    }
+
+    #[test]
     fn uninstall_removes_only_our_entries() {
+        // The stale entry uses the legacy pre-rename marker, exercising the
+        // back-compat path that strips hooks installed by an older build.
         let existing = json!({
             "hooks": {
                 "Stop": [
@@ -350,7 +364,7 @@ mod tests {
         let raw = fs::read_to_string(settings_path(tmp.path())).unwrap();
         let saved: Value = serde_json::from_str(&raw).unwrap();
         assert_eq!(saved["permissions"]["allow"][0], "Bash");
-        assert_eq!(command_of(&saved, "SessionStart"), "\"/exe\" --claude-terminal-hook session-start");
+        assert_eq!(command_of(&saved, "SessionStart"), "\"/exe\" --too-many-terminals-hook session-start");
     }
 
     #[test]

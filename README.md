@@ -1,4 +1,4 @@
-# Claude Terminal
+# Too Many Terminals
 
 Lightweight cross-platform desktop terminal for [Claude Code](https://claude.com/claude-code).
 Built with Tauri 2 — small native builds (~10–25 MB) for Windows, macOS and Linux.

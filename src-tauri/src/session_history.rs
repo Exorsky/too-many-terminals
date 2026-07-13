@@ -44,7 +44,7 @@ fn extract_text(content: &Value) -> Option<&str> {
     }
 }
 
-/// True for Claude Terminal / Claude Code's own synthetic wrapper messages
+/// True for Too Many Terminals / Claude Code's own synthetic wrapper messages
 /// (slash-command echoes, hook notices, caveats) rather than something the
 /// human actually typed.
 fn looks_synthetic(text: &str) -> bool {

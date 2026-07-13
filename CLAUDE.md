@@ -1,4 +1,4 @@
-# Claude Terminal
+# Too Many Terminals
 
 Lightweight cross-platform (Windows/Linux/macOS) desktop terminal for Claude Code.
 Tauri 2 (Rust backend + system webview) + React 19 + Tailwind v4 + xterm.js.

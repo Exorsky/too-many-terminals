@@ -10,7 +10,7 @@ terminal output.
 The original Electron implementation used small Node scripts (`on-*.js` +
 `pipe-send.js`) as the hook commands. This app has no Node runtime, so instead **the
 app's own executable doubles as the hook client**: `main.rs` checks its own argv
-before doing anything else — `<exe> --claude-terminal-hook <event>` runs
+before doing anything else — `<exe> --too-many-terminals-hook <event>` runs
 `hooks::run_hook_client(event)` (reads the hook's stdin JSON, sends one line over the
 pipe, exits) instead of launching the GUI. `.claude/settings.local.json` hook commands
 point straight at this executable.
@@ -23,10 +23,11 @@ point straight at this executable.
    `<cwd>/.claude/settings.local.json` for all six events (SessionStart,
    UserPromptSubmit, PreToolUse, Stop, Notification, SessionEnd) — matching, not
    overwriting, any hooks the user configured themselves (detected by a
-   `--claude-terminal-hook` marker in the command string, so re-installs replace only
-   our own entries). Runs on every spawn since the pipe path is PID-scoped and changes
-   every launch.
-2. `CLAUDE_TERMINAL_TAB_ID` / `CLAUDE_TERMINAL_PIPE` env vars are set on the pty child
+   `--too-many-terminals-hook` marker in the command string, so re-installs replace only
+   our own entries; the legacy `--claude-terminal-hook` marker is also recognized so
+   entries from before the rename get cleaned up). Runs on every spawn since the pipe
+   path is PID-scoped and changes every launch.
+2. `TOO_MANY_TERMINALS_TAB_ID` / `TOO_MANY_TERMINALS_PIPE` env vars are set on the pty child
    so the hook client (invoked by Claude Code, inheriting the pty's env) knows where
    to send messages and which tab they're for.
 3. If resuming a past session, the tab's naming flag is pre-marked (see below) so its
@@ -34,8 +35,8 @@ point straight at this executable.
 
 ## Transport
 
-One named pipe (Windows, `\\.\pipe\claude-terminal-hooks-<pid>`) / Unix socket
-(`<tmp>/claude-terminal-hooks-<pid>.sock`), started once at app launch
+One named pipe (Windows, `\\.\pipe\too-many-terminals-hooks-<pid>`) / Unix socket
+(`<tmp>/too-many-terminals-hooks-<pid>.sock`), started once at app launch
 (`hook_server::start`, via `tauri::async_runtime::spawn`). Every hook invocation opens
 a short-lived connection, writes one line of `{"tabId","event","data"}` JSON, and
 exits — the server accepts connections in a loop and hands each to
@@ -67,7 +68,7 @@ elsewhere) and gives up silently. Calls are serialized through a single worker t
 get rate-limited.
 
 The hook client (`run_hook_client`, `prompt-submit` case) gates itself with a flag
-file (`hooks::naming_flag_path`, `<tmp>/claude-terminal-named-<tabId>`) so only the
+file (`hooks::naming_flag_path`, `<tmp>/too-many-terminals-named-<tabId>`) so only the
 *first* prompt of a session triggers naming; the flag is written right after sending
 the `tab:generate-name` message. Both the hook client and the running app compute this
 path independently from `std::env::temp_dir()` — no extra env var needed, since a

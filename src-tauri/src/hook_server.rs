@@ -15,12 +15,12 @@ use crate::namer::{NamingJob, NamingQueue};
 pub fn pipe_path() -> String {
     #[cfg(windows)]
     {
-        format!(r"\\.\pipe\claude-terminal-hooks-{}", std::process::id())
+        format!(r"\\.\pipe\too-many-terminals-hooks-{}", std::process::id())
     }
     #[cfg(not(windows))]
     {
         std::env::temp_dir()
-            .join(format!("claude-terminal-hooks-{}.sock", std::process::id()))
+            .join(format!("too-many-terminals-hooks-{}.sock", std::process::id()))
             .to_string_lossy()
             .into_owned()
     }

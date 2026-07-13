@@ -308,7 +308,7 @@ export default function Sidebar({
           {/* Header */}
           <div className="flex items-center gap-1.5 h-10 px-2.5 border-b border-border shrink-0">
             <TerminalSquare size={15} className="text-primary shrink-0" />
-            <span className="text-[12px] font-semibold tracking-wide text-foreground/90 truncate">Claude Terminal</span>
+            <span className="text-[12px] font-semibold tracking-wide text-foreground/90 truncate">Too Many Terminals</span>
             <button
               className="flex items-center justify-center w-6 h-6 ml-auto rounded-sm text-muted-foreground hover:text-foreground hover:bg-white/8 border-none cursor-pointer shrink-0"
               onClick={onToggleCollapse}

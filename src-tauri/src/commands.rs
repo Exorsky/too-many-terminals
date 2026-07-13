@@ -78,8 +78,8 @@ pub fn pty_spawn(
         if let Ok(exe) = std::env::current_exe() {
             let _ = hooks::install_hooks(std::path::Path::new(&cwd), &exe.to_string_lossy());
         }
-        cmd.env("CLAUDE_TERMINAL_TAB_ID", tab_id.clone());
-        cmd.env("CLAUDE_TERMINAL_PIPE", hook_env.pipe_path.clone());
+        cmd.env("TOO_MANY_TERMINALS_TAB_ID", tab_id.clone());
+        cmd.env("TOO_MANY_TERMINALS_PIPE", hook_env.pipe_path.clone());
         // A resumed tab already has a meaningful name — don't let the next
         // prompt trigger another auto-rename.
         if resume_session_id.is_some() {
@@ -191,6 +191,9 @@ pub fn load_workspace() -> WorkspaceState {
     let Some(root) = workspace::config_dir() else {
         return WorkspaceState::default();
     };
+    if let Some(legacy) = workspace::legacy_config_dir() {
+        workspace::migrate_legacy_workspace(&root, &legacy);
+    }
     workspace::load_workspace(&root)
 }
 
