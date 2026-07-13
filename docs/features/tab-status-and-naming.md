@@ -25,8 +25,10 @@ point straight at this executable.
    overwriting, any hooks the user configured themselves (detected by a
    `--too-many-terminals-hook` marker in the command string, so re-installs replace only
    our own entries; the legacy `--claude-terminal-hook` marker is also recognized so
-   entries from before the rename get cleaned up). Runs on every spawn since the pipe
-   path is PID-scoped and changes every launch.
+   entries from before the rename get cleaned up, as are the old Electron-based
+   ClaudeTerminal app's `node "<bundle>/hooks/on-<event>.js"` commands, which would
+   otherwise spam MODULE_NOT_FOUND errors once that app is uninstalled). Runs on every
+   spawn since the pipe path is PID-scoped and changes every launch.
 2. `TOO_MANY_TERMINALS_TAB_ID` / `TOO_MANY_TERMINALS_PIPE` env vars are set on the pty child
    so the hook client (invoked by Claude Code, inheriting the pty's env) knows where
    to send messages and which tab they're for.

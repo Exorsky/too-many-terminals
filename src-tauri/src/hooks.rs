@@ -32,6 +32,27 @@ const HOOK_MARKER: &str = "--too-many-terminals-hook";
 /// projects instrumented by an older build.
 const LEGACY_HOOK_MARKER: &str = "--claude-terminal-hook";
 
+/// Hook scripts installed by the old Electron-based ClaudeTerminal app as
+/// `node "<bundle>/hooks/on-<event>.js"`. Once that app is uninstalled or
+/// replaced, the scripts no longer exist and every Claude session spams
+/// MODULE_NOT_FOUND errors, so stale entries must be stripped on re-merge.
+const LEGACY_NODE_HOOK_SCRIPTS: [&str; 6] = [
+    "on-session-start.js",
+    "on-prompt-submit.js",
+    "on-tool-use.js",
+    "on-stop.js",
+    "on-notification.js",
+    "on-session-end.js",
+];
+
+fn is_legacy_node_hook(command: &str) -> bool {
+    command.starts_with("node \"")
+        && LEGACY_NODE_HOOK_SCRIPTS.iter().any(|script| {
+            command.ends_with(&format!("/hooks/{script}\""))
+                || command.ends_with(&format!("\\hooks\\{script}\""))
+        })
+}
+
 fn settings_path(cwd: &Path) -> PathBuf {
     cwd.join(".claude").join("settings.local.json")
 }
@@ -41,7 +62,9 @@ fn build_hook_command(exe: &str, event_arg: &str) -> String {
 }
 
 fn is_our_hook(command: &str) -> bool {
-    command.contains(HOOK_MARKER) || command.contains(LEGACY_HOOK_MARKER)
+    command.contains(HOOK_MARKER)
+        || command.contains(LEGACY_HOOK_MARKER)
+        || is_legacy_node_hook(command)
 }
 
 fn is_our_group(group: &Value) -> bool {
@@ -304,6 +327,45 @@ mod tests {
         assert!(is_our_hook("\"/exe\" --too-many-terminals-hook stop"));
         assert!(is_our_hook("\"/exe\" --claude-terminal-hook stop"));
         assert!(!is_our_hook("echo user-hook"));
+    }
+
+    #[test]
+    fn is_our_hook_recognizes_electron_era_node_hooks() {
+        // macOS bundle path (the app was later deleted → MODULE_NOT_FOUND spam).
+        assert!(is_our_hook(
+            "node \"/Applications/ClaudeTerminal.app/Contents/Resources/hooks/on-stop.js\""
+        ));
+        // Windows Squirrel install path.
+        assert!(is_our_hook(
+            "node \"C:\\Users\\x\\AppData\\Local\\ClaudeTerminal\\app-1.4.1\\resources\\hooks\\on-prompt-submit.js\""
+        ));
+        // Linux path.
+        assert!(is_our_hook(
+            "node \"/usr/lib/claude-terminal/resources/hooks/on-session-end.js\""
+        ));
+        // User-authored node hooks with other script names stay untouched.
+        assert!(!is_our_hook("node \"/home/x/my-hooks/notify.js\""));
+        assert!(!is_our_hook("node \"/home/x/hooks/on-custom.js\""));
+    }
+
+    #[test]
+    fn merge_strips_stale_electron_era_entries() {
+        let existing = json!({
+            "hooks": {
+                "Stop": [{
+                    "matcher": "",
+                    "hooks": [{
+                        "type": "command",
+                        "command": "node \"/Applications/ClaudeTerminal.app/Contents/Resources/hooks/on-stop.js\"",
+                        "timeout": 10
+                    }]
+                }]
+            }
+        });
+        let merged = merge_settings(existing, "/new/exe");
+        let group = merged["hooks"]["Stop"].as_array().unwrap();
+        assert_eq!(group.len(), 1, "stale Electron entry should be replaced, not kept alongside");
+        assert_eq!(command_of(&merged, "Stop"), "\"/new/exe\" --too-many-terminals-hook stop");
     }
 
     #[test]
