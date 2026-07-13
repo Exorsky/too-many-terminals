@@ -5,6 +5,7 @@ mod hooks;
 mod namer;
 mod pty;
 mod session_history;
+mod settings;
 mod shell;
 mod usage;
 mod workspace;
@@ -47,6 +48,8 @@ pub fn run() {
             commands::get_usage_stats,
             commands::load_workspace,
             commands::save_workspace,
+            commands::load_settings,
+            commands::save_settings,
             commands::uninstall_hooks,
         ])
         .build(tauri::generate_context!())

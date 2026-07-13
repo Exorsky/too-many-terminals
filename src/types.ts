@@ -81,3 +81,12 @@ export interface WorkspaceState {
   collapsed: boolean;
   tabs: SavedTab[];
 }
+
+// --- App settings (theme selection + custom themes) ---
+
+export interface AppSettings {
+  /** Id of the active theme — a built-in preset or a custom theme. */
+  selectedThemeId: string;
+  /** Custom themes as raw JSON; validated by sanitizeCustomThemes on load. */
+  customThemes: unknown[];
+}

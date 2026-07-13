@@ -7,6 +7,7 @@ use crate::claude::{claude_command, login_shell_path, resume_flags};
 use crate::hooks;
 use crate::pty::PtyManager;
 use crate::session_history::{projects_root, SessionHistoryEntry};
+use crate::settings::{self, AppSettings};
 use crate::shell::{all_shell_options, shell_option, Platform, ShellOption};
 use crate::workspace::{self, WorkspaceState};
 use crate::HookEnv;
@@ -201,6 +202,20 @@ pub fn load_workspace() -> WorkspaceState {
 pub fn save_workspace(state: WorkspaceState) -> Result<(), String> {
     let root = workspace::config_dir().ok_or("could not resolve config directory")?;
     workspace::save_workspace(&root, &state)
+}
+
+#[tauri::command(async)]
+pub fn load_settings() -> AppSettings {
+    let Some(root) = workspace::config_dir() else {
+        return AppSettings::default();
+    };
+    settings::load_settings(&root)
+}
+
+#[tauri::command(async)]
+pub fn save_settings(settings: AppSettings) -> Result<(), String> {
+    let root = workspace::config_dir().ok_or("could not resolve config directory")?;
+    settings::save_settings(&root, &settings)
 }
 
 #[tauri::command(async)]

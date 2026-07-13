@@ -5,6 +5,7 @@ import { WebLinksAddon } from '@xterm/addon-web-links';
 import { WebglAddon } from '@xterm/addon-webgl';
 import '@xterm/xterm/css/xterm.css';
 import * as ipc from '@/lib/ipc';
+import { getActiveXtermTheme } from '@/lib/themes';
 import { terminalCache, flushPendingWrites } from './terminalCache';
 
 interface TerminalProps {
@@ -26,28 +27,7 @@ const Terminal = React.memo(function Terminal({ tabId, isVisible }: TerminalProp
         fontSize: 14,
         fontFamily: "'Cascadia Code', 'Consolas', monospace",
         scrollback: 5000,
-        theme: {
-          background: '#0c0d10',
-          foreground: '#e7e8ec',
-          cursor: '#7c9eff',
-          selectionBackground: '#2a2f45',
-          black: '#0c0d10',
-          red: '#ff6b6b',
-          green: '#8bd17c',
-          yellow: '#f0b357',
-          blue: '#7c9eff',
-          magenta: '#c792ea',
-          cyan: '#6fd4c9',
-          white: '#e7e8ec',
-          brightBlack: '#666b78',
-          brightRed: '#ff6b6b',
-          brightGreen: '#8bd17c',
-          brightYellow: '#f0b357',
-          brightBlue: '#7c9eff',
-          brightMagenta: '#c792ea',
-          brightCyan: '#6fd4c9',
-          brightWhite: '#ffffff',
-        },
+        theme: getActiveXtermTheme(),
       });
 
       const fitAddon = new FitAddon();

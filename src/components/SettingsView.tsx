@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Settings as SettingsIcon, Sparkles, SlidersHorizontal } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import CustomizeTab from './CustomizeTab';
 
 type SettingsTab = 'general' | 'customize';
 
@@ -12,22 +13,10 @@ const TABS: { id: SettingsTab; label: string; icon: typeof SlidersHorizontal }[]
 function GeneralTab() {
   return (
     <div className="flex flex-col items-center justify-center gap-1.5 text-center px-6 py-14 text-muted-foreground">
-      <SettingsIcon size={20} className="text-[#33363f] mb-1" />
+      <SettingsIcon size={20} className="text-border-hover mb-1" />
       <div className="text-[12.5px] text-foreground">No settings yet</div>
       <div className="text-[11px] max-w-[34ch] leading-relaxed">
         General app preferences will appear here.
-      </div>
-    </div>
-  );
-}
-
-function CustomizeTab() {
-  return (
-    <div className="flex flex-col items-center justify-center gap-1.5 text-center px-6 py-14 text-muted-foreground">
-      <Sparkles size={20} className="text-[#33363f] mb-1" />
-      <div className="text-[12.5px] text-foreground">Customization coming soon</div>
-      <div className="text-[11px] max-w-[34ch] leading-relaxed">
-        Theming and appearance options will live here.
       </div>
     </div>
   );

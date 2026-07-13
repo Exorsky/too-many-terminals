@@ -8,7 +8,7 @@ import { invoke, Channel } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
-import type { SessionHistoryEntry, ShellOption, TabStatus, UsageStats, WorkspaceState } from '@/types';
+import type { AppSettings, SessionHistoryEntry, ShellOption, TabStatus, UsageStats, WorkspaceState } from '@/types';
 
 export interface SpawnPtyOptions {
   tabId: string;
@@ -114,6 +114,14 @@ export function loadWorkspace(): Promise<WorkspaceState> {
 
 export function saveWorkspace(state: WorkspaceState): Promise<void> {
   return invoke('save_workspace', { state });
+}
+
+export function loadSettings(): Promise<AppSettings> {
+  return invoke('load_settings');
+}
+
+export function saveSettings(settings: AppSettings): Promise<void> {
+  return invoke('save_settings', { settings });
 }
 
 /** Removes just this app's hook entries from a project's
