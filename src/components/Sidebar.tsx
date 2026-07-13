@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type MutableRefObject } from 'react';
 import {
   CheckCircle2, ChevronRight, Circle, Folder, FolderPlus, History, Loader2,
   MessageCircle, PanelLeftClose, PanelLeftOpen, Plus, Settings, Sparkles, TerminalSquare, X,
@@ -31,7 +31,29 @@ interface SidebarProps {
   onToggleSettings: () => void;
   onAddProject: () => void;
   onRemoveProject: (dir: string) => void;
+  onReorderProject: (sourceDir: string, targetDir: string, position: DropPos) => void;
+  onReorderTab: (tabId: string, targetId: string, position: DropPos) => void;
   onToggleCollapse: () => void;
+}
+
+/** The item currently being dragged in the sidebar, held in a ref shared by the
+ *  cards and tab rows so a drop target can decide — synchronously during
+ *  dragover — whether it's a valid target (a folder can only reorder among
+ *  folders, a session only among sessions in the *same* folder). */
+type DragItem =
+  | { kind: 'folder'; dir: string }
+  | { kind: 'tab'; id: string; cwd: string };
+
+type DragRef = MutableRefObject<DragItem | null>;
+
+/** Which side of the hovered target the dragged item will land on. */
+type DropPos = 'before' | 'after';
+
+/** Above the target's vertical midpoint drops before it, below drops after —
+ *  so the insertion line always shows the exact gap the item will fall into. */
+function dropSide(e: { clientY: number; currentTarget: HTMLElement }): DropPos {
+  const r = e.currentTarget.getBoundingClientRect();
+  return e.clientY < r.top + r.height / 2 ? 'before' : 'after';
 }
 
 function folderName(dir: string): string {
@@ -42,6 +64,27 @@ function folderName(dir: string): string {
  *  same scheme the original multi-project app used. */
 function projectHue(index: number): number {
   return PROJECT_COLORS[index % PROJECT_COLORS.length].hue;
+}
+
+/** The insertion line shown while dragging — a glowing accent bar with a
+ *  leading cap, sitting in the gap the item will drop into. `flush` tucks it to
+ *  the target's own edge for cards (whose `overflow-hidden` would clip a line
+ *  floated into the gap); rows let it sit in the margin between them. */
+function DropLine({ pos, flush = false }: { pos: DropPos; flush?: boolean }) {
+  return (
+    <span
+      className={cn(
+        'absolute z-10 h-0.5 rounded-full bg-primary pointer-events-none',
+        'shadow-[0_0_6px_0_var(--primary)]',
+        flush ? 'left-0 right-0' : 'left-2 right-2',
+        pos === 'before'
+          ? (flush ? 'top-0' : '-top-px')
+          : (flush ? 'bottom-0' : '-bottom-px'),
+      )}
+    >
+      <span className="absolute -left-0.5 -top-0.75 w-2 h-2 rounded-full bg-primary shadow-[0_0_6px_0_var(--primary)]" />
+    </span>
+  );
 }
 
 /** Live status of a Claude tab, learned from Claude Code's own hooks. */
@@ -92,16 +135,25 @@ function NewSessionMenu({ dir, shellOptions, onNewClaudeTab, onNewShellTab }: {
   );
 }
 
-function TabRow({ tab, isActive, onSelectTab, onCloseTab, onRenameTab }: {
+function TabRow({ tab, isActive, dragRef, onSelectTab, onCloseTab, onRenameTab, onReorderTab }: {
   tab: Tab;
   isActive: boolean;
+  dragRef: DragRef;
   onSelectTab: (tabId: string) => void;
   onCloseTab: (tabId: string) => void;
   onRenameTab: (tabId: string, name: string) => void;
+  onReorderTab: (tabId: string, targetId: string, position: DropPos) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(tab.name);
+  const [dropPos, setDropPos] = useState<DropPos | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  /** A session drag only targets another session in the same folder. */
+  const canAccept = () => {
+    const d = dragRef.current;
+    return d?.kind === 'tab' && d.cwd === tab.cwd && d.id !== tab.id;
+  };
 
   useEffect(() => {
     if (editing) {
@@ -152,10 +204,34 @@ function TabRow({ tab, isActive, onSelectTab, onCloseTab, onRenameTab }: {
   return (
     <div
       className={cn(rowClass, 'cursor-pointer')}
+      draggable
+      onDragStart={(e) => {
+        dragRef.current = { kind: 'tab', id: tab.id, cwd: tab.cwd };
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', tab.id);
+        e.stopPropagation();
+      }}
+      onDragEnd={() => { dragRef.current = null; setDropPos(null); }}
+      onDragOver={(e) => {
+        if (!canAccept()) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        setDropPos(dropSide(e)); // identical value bails out of re-render, so no flicker
+      }}
+      onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropPos(null); }}
+      onDrop={(e) => {
+        const d = dragRef.current;
+        if (d?.kind === 'tab' && d.cwd === tab.cwd && d.id !== tab.id) {
+          e.preventDefault();
+          onReorderTab(d.id, tab.id, dropSide(e));
+        }
+        setDropPos(null);
+      }}
       onClick={() => onSelectTab(tab.id)}
       onDoubleClick={() => { setDraft(tab.name); setEditing(true); }}
       title={tab.cwd}
     >
+      {dropPos && <DropLine pos={dropPos} />}
       {isActive && <span className="absolute left-0 top-1 bottom-1 w-0.5 rounded-full bg-primary" />}
       {icon}
       <span className="truncate flex-1">{tab.name}{tab.exited ? ' (exited)' : ''}</span>
@@ -175,8 +251,9 @@ function TabRow({ tab, isActive, onSelectTab, onCloseTab, onRenameTab }: {
 }
 
 function ProjectCard({
-  dir, hue, tabs, activeTabId, showHistory, shellOptions,
+  dir, hue, tabs, activeTabId, showHistory, shellOptions, dragRef,
   onSelectTab, onCloseTab, onRenameTab, onNewClaudeTab, onNewShellTab, onRemoveProject,
+  onReorderProject, onReorderTab,
 }: {
   dir: string;
   hue: number;
@@ -184,22 +261,53 @@ function ProjectCard({
   activeTabId: string | null;
   showHistory: boolean;
   shellOptions: ShellOption[];
+  dragRef: DragRef;
   onSelectTab: (tabId: string) => void;
   onCloseTab: (tabId: string) => void;
   onRenameTab: (tabId: string, name: string) => void;
   onNewClaudeTab: (dir: string) => void;
   onNewShellTab: (dir: string, shellId: string) => void;
   onRemoveProject: (dir: string) => void;
+  onReorderProject: (sourceDir: string, targetDir: string, position: DropPos) => void;
+  onReorderTab: (tabId: string, targetId: string, position: DropPos) => void;
 }) {
   const [expanded, setExpanded] = useState(true);
+  const [dropPos, setDropPos] = useState<DropPos | null>(null);
+
+  /** A folder drag only targets another folder. */
+  const canAccept = () => {
+    const d = dragRef.current;
+    return d?.kind === 'folder' && d.dir !== dir;
+  };
 
   return (
     <div
-      className="mx-2 mb-2 rounded-md border overflow-hidden transition-colors duration-100"
+      className="relative mx-2 mb-2 rounded-md border overflow-hidden transition-colors duration-100"
       style={{ borderColor: `hsla(${hue}, 55%, 58%, 0.22)`, backgroundColor: `hsla(${hue}, 55%, 58%, 0.05)` }}
+      onDragOver={(e) => {
+        if (!canAccept()) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        setDropPos(dropSide(e));
+      }}
+      onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropPos(null); }}
+      onDrop={(e) => {
+        const d = dragRef.current;
+        if (d?.kind === 'folder' && d.dir !== dir) { e.preventDefault(); onReorderProject(d.dir, dir, dropSide(e)); }
+        setDropPos(null);
+      }}
+      onDragEnd={() => setDropPos(null)}
     >
+      {dropPos && <DropLine pos={dropPos} flush />}
       <div
         className="group/card relative flex items-center gap-2 w-full text-left px-2.5 py-2 text-[11px] font-semibold text-foreground/90 cursor-pointer"
+        draggable
+        onDragStart={(e) => {
+          dragRef.current = { kind: 'folder', dir };
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/plain', dir);
+        }}
+        onDragEnd={() => { dragRef.current = null; setDropPos(null); }}
         onClick={() => setExpanded((v) => !v)}
         title={dir}
       >
@@ -222,9 +330,11 @@ function ProjectCard({
               key={tab.id}
               tab={tab}
               isActive={!showHistory && tab.id === activeTabId}
+              dragRef={dragRef}
               onSelectTab={onSelectTab}
               onCloseTab={onCloseTab}
               onRenameTab={onRenameTab}
+              onReorderTab={onReorderTab}
             />
           ))}
           <NewSessionMenu dir={dir} shellOptions={shellOptions} onNewClaudeTab={onNewClaudeTab} onNewShellTab={onNewShellTab} />
@@ -237,8 +347,9 @@ function ProjectCard({
 export default function Sidebar({
   tabs, activeTabId, shellOptions, showHistory, showSettings, projects, collapsed,
   onSelectTab, onCloseTab, onNewClaudeTab, onNewShellTab, onRenameTab, onToggleHistory, onToggleSettings,
-  onAddProject, onRemoveProject, onToggleCollapse,
+  onAddProject, onRemoveProject, onReorderProject, onReorderTab, onToggleCollapse,
 }: SidebarProps) {
+  const dragRef = useRef<DragItem | null>(null);
   // A single root element (shared across the collapsed/expanded states) lets
   // the width change animate — swapping to two separate `if`-return roots
   // would remount the whole sidebar and skip the transition entirely.
@@ -348,12 +459,15 @@ export default function Sidebar({
                 activeTabId={activeTabId}
                 showHistory={showHistory}
                 shellOptions={shellOptions}
+                dragRef={dragRef}
                 onSelectTab={onSelectTab}
                 onCloseTab={onCloseTab}
                 onRenameTab={onRenameTab}
                 onNewClaudeTab={onNewClaudeTab}
                 onNewShellTab={onNewShellTab}
                 onRemoveProject={onRemoveProject}
+                onReorderProject={onReorderProject}
+                onReorderTab={onReorderTab}
               />
             ))}
 

@@ -13,6 +13,36 @@ or the folder-plus icon in the collapsed rail) opens the native picker
 already-open folder is a no-op. Each project's "New session" menu is scoped to that
 project — every tab spawns with its owning folder as `cwd`.
 
+## Reordering (drag & drop)
+
+Both folder cards and sessions can be reordered by dragging (native HTML5 DnD; Tauri's
+own file-drop handler is turned off via `dragDropEnabled: false` in `tauri.conf.json` so
+the webview receives the drag events). Two things stay put:
+
+- **Folders reorder among folders.** Grab a card by its header and drop it onto another
+  card — `App.tsx` `handleReorderProject` splices the `projects` array (the new order
+  persists like the rest of the workspace, and re-hues the cards by their new index).
+- **Sessions reorder within their own folder.** Drag a `TabRow` onto another row in the
+  same card — `tabsReducer`'s `reorderTab` action moves it. A session **cannot** move into
+  another folder and a folder **cannot** nest inside another: a drop is only accepted when
+  the drag item and target match kind (and, for sessions, share the same `cwd`). The check
+  is synchronous during `dragover` via a shared `dragRef` in `Sidebar`, so cross-folder
+  targets show no indicator at all; the reducer refuses a cross-`cwd` move as a second guard.
+
+### The drop indicator
+
+The valid drop target renders a `DropLine` — a glowing 2px accent bar (`bg-primary`) with a
+leading cap, sitting in the gap the item will fall into rather than outlining the whole row
+(an outline can't say *before* vs *after*). Which side is decided by `dropSide()`: cursor
+above the target's vertical midpoint → `before`, below → `after`, so the line follows the
+pointer between rows. That `'before' | 'after'` position flows all the way through
+`onReorderTab`/`onReorderProject` into the reducer/array splice — which is why a drop can
+land *after* the last row, something a plain insert-before couldn't reach. Each target
+stores its own `dropPos` state and sets it only when the side changes (React bails out of
+identical-value updates), so the line never flickers. Cards use `DropLine`'s `flush`
+variant (tucked to the card's own edge, since their `overflow-hidden` would clip a line
+floated into the gap); rows let it sit in the `my-0.5` margin between them.
+
 ## Sidebar collapse
 
 The sidebar can be hidden to an 11px icon rail (`PanelLeftClose`/`PanelLeftOpen` toggle,
@@ -73,10 +103,12 @@ Paste/Rename/Close items) is a planned follow-up, not implemented yet.
 
 ## Tests
 
-- `src/lib/tabs.test.ts` — tab state transitions, including `rename`
+- `src/lib/tabs.test.ts` — tab state transitions, including `rename` and `reorderTab`
+  (same-folder move, no-op guards, cross-folder refusal)
 - `src/components/Sidebar.test.tsx` — tab rows, per-project shell menu, card expand/collapse,
   add/remove folder, multiple simultaneous project cards, empty state, sidebar collapse,
-  double-click rename (commit/cancel/empty-name-discard)
+  double-click rename (commit/cancel/empty-name-discard), drag-to-reorder folders and
+  sessions (and refusal to move a session across folders)
 - `cargo test shell::` / `claude::` — per-platform shell lists and claude command shape
 
 Manual PTY verification checklist: docs/development.md.

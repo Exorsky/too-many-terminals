@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ShellOption, Tab } from '@/types';
@@ -47,6 +47,8 @@ function renderSidebar(overrides: Partial<React.ComponentProps<typeof Sidebar>> 
     onToggleSettings: vi.fn(),
     onAddProject: vi.fn(),
     onRemoveProject: vi.fn(),
+    onReorderProject: vi.fn(),
+    onReorderTab: vi.fn(),
     onToggleCollapse: vi.fn(),
     ...overrides,
   };
@@ -211,5 +213,43 @@ describe('Sidebar', () => {
       tabs: [makeTab('shell-1', { kind: 'shell', status: 'working' })],
     });
     expect(container.querySelector('.animate-spin')).not.toBeInTheDocument();
+  });
+
+  // A fresh mock DataTransfer per drag — the handlers set effectAllowed/dropEffect
+  // and call setData, which jsdom's synthetic events don't provide on their own.
+  const dt = () => ({ setData: vi.fn(), getData: vi.fn(), effectAllowed: '', dropEffect: '' });
+
+  it('reorders sessions within a folder by dragging one onto another', () => {
+    const props = renderSidebar({
+      tabs: [makeTab('a'), makeTab('b'), makeTab('c')],
+    });
+    const dataTransfer = dt();
+    fireEvent.dragStart(screen.getByText('a'), { dataTransfer });
+    fireEvent.drop(screen.getByText('c'), { dataTransfer });
+    expect(props.onReorderTab).toHaveBeenCalledWith('a', 'c', expect.stringMatching(/^(before|after)$/));
+  });
+
+  it('does not reorder a session onto one in a different folder', () => {
+    const other = 'C:\\Users\\x\\other';
+    const props = renderSidebar({
+      projects: [PROJECT, other],
+      tabs: [makeTab('a', { cwd: PROJECT }), makeTab('b', { cwd: other })],
+    });
+    const dataTransfer = dt();
+    fireEvent.dragStart(screen.getByText('a'), { dataTransfer });
+    fireEvent.drop(screen.getByText('b'), { dataTransfer });
+    expect(props.onReorderTab).not.toHaveBeenCalled();
+  });
+
+  it('reorders folders by dragging one card onto another', () => {
+    const other = 'C:\\Users\\x\\other';
+    const props = renderSidebar({
+      projects: [PROJECT, other],
+      tabs: [],
+    });
+    const dataTransfer = dt();
+    fireEvent.dragStart(screen.getByText('project'), { dataTransfer });
+    fireEvent.drop(screen.getByText('other'), { dataTransfer });
+    expect(props.onReorderProject).toHaveBeenCalledWith(PROJECT, other, expect.stringMatching(/^(before|after)$/));
   });
 });

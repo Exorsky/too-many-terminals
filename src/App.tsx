@@ -45,6 +45,23 @@ export default function App() {
     ipc.uninstallHooks(dir).catch(() => {});
   }, [state.tabs]);
 
+  const handleReorderProject = useCallback((sourceDir: string, targetDir: string, position: 'before' | 'after') => {
+    setProjects((prev) => {
+      if (sourceDir === targetDir) return prev;
+      const from = prev.indexOf(sourceDir);
+      if (from === -1 || !prev.includes(targetDir)) return prev;
+      const next = [...prev];
+      next.splice(from, 1);
+      const at = next.indexOf(targetDir);
+      next.splice(position === 'after' ? at + 1 : at, 0, sourceDir);
+      return next;
+    });
+  }, []);
+
+  const handleReorderTab = useCallback((tabId: string, targetId: string, position: 'before' | 'after') => {
+    dispatch({ type: 'reorderTab', tabId, targetId, position });
+  }, []);
+
   useEffect(() => {
     const unlisten = ipc.onPtyExit((tabId) => dispatch({ type: 'exited', tabId }));
     return () => { unlisten.then((fn) => fn()); };
@@ -187,6 +204,8 @@ export default function App() {
         onToggleSettings={() => { setShowSettings((v) => !v); setShowHistory(false); }}
         onAddProject={handleAddProject}
         onRemoveProject={handleRemoveProject}
+        onReorderProject={handleReorderProject}
+        onReorderTab={handleReorderTab}
         onToggleCollapse={() => setCollapsed((v) => !v)}
       />
       <main className="relative flex-1 min-w-0" data-terminal-area>
