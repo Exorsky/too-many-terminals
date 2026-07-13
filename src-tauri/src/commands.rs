@@ -4,10 +4,12 @@ use tauri::ipc::{Channel, InvokeResponseBody};
 use tauri::{AppHandle, Emitter, State};
 
 use crate::claude::{claude_command, login_shell_path, resume_flags};
+use crate::hooks;
 use crate::pty::PtyManager;
 use crate::session_history::{projects_root, SessionHistoryEntry};
 use crate::shell::{all_shell_options, shell_option, Platform, ShellOption};
 use crate::workspace::{self, WorkspaceState};
+use crate::HookEnv;
 
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -31,6 +33,7 @@ const SESSION_ID_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_
 pub fn pty_spawn(
     app: AppHandle,
     ptys: State<'_, PtyManager>,
+    hook_env: State<'_, HookEnv>,
     tab_id: String,
     kind: String,
     cwd: String,
@@ -66,6 +69,22 @@ pub fn pty_spawn(
     cmd.env("TERM", "xterm-256color");
     if let Some(path) = login_shell_path() {
         cmd.env("PATH", path);
+    }
+
+    // Wire up Claude Code's own hooks (status updates, auto-naming) — see
+    // docs/features/tab-status-and-naming.md. Silently skipped if we can't
+    // resolve our own exe path; a Claude tab still works fine without them.
+    if kind == "claude" {
+        if let Ok(exe) = std::env::current_exe() {
+            let _ = hooks::install_hooks(std::path::Path::new(&cwd), &exe.to_string_lossy());
+        }
+        cmd.env("CLAUDE_TERMINAL_TAB_ID", tab_id.clone());
+        cmd.env("CLAUDE_TERMINAL_PIPE", hook_env.pipe_path.clone());
+        // A resumed tab already has a meaningful name — don't let the next
+        // prompt trigger another auto-rename.
+        if resume_session_id.is_some() {
+            hooks::mark_named(&tab_id);
+        }
     }
 
     let exit_tab_id = tab_id.clone();
@@ -179,4 +198,9 @@ pub fn load_workspace() -> WorkspaceState {
 pub fn save_workspace(state: WorkspaceState) -> Result<(), String> {
     let root = workspace::config_dir().ok_or("could not resolve config directory")?;
     workspace::save_workspace(&root, &state)
+}
+
+#[tauri::command(async)]
+pub fn uninstall_hooks(cwd: String) -> Result<(), String> {
+    hooks::uninstall_hooks(std::path::Path::new(&cwd))
 }

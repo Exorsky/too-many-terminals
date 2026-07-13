@@ -8,7 +8,7 @@ import { invoke, Channel } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
-import type { SessionHistoryEntry, ShellOption, UsageStats, WorkspaceState } from '@/types';
+import type { SessionHistoryEntry, ShellOption, TabStatus, UsageStats, WorkspaceState } from '@/types';
 
 export interface SpawnPtyOptions {
   tabId: string;
@@ -60,6 +60,24 @@ export function onClaudeSessionResolved(
     callback(event.payload.tabId, event.payload.sessionId));
 }
 
+/** Fired when Claude Code's own hooks (PreToolUse/Stop/Notification/
+ *  SessionStart) report a Claude tab's live state. */
+export function onTabStatus(
+  callback: (tabId: string, status: TabStatus) => void,
+): Promise<UnlistenFn> {
+  return listen<{ tabId: string; status: TabStatus }>('claude-tab-status', (event) =>
+    callback(event.payload.tabId, event.payload.status));
+}
+
+/** Fired once a background `claude -p` call has generated a short title for
+ *  a Claude tab from its first prompt. */
+export function onTabNamed(
+  callback: (tabId: string, name: string) => void,
+): Promise<UnlistenFn> {
+  return listen<{ tabId: string; name: string }>('claude-tab-named', (event) =>
+    callback(event.payload.tabId, event.payload.name));
+}
+
 export function listShells(): Promise<ShellOption[]> {
   return invoke('list_shells');
 }
@@ -96,4 +114,10 @@ export function loadWorkspace(): Promise<WorkspaceState> {
 
 export function saveWorkspace(state: WorkspaceState): Promise<void> {
   return invoke('save_workspace', { state });
+}
+
+/** Removes just this app's hook entries from a project's
+ *  `.claude/settings.local.json` (leaves any user-authored hooks alone). */
+export function uninstallHooks(cwd: string): Promise<void> {
+  return invoke('uninstall_hooks', { cwd });
 }

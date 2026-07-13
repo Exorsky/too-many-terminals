@@ -7,6 +7,8 @@ Built with Tauri 2 — small native builds (~10–25 MB) for Windows, macOS and 
 
 - **Multi-project sidebar** — open several folders at once, each its own card with
   Claude tabs and native OS shells (Windows: PowerShell/CMD · macOS: Zsh/Bash · Linux: Bash/Zsh/Fish)
+- **Live tab status & auto-naming** — see at a glance whether Claude is working, done,
+  or waiting on you; tabs title themselves from your first message
 - **Session history** — browse and resume past Claude Code sessions across every open folder
 - **Usage meter** — today's token consumption per model
 - **Workspace persistence** — open folders and tabs continue where you left off next launch

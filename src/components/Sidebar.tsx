@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  ChevronRight, Folder, FolderPlus, History, PanelLeftClose, PanelLeftOpen,
-  Plus, Sparkles, TerminalSquare, X,
+  CheckCircle2, ChevronRight, Circle, Folder, FolderPlus, History, Loader2,
+  MessageCircle, PanelLeftClose, PanelLeftOpen, Plus, Sparkles, TerminalSquare, X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { PROJECT_COLORS, type ShellOption, type Tab } from '@/types';
+import { PROJECT_COLORS, type ShellOption, type Tab, type TabStatus } from '@/types';
 import UsageMeter from './UsageMeter';
 import {
   DropdownMenu,
@@ -40,6 +40,20 @@ function folderName(dir: string): string {
  *  same scheme the original multi-project app used. */
 function projectHue(index: number): number {
   return PROJECT_COLORS[index % PROJECT_COLORS.length].hue;
+}
+
+/** Live status of a Claude tab, learned from Claude Code's own hooks. */
+function TabIndicator({ status, size = 12 }: { status: TabStatus; size?: number }) {
+  switch (status) {
+    case 'working':
+      return <Loader2 size={size} className="shrink-0 text-warning animate-spin" />;
+    case 'idle':
+      return <CheckCircle2 size={size} className="shrink-0 text-success" />;
+    case 'requires_response':
+      return <MessageCircle size={size} className="shrink-0 text-attention animate-pulse" />;
+    case 'new':
+      return <Circle size={size} className="shrink-0 text-muted-foreground/50" />;
+  }
 }
 
 function NewSessionMenu({ dir, shellOptions, onNewClaudeTab, onNewShellTab }: {
@@ -109,7 +123,7 @@ function TabRow({ tab, isActive, onSelectTab, onCloseTab, onRenameTab }: {
     tab.exited && 'opacity-50',
   );
   const icon = tab.kind === 'claude'
-    ? <Sparkles size={12} className="shrink-0 text-primary/80" />
+    ? <TabIndicator status={tab.status} />
     : <TerminalSquare size={12} className="shrink-0" />;
 
   if (editing) {
@@ -263,7 +277,7 @@ export default function Sidebar({
                 >
                   {isActive && <span className="absolute left-0 top-1 bottom-1 w-0.5 rounded-full bg-primary" />}
                   {tab.kind === 'claude'
-                    ? <Sparkles size={14} className="shrink-0" />
+                    ? <TabIndicator status={tab.status} size={14} />
                     : <TerminalSquare size={14} className="shrink-0" />}
                 </button>
               );

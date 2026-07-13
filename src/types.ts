@@ -1,5 +1,10 @@
 export type TabKind = 'claude' | 'shell';
 
+/** Live state of a Claude tab, learned from Claude Code's own hooks
+ *  (SessionStart/PreToolUse/Stop/Notification). Meaningless for shell tabs,
+ *  which never emit hook events. */
+export type TabStatus = 'new' | 'working' | 'idle' | 'requires_response';
+
 export interface Tab {
   id: string;
   kind: TabKind;
@@ -11,6 +16,7 @@ export interface Tab {
   resumeSessionId: string | null;
   /** True once the underlying pty process has exited. */
   exited: boolean;
+  status: TabStatus;
 }
 
 /** A shell available on the current OS, provided by the Rust backend. */

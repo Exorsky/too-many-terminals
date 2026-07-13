@@ -11,6 +11,7 @@ function makeTab(id: string, overrides: Partial<Tab> = {}): Tab {
     cwd: 'C:\\Users\\x',
     resumeSessionId: null,
     exited: false,
+    status: 'new',
     ...overrides,
   };
 }
@@ -83,5 +84,15 @@ describe('tabsReducer', () => {
     state = tabsReducer(state, { type: 'sessionResolved', tabId: 'a', sessionId: 'sess-1' });
     expect(state.tabs[0].resumeSessionId).toBe('sess-1');
     expect(state.tabs[1].resumeSessionId).toBeNull();
+  });
+
+  it('status updates only the named tab, leaving others untouched', () => {
+    let state = stateWith('a', 'b');
+    state = tabsReducer(state, { type: 'status', tabId: 'a', status: 'working' });
+    expect(state.tabs[0].status).toBe('working');
+    expect(state.tabs[1].status).toBe('new');
+
+    state = tabsReducer(state, { type: 'status', tabId: 'a', status: 'requires_response' });
+    expect(state.tabs[0].status).toBe('requires_response');
   });
 });

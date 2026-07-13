@@ -40,6 +40,7 @@ export default function App() {
       }
     }
     setProjects((prev) => prev.filter((p) => p !== dir));
+    ipc.uninstallHooks(dir).catch(() => {});
   }, [state.tabs]);
 
   useEffect(() => {
@@ -50,6 +51,18 @@ export default function App() {
   useEffect(() => {
     const unlisten = ipc.onClaudeSessionResolved((tabId, sessionId) =>
       dispatch({ type: 'sessionResolved', tabId, sessionId }));
+    return () => { unlisten.then((fn) => fn()); };
+  }, []);
+
+  // Claude Code's own hooks report live tab state (idle/working/awaiting
+  // input) and, once the first prompt is submitted, a generated title.
+  useEffect(() => {
+    const unlisten = ipc.onTabStatus((tabId, status) => dispatch({ type: 'status', tabId, status }));
+    return () => { unlisten.then((fn) => fn()); };
+  }, []);
+
+  useEffect(() => {
+    const unlisten = ipc.onTabNamed((tabId, name) => dispatch({ type: 'rename', tabId, name }));
     return () => { unlisten.then((fn) => fn()); };
   }, []);
 
@@ -66,6 +79,7 @@ export default function App() {
         cwd: atCwd,
         resumeSessionId: resumeSessionId ?? null,
         exited: false,
+        status: 'new',
       };
       dispatch({ type: 'add', tab });
       setShowHistory(false);

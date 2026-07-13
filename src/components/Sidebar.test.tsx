@@ -24,6 +24,7 @@ function makeTab(id: string, overrides: Partial<Tab> = {}): Tab {
     cwd: PROJECT,
     resumeSessionId: null,
     exited: false,
+    status: 'new',
     ...overrides,
   };
 }
@@ -47,8 +48,8 @@ function renderSidebar(overrides: Partial<React.ComponentProps<typeof Sidebar>> 
     onToggleCollapse: vi.fn(),
     ...overrides,
   };
-  render(<Sidebar {...props} />);
-  return props;
+  const { container } = render(<Sidebar {...props} />);
+  return { ...props, container };
 }
 
 beforeEach(() => {
@@ -184,5 +185,23 @@ describe('Sidebar', () => {
     expect(screen.queryByText('New session')).not.toBeInTheDocument();
     await userEvent.click(screen.getByTitle('Show sidebar'));
     expect(props.onToggleCollapse).toHaveBeenCalled();
+  });
+
+  it('shows a spinning indicator while a claude tab is working', () => {
+    const { container } = renderSidebar({ tabs: [makeTab('claude-1', { status: 'working' })] });
+    expect(container.querySelector('.animate-spin')).toBeInTheDocument();
+  });
+
+  it('shows a pulsing indicator when a claude tab requires a response', () => {
+    const { container } = renderSidebar({ tabs: [makeTab('claude-1', { status: 'requires_response' })] });
+    expect(container.querySelector('.animate-pulse')).toBeInTheDocument();
+    expect(container.querySelector('.animate-spin')).not.toBeInTheDocument();
+  });
+
+  it('does not render a status indicator for shell tabs', () => {
+    const { container } = renderSidebar({
+      tabs: [makeTab('shell-1', { kind: 'shell', status: 'working' })],
+    });
+    expect(container.querySelector('.animate-spin')).not.toBeInTheDocument();
   });
 });

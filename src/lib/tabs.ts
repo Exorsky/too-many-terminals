@@ -1,4 +1,4 @@
-import type { Tab } from '@/types';
+import type { Tab, TabStatus } from '@/types';
 
 export interface TabsState {
   tabs: Tab[];
@@ -13,7 +13,8 @@ export type TabsAction =
   | { type: 'select'; tabId: string }
   | { type: 'rename'; tabId: string; name: string }
   | { type: 'exited'; tabId: string }
-  | { type: 'sessionResolved'; tabId: string; sessionId: string };
+  | { type: 'sessionResolved'; tabId: string; sessionId: string }
+  | { type: 'status'; tabId: string; status: TabStatus };
 
 export function tabsReducer(state: TabsState, action: TabsAction): TabsState {
   switch (action.type) {
@@ -60,6 +61,14 @@ export function tabsReducer(state: TabsState, action: TabsAction): TabsState {
         ...state,
         tabs: state.tabs.map((t) =>
           t.id === action.tabId ? { ...t, resumeSessionId: action.sessionId } : t,
+        ),
+      };
+
+    case 'status':
+      return {
+        ...state,
+        tabs: state.tabs.map((t) =>
+          t.id === action.tabId ? { ...t, status: action.status } : t,
         ),
       };
   }
