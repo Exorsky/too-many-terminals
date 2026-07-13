@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Settings as SettingsIcon, Sparkles, SlidersHorizontal } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { patchSettings, useSettings } from '@/lib/settings-store';
+import * as ipc from '@/lib/ipc';
 import CustomizeTab from './CustomizeTab';
 
 type SettingsTab = 'general' | 'customize';
@@ -58,6 +59,29 @@ function SettingRow({ title, description, checked, disabled, onChange }: {
   );
 }
 
+function TestNotificationButton() {
+  const [state, setState] = useState<'idle' | 'sent' | 'blocked'>('idle');
+  const send = async () => {
+    const granted = await ipc.ensureNotificationPermission();
+    if (!granted) { setState('blocked'); return; }
+    await ipc.notify('Too Many Terminals', 'Notifications are working.');
+    setState('sent');
+    setTimeout(() => setState('idle'), 2500);
+  };
+  return (
+    <div className="flex items-center gap-3 py-3 border-t border-border">
+      <button
+        onClick={send}
+        className="px-2.5 py-1.5 rounded-sm border border-border bg-card text-foreground text-[11px] cursor-pointer hover:bg-white/5 hover:border-border-hover font-inherit"
+      >
+        Send a test notification
+      </button>
+      {state === 'sent' && <span className="text-[11px] text-success">Sent — check your notifications.</span>}
+      {state === 'blocked' && <span className="text-[11px] text-attention">Notifications are blocked by the OS.</span>}
+    </div>
+  );
+}
+
 function GeneralTab() {
   const settings = useSettings();
   return (
@@ -88,6 +112,7 @@ function GeneralTab() {
         checked={settings.notificationsEnabled}
         onChange={(v) => patchSettings({ notificationsEnabled: v })}
       />
+      <TestNotificationButton />
     </div>
   );
 }

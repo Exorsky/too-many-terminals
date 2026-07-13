@@ -96,18 +96,23 @@ export default function App() {
   notificationsRef.current = settings.notificationsEnabled;
   // Last status we saw per tab, to detect the transition (not just the state).
   const prevStatusRef = useRef<Map<string, TabStatus>>(new Map());
+  // The tab the user is actually looking at right now (active, app focused, no
+  // overlay covering it) — the one case where a notification is redundant.
+  const visibleTabIdRef = useRef<string | null>(null);
 
   // Ask for notification permission once, up front, if the pref is on.
   useEffect(() => {
     if (settings.notificationsEnabled) void ipc.ensureNotificationPermission();
   }, [settings.notificationsEnabled]);
 
-  /** Notify only when the app isn't focused (otherwise the status dot / inbox
-   *  already tells you), and only on a real transition — Claude asking for
-   *  input, or finishing a run (working → idle). Skips the first status of a
-   *  tab so restoring a workspace doesn't fire a burst. */
+  /** Notify on a real transition — Claude asking for input, or finishing a run
+   *  (working → idle) — unless you're already looking right at that tab (app
+   *  focused and it's the visible tab), where the status dot says it all. A
+   *  background tab still notifies even while you work in another tab. Skips the
+   *  first status of a tab so restoring a workspace doesn't fire a burst. */
   const maybeNotify = useCallback((tabId: string, prev: TabStatus | undefined, status: TabStatus) => {
-    if (!notificationsRef.current || prev === undefined || document.hasFocus()) return;
+    if (!notificationsRef.current || prev === undefined) return;
+    if (document.hasFocus() && tabId === visibleTabIdRef.current) return;
     const name = tabsRef.current.find((t) => t.id === tabId)?.name ?? 'Claude';
     if (status === 'requires_response') void ipc.notify(name, 'Needs your input');
     else if (status === 'idle' && prev === 'working') void ipc.notify(name, 'Finished');
@@ -284,6 +289,8 @@ export default function App() {
   // Markdown reading needs both prefs on (so there's always a bar toggle to leave it by).
   const canRead = settings.showSessionBar && settings.showMarkdownToggle && activeReadable;
   const mdActive = canRead && activeTab !== null && mdTabs.has(activeTab.id);
+  // Feed the notification guard: which tab is genuinely on screen right now.
+  visibleTabIdRef.current = overlaysUp || mdActive ? null : activeTab?.id ?? null;
 
   const { turns, error } = useTranscript(
     mdActive && activeTab ? activeTab.cwd : null,

@@ -12,9 +12,12 @@ tab's live state from the hooks (see
 *transition* into a notification, under three guards:
 
 1. The **notifications** preference is on (General settings, default on).
-2. The app window is **not focused** (`document.hasFocus()` is false) — if you're
-   looking at the app, the status dot and the [inbox](attention-inbox.md) already
-   tell you, so a toast would be noise.
+2. You aren't **already looking at that exact tab**. A toast is suppressed only
+   when the app is focused *and* the tab that changed is the one on screen
+   (`visibleTabIdRef` — the active tab, app focused, no overlay covering it),
+   because the status dot right in front of you already says it. A **background
+   tab still notifies even while you work in another tab** — the common case
+   when juggling several sessions.
 3. It's a **real transition**, not the first status we've seen for that tab —
    `prevStatusRef` holds the previous status per tab, and a tab whose first event
    arrives (session start, or workspace restore) is skipped so relaunching
@@ -35,7 +38,13 @@ Shell tabs never emit hook status, so they never notify.
 permission once, caching the result. It's called up front on launch when the
 pref is on, and again (guarded) before any notification, so the first toast
 isn't lost to an unresolved prompt. Denied or unavailable → notifications
-silently no-op.
+silently no-op. The **Send a test notification** button in the Notifications
+settings section fires one on demand (reporting *blocked* if the OS refuses),
+to separate a delivery/permission problem from the trigger logic.
+
+On **Windows**, OS toasts generally require the app to be *installed* (a Start
+Menu shortcut registers the AppUserModelID); a bare `tauri dev` run may not
+surface banners. Test with an installed build if a dev run shows nothing.
 
 ## The preference
 
