@@ -64,6 +64,20 @@ export interface SessionHistoryEntry {
   lastUsedIso: string;
 }
 
+// --- Transcript reading (a past session rendered as a document) ---
+
+/** A renderable piece of a turn. `text` carries Markdown; `tool` is a
+ *  collapsed tool call (name + one-line argument). */
+export type TranscriptBlock =
+  | { kind: 'text'; text: string }
+  | { kind: 'tool'; name: string; detail: string };
+
+export interface TranscriptTurn {
+  role: 'user' | 'assistant';
+  timestamp: string | null;
+  blocks: TranscriptBlock[];
+}
+
 // --- Workspace persistence (restores open tabs across app launches) ---
 
 export interface SavedTab {
@@ -89,4 +103,8 @@ export interface AppSettings {
   selectedThemeId: string;
   /** Custom themes as raw JSON; validated by sanitizeCustomThemes on load. */
   customThemes: unknown[];
+  /** Show the per-session bar above the terminal. */
+  showSessionBar: boolean;
+  /** Show the Terminal/Markdown toggle within the session bar. */
+  showMarkdownToggle: boolean;
 }

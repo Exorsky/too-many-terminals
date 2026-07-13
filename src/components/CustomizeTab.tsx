@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Check, Copy, Pencil, Plus, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import * as ipc from '@/lib/ipc';
+import { loadSettings, patchSettings } from '@/lib/settings-store';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -30,8 +30,7 @@ export default function CustomizeTab() {
 
   useEffect(() => {
     let cancelled = false;
-    ipc
-      .loadSettings()
+    loadSettings()
       .then((settings) => {
         if (cancelled) return;
         setSelectedId(settings.selectedThemeId);
@@ -44,8 +43,9 @@ export default function CustomizeTab() {
     };
   }, []);
 
+  // Merge through the store so theme writes preserve the UI prefs (and vice versa).
   const persist = (id: string, customs: Theme[]) => {
-    void ipc.saveSettings({ selectedThemeId: id, customThemes: customs }).catch(() => {});
+    patchSettings({ selectedThemeId: id, customThemes: customs });
   };
 
   const selectTheme = (theme: Theme) => {

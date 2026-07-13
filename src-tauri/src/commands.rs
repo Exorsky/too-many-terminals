@@ -175,6 +175,15 @@ pub fn delete_session(project_dir: String, session_id: String) -> Result<(), Str
 }
 
 #[tauri::command(async)]
+pub fn read_transcript(
+    project_dir: String,
+    session_id: String,
+) -> Result<Vec<crate::session_history::TranscriptTurn>, String> {
+    let root = projects_root().ok_or("could not resolve home directory")?;
+    crate::session_history::read_transcript(&root, &project_dir, &session_id)
+}
+
+#[tauri::command(async)]
 pub fn get_usage_stats() -> Result<crate::usage::UsageStats, String> {
     let root = projects_root().ok_or("could not resolve home directory")?;
     Ok(crate::usage::usage_stats(&root))

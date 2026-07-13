@@ -12,11 +12,21 @@ use serde::{Deserialize, Serialize};
 pub struct AppSettings {
     pub selected_theme_id: String,
     pub custom_themes: Vec<serde_json::Value>,
+    /// Show the per-session bar above the terminal. Missing in older settings
+    /// files → filled from `Default` (true), so the bar is opt-out, not opt-in.
+    pub show_session_bar: bool,
+    /// Show the Terminal/Markdown toggle within the session bar.
+    pub show_markdown_toggle: bool,
 }
 
 impl Default for AppSettings {
     fn default() -> Self {
-        Self { selected_theme_id: "default".to_string(), custom_themes: Vec::new() }
+        Self {
+            selected_theme_id: "default".to_string(),
+            custom_themes: Vec::new(),
+            show_session_bar: true,
+            show_markdown_toggle: true,
+        }
     }
 }
 
@@ -68,10 +78,22 @@ mod tests {
                 "name": "My Theme",
                 "colors": { "background": "#101010", "primary": "#ffcc00" }
             })],
+            show_session_bar: false,
+            show_markdown_toggle: true,
         };
 
         save_settings(tmp.path(), &settings).unwrap();
         assert_eq!(load_settings(tmp.path()), settings);
+    }
+
+    #[test]
+    fn ui_prefs_default_true_when_absent() {
+        let tmp = tempfile::tempdir().unwrap();
+        fs::write(settings_path(tmp.path()), r#"{"selectedThemeId":"amber"}"#).unwrap();
+        let settings = load_settings(tmp.path());
+        assert_eq!(settings.selected_theme_id, "amber");
+        assert!(settings.show_session_bar);
+        assert!(settings.show_markdown_toggle);
     }
 
     #[test]

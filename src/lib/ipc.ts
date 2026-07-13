@@ -8,7 +8,7 @@ import { invoke, Channel } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
-import type { AppSettings, SessionHistoryEntry, ShellOption, TabStatus, UsageStats, WorkspaceState } from '@/types';
+import type { AppSettings, SessionHistoryEntry, ShellOption, TabStatus, TranscriptTurn, UsageStats, WorkspaceState } from '@/types';
 
 export interface SpawnPtyOptions {
   tabId: string;
@@ -98,6 +98,11 @@ export function listSessions(projectDir: string): Promise<SessionHistoryEntry[]>
 
 export function deleteSession(projectDir: string, sessionId: string): Promise<void> {
   return invoke('delete_session', { projectDir, sessionId });
+}
+
+/** Full transcript of a past session, parsed into ordered turns for reading. */
+export function readTranscript(projectDir: string, sessionId: string): Promise<TranscriptTurn[]> {
+  return invoke('read_transcript', { projectDir, sessionId });
 }
 
 export function getUsageStats(): Promise<UsageStats> {

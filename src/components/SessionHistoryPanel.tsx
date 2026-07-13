@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowRight, History, Loader2, Search, Trash2, X } from 'lucide-react';
+import { ArrowRight, FileText, History, Loader2, Search, Trash2, X } from 'lucide-react';
 import type { SessionHistoryEntry } from '@/types';
 import { relativeTime } from '@/lib/relative-time';
 import * as ipc from '@/lib/ipc';
@@ -13,6 +13,7 @@ interface HistoryEntry extends SessionHistoryEntry {
 interface SessionHistoryPanelProps {
   projects: string[];
   onResume: (projectDir: string, entry: SessionHistoryEntry) => void;
+  onRead: (projectDir: string, entry: SessionHistoryEntry) => void;
 }
 
 type DayGroup = 'Today' | 'Yesterday' | 'Earlier';
@@ -65,7 +66,7 @@ function highlightMatch(text: string, query: string): React.ReactNode {
   );
 }
 
-export default function SessionHistoryPanel({ projects, onResume }: SessionHistoryPanelProps) {
+export default function SessionHistoryPanel({ projects, onResume, onRead }: SessionHistoryPanelProps) {
   const [entries, setEntries] = useState<HistoryEntry[] | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
@@ -168,6 +169,9 @@ export default function SessionHistoryPanel({ projects, onResume }: SessionHisto
       case 'Enter':
         if (active && pendingDeleteId !== active.sessionId) onResume(active.projectDir, active);
         break;
+      case ' ':
+        if (active && pendingDeleteId !== active.sessionId) { e.preventDefault(); onRead(active.projectDir, active); }
+        break;
       case 'Delete':
       case 'Backspace':
         if (active) { e.preventDefault(); setPendingDeleteId(active.sessionId); }
@@ -176,7 +180,7 @@ export default function SessionHistoryPanel({ projects, onResume }: SessionHisto
         if (pendingDeleteId) setPendingDeleteId(null);
         break;
     }
-  }, [filteredEntries, activeIndex, pendingDeleteId, query, moveActive, onResume]);
+  }, [filteredEntries, activeIndex, pendingDeleteId, query, moveActive, onResume, onRead]);
 
   const totalCount = entries?.length ?? 0;
   const shownCount = filteredEntries.length;
@@ -383,6 +387,13 @@ export default function SessionHistoryPanel({ projects, onResume }: SessionHisto
                       ) : (
                         <>
                           <button
+                            className="flex items-center justify-center w-5 h-5 rounded-sm bg-transparent border-none cursor-pointer text-muted-foreground/60 hover:text-[#6fd4c9] hover:bg-white/[0.07]"
+                            title="Read this session (Space)"
+                            onClick={(e) => { e.stopPropagation(); onRead(entry.projectDir, entry); }}
+                          >
+                            <FileText size={12} />
+                          </button>
+                          <button
                             className="flex items-center justify-center w-5 h-5 rounded-sm bg-transparent border-none cursor-pointer text-muted-foreground/60 hover:text-foreground hover:bg-white/[0.07]"
                             title="Resume this session"
                             onClick={(e) => { e.stopPropagation(); onResume(entry.projectDir, entry); }}
@@ -412,6 +423,8 @@ export default function SessionHistoryPanel({ projects, onResume }: SessionHisto
           <kbd className="mr-1 px-1 rounded-sm border border-border bg-white/[0.05] text-[#9297a3]">↑↓</kbd> navigate
           <span className="mx-2 opacity-40">·</span>
           <kbd className="mr-1 px-1 rounded-sm border border-border bg-white/[0.05] text-[#9297a3]">↵</kbd> resume
+          <span className="mx-2 opacity-40">·</span>
+          <kbd className="mr-1 px-1 rounded-sm border border-border bg-white/[0.05] text-[#9297a3]">space</kbd> read
           <span className="mx-2 opacity-40">·</span>
           <kbd className="mr-1 px-1 rounded-sm border border-border bg-white/[0.05] text-[#9297a3]">del</kbd> delete
           <span className="mx-2 opacity-40">·</span>

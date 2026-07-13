@@ -1,7 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
-import * as ipc from "@/lib/ipc";
+import { loadSettings } from "@/lib/settings-store";
 import { applyTheme, resolveTheme, sanitizeCustomThemes } from "@/lib/themes";
 import "./globals.css";
 
@@ -21,7 +21,7 @@ function render() {
 // Apply the saved theme before first paint so non-default themes don't flash
 // the Default palette (globals.css :root ships the Default values). One local
 // file read — cheap. Any failure falls back to rendering with Default.
-ipc.loadSettings()
+loadSettings()
   .then((settings) => {
     applyTheme(resolveTheme(settings.selectedThemeId, sanitizeCustomThemes(settings.customThemes)));
   })

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type MutableRefObject } from 'react';
 import {
-  CheckCircle2, ChevronRight, Circle, Folder, FolderPlus, History, Loader2,
+  CheckCircle2, ChevronRight, Circle, FileText, Folder, FolderPlus, History, Loader2,
   MessageCircle, PanelLeftClose, PanelLeftOpen, Plus, Settings, Sparkles, TerminalSquare, X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -24,6 +24,9 @@ interface SidebarProps {
   collapsed: boolean;
   onSelectTab: (tabId: string) => void;
   onCloseTab: (tabId: string) => void;
+  onReadTab: (tab: Tab) => void;
+  /** Whether the markdown reader is available (both prefs on) — gates the row's read icon. */
+  markdownEnabled: boolean;
   onNewClaudeTab: (dir: string) => void;
   onNewShellTab: (dir: string, shellId: string) => void;
   onRenameTab: (tabId: string, name: string) => void;
@@ -135,12 +138,14 @@ function NewSessionMenu({ dir, shellOptions, onNewClaudeTab, onNewShellTab }: {
   );
 }
 
-function TabRow({ tab, isActive, dragRef, onSelectTab, onCloseTab, onRenameTab, onReorderTab }: {
+function TabRow({ tab, isActive, dragRef, markdownEnabled, onSelectTab, onCloseTab, onReadTab, onRenameTab, onReorderTab }: {
   tab: Tab;
   isActive: boolean;
   dragRef: DragRef;
+  markdownEnabled: boolean;
   onSelectTab: (tabId: string) => void;
   onCloseTab: (tabId: string) => void;
+  onReadTab: (tab: Tab) => void;
   onRenameTab: (tabId: string, name: string) => void;
   onReorderTab: (tabId: string, targetId: string, position: DropPos) => void;
 }) {
@@ -235,6 +240,19 @@ function TabRow({ tab, isActive, dragRef, onSelectTab, onCloseTab, onRenameTab, 
       {isActive && <span className="absolute left-0 top-1 bottom-1 w-0.5 rounded-full bg-primary" />}
       {icon}
       <span className="truncate flex-1">{tab.name}{tab.exited ? ' (exited)' : ''}</span>
+      {markdownEnabled && tab.kind === 'claude' && tab.resumeSessionId && (
+        <button
+          className={cn(
+            'flex items-center justify-center w-4 h-4 rounded-sm shrink-0 border-none cursor-pointer',
+            'bg-transparent text-muted-foreground/60 hover:text-[#6fd4c9] hover:bg-white/10',
+            'opacity-0 group-hover:opacity-100',
+          )}
+          onClick={(e) => { e.stopPropagation(); onReadTab(tab); }}
+          title="Read this session as Markdown"
+        >
+          <FileText size={11} />
+        </button>
+      )}
       <button
         className={cn(
           'flex items-center justify-center w-4 h-4 rounded-sm shrink-0 border-none cursor-pointer',
@@ -251,8 +269,8 @@ function TabRow({ tab, isActive, dragRef, onSelectTab, onCloseTab, onRenameTab, 
 }
 
 function ProjectCard({
-  dir, hue, tabs, activeTabId, showHistory, shellOptions, dragRef,
-  onSelectTab, onCloseTab, onRenameTab, onNewClaudeTab, onNewShellTab, onRemoveProject,
+  dir, hue, tabs, activeTabId, showHistory, shellOptions, dragRef, markdownEnabled,
+  onSelectTab, onCloseTab, onReadTab, onRenameTab, onNewClaudeTab, onNewShellTab, onRemoveProject,
   onReorderProject, onReorderTab,
 }: {
   dir: string;
@@ -262,8 +280,10 @@ function ProjectCard({
   showHistory: boolean;
   shellOptions: ShellOption[];
   dragRef: DragRef;
+  markdownEnabled: boolean;
   onSelectTab: (tabId: string) => void;
   onCloseTab: (tabId: string) => void;
+  onReadTab: (tab: Tab) => void;
   onRenameTab: (tabId: string, name: string) => void;
   onNewClaudeTab: (dir: string) => void;
   onNewShellTab: (dir: string, shellId: string) => void;
@@ -331,8 +351,10 @@ function ProjectCard({
               tab={tab}
               isActive={!showHistory && tab.id === activeTabId}
               dragRef={dragRef}
+              markdownEnabled={markdownEnabled}
               onSelectTab={onSelectTab}
               onCloseTab={onCloseTab}
+              onReadTab={onReadTab}
               onRenameTab={onRenameTab}
               onReorderTab={onReorderTab}
             />
@@ -345,8 +367,8 @@ function ProjectCard({
 }
 
 export default function Sidebar({
-  tabs, activeTabId, shellOptions, showHistory, showSettings, projects, collapsed,
-  onSelectTab, onCloseTab, onNewClaudeTab, onNewShellTab, onRenameTab, onToggleHistory, onToggleSettings,
+  tabs, activeTabId, shellOptions, showHistory, showSettings, projects, collapsed, markdownEnabled,
+  onSelectTab, onCloseTab, onReadTab, onNewClaudeTab, onNewShellTab, onRenameTab, onToggleHistory, onToggleSettings,
   onAddProject, onRemoveProject, onReorderProject, onReorderTab, onToggleCollapse,
 }: SidebarProps) {
   const dragRef = useRef<DragItem | null>(null);
@@ -460,8 +482,10 @@ export default function Sidebar({
                 showHistory={showHistory}
                 shellOptions={shellOptions}
                 dragRef={dragRef}
+                markdownEnabled={markdownEnabled}
                 onSelectTab={onSelectTab}
                 onCloseTab={onCloseTab}
+                onReadTab={onReadTab}
                 onRenameTab={onRenameTab}
                 onNewClaudeTab={onNewClaudeTab}
                 onNewShellTab={onNewShellTab}

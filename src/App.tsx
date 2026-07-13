@@ -1,11 +1,18 @@
-import { useCallback, useEffect, useReducer, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
+import SessionBar, { type MarkdownView, type SessionMode } from '@/components/SessionBar';
 import SessionHistoryPanel from '@/components/SessionHistoryPanel';
+import SessionReader from '@/components/SessionReader';
 import SettingsView from '@/components/SettingsView';
 import Sidebar from '@/components/Sidebar';
 import Terminal from '@/components/Terminal';
+import TranscriptDocument from '@/components/TranscriptDocument';
+import TranscriptStates from '@/components/TranscriptStates';
 import { disposeTerminal, writeToTerminal } from '@/components/terminalCache';
 import * as ipc from '@/lib/ipc';
+import { useSettings } from '@/lib/settings-store';
 import { initialTabsState, tabsReducer } from '@/lib/tabs';
+import { transcriptToMarkdown } from '@/lib/transcript';
+import { useTranscript } from '@/lib/use-transcript';
 import type { SavedTab, SessionHistoryEntry, ShellOption, Tab, TabKind } from '@/types';
 
 const INITIAL_COLS = 120;
@@ -19,8 +26,14 @@ export default function App() {
   const [homeDir, setHomeDir] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [readerTarget, setReaderTarget] = useState<{ projectDir: string; entry: SessionHistoryEntry } | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [workspaceLoaded, setWorkspaceLoaded] = useState(false);
+  const settings = useSettings();
+  // Tabs currently showing the in-place markdown reader (remembered per tab).
+  const [mdTabs, setMdTabs] = useState<Set<string>>(new Set());
+  const [mdView, setMdView] = useState<MarkdownView>('rendered');
+  const [mdReload, setMdReload] = useState(0);
 
   useEffect(() => {
     ipc.listShells().then(setShellOptions).catch(() => {});
@@ -164,7 +177,23 @@ export default function App() {
   const handleCloseTab = useCallback((tabId: string) => {
     ipc.killPty(tabId);
     disposeTerminal(tabId);
+    setMdTabs((prev) => {
+      if (!prev.has(tabId)) return prev;
+      const next = new Set(prev);
+      next.delete(tabId);
+      return next;
+    });
     dispatch({ type: 'close', tabId });
+  }, []);
+
+  /** Flip a tab between its live terminal and the in-place markdown reader. */
+  const setTabMode = useCallback((tabId: string, mode: SessionMode) => {
+    setMdTabs((prev) => {
+      const next = new Set(prev);
+      if (mode === 'markdown') next.add(tabId);
+      else next.delete(tabId);
+      return next;
+    });
   }, []);
 
   const handleSelectTab = useCallback((tabId: string) => {
@@ -180,10 +209,42 @@ export default function App() {
   const handleResumeSession = useCallback(
     (dir: string, entry: SessionHistoryEntry) => {
       const name = entry.preview.slice(0, 30) || 'Claude';
+      setReaderTarget(null);
       spawnTabAt(dir, 'claude', null, name, entry.sessionId);
     },
     [spawnTabAt],
   );
+
+  const handleReadSession = useCallback(
+    (dir: string, entry: SessionHistoryEntry) => setReaderTarget({ projectDir: dir, entry }),
+    [],
+  );
+
+  /** Jump a live (or resumed) Claude tab straight into its in-place markdown
+   *  reader from the sidebar — selects the tab and flips it to markdown. */
+  const handleReadTab = useCallback((tab: Tab) => {
+    if (tab.kind !== 'claude' || !tab.resumeSessionId) return;
+    setShowHistory(false);
+    setShowSettings(false);
+    setReaderTarget(null);
+    dispatch({ type: 'select', tabId: tab.id });
+    setMdTabs((prev) => new Set(prev).add(tab.id));
+  }, []);
+
+  const activeTab = state.tabs.find((t) => t.id === state.activeTabId) ?? null;
+  const activeReadable = !!activeTab && activeTab.kind === 'claude' && !!activeTab.resumeSessionId;
+  const overlaysUp = showHistory || showSettings || readerTarget !== null;
+  const barVisible = settings.showSessionBar && activeTab !== null && !overlaysUp;
+  // Markdown reading needs both prefs on (so there's always a bar toggle to leave it by).
+  const canRead = settings.showSessionBar && settings.showMarkdownToggle && activeReadable;
+  const mdActive = canRead && activeTab !== null && mdTabs.has(activeTab.id);
+
+  const { turns, error } = useTranscript(
+    mdActive && activeTab ? activeTab.cwd : null,
+    mdActive && activeTab ? activeTab.resumeSessionId : null,
+    mdReload,
+  );
+  const fullMarkdown = useMemo(() => (turns ? transcriptToMarkdown(turns) : ''), [turns]);
 
   return (
     <div className="flex h-screen bg-background text-foreground">
@@ -197,6 +258,8 @@ export default function App() {
         collapsed={collapsed}
         onSelectTab={handleSelectTab}
         onCloseTab={handleCloseTab}
+        onReadTab={handleReadTab}
+        markdownEnabled={settings.showSessionBar && settings.showMarkdownToggle}
         onNewClaudeTab={handleNewClaudeTab}
         onNewShellTab={handleNewShellTab}
         onRenameTab={handleRenameTab}
@@ -208,40 +271,71 @@ export default function App() {
         onReorderTab={handleReorderTab}
         onToggleCollapse={() => setCollapsed((v) => !v)}
       />
-      <main className="relative flex-1 min-w-0" data-terminal-area>
-        {state.tabs.map((tab) => (
-          <Terminal
-            key={tab.id}
-            tabId={tab.id}
-            isVisible={!showHistory && !showSettings && tab.id === state.activeTabId}
+      <main className="relative flex-1 min-w-0 flex flex-col" data-terminal-area>
+        {barVisible && activeTab && (
+          <SessionBar
+            tab={activeTab}
+            canRead={canRead}
+            mode={mdActive ? 'markdown' : 'terminal'}
+            view={mdView}
+            turnsCount={turns ? turns.length : null}
+            markdownText={fullMarkdown}
+            onSetMode={(m) => setTabMode(activeTab.id, m)}
+            onSetView={setMdView}
+            onRefresh={() => setMdReload((k) => k + 1)}
           />
-        ))}
-        {showHistory && projects.length > 0 && (
-          <div className="absolute inset-0 bg-background">
-            <SessionHistoryPanel projects={projects} onResume={handleResumeSession} />
-          </div>
         )}
-        {showSettings && (
-          <div className="absolute inset-0 bg-background">
-            <SettingsView />
-          </div>
-        )}
-        {!showHistory && !showSettings && state.tabs.length === 0 && projects.length === 0 && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-muted-foreground text-[12px]">
-            <span>Select a folder to start a session</span>
-            <button
-              className="px-3 py-1.5 rounded-sm border border-border bg-card text-foreground text-[12px] cursor-pointer hover:bg-white/5"
-              onClick={handleAddProject}
-            >
-              Choose folder…
-            </button>
-          </div>
-        )}
-        {!showHistory && !showSettings && state.tabs.length === 0 && projects.length > 0 && (
-          <div className="absolute inset-0 flex items-center justify-center text-muted-foreground text-[12px]">
-            Create a session from the sidebar to get started
-          </div>
-        )}
+        <div className="relative flex-1 min-h-0">
+          {state.tabs.map((tab) => (
+            <Terminal
+              key={tab.id}
+              tabId={tab.id}
+              isVisible={tab.id === state.activeTabId && !overlaysUp && !mdActive}
+            />
+          ))}
+          {mdActive && (
+            <div className="absolute inset-0 overflow-y-auto scrollbar-thin bg-background">
+              <TranscriptStates turns={turns} error={error} />
+              {turns && turns.length > 0 && <TranscriptDocument turns={turns} view={mdView} />}
+            </div>
+          )}
+          {showHistory && projects.length > 0 && (
+            <div className="absolute inset-0 bg-background">
+              <SessionHistoryPanel projects={projects} onResume={handleResumeSession} onRead={handleReadSession} />
+            </div>
+          )}
+          {readerTarget && (
+            <div className="absolute inset-0 bg-background z-10">
+              <SessionReader
+                projectDir={readerTarget.projectDir}
+                entry={readerTarget.entry}
+                onClose={() => setReaderTarget(null)}
+                onResume={handleResumeSession}
+              />
+            </div>
+          )}
+          {showSettings && (
+            <div className="absolute inset-0 bg-background">
+              <SettingsView />
+            </div>
+          )}
+          {!overlaysUp && !mdActive && state.tabs.length === 0 && projects.length === 0 && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-muted-foreground text-[12px]">
+              <span>Select a folder to start a session</span>
+              <button
+                className="px-3 py-1.5 rounded-sm border border-border bg-card text-foreground text-[12px] cursor-pointer hover:bg-white/5"
+                onClick={handleAddProject}
+              >
+                Choose folder…
+              </button>
+            </div>
+          )}
+          {!overlaysUp && !mdActive && state.tabs.length === 0 && projects.length > 0 && (
+            <div className="absolute inset-0 flex items-center justify-center text-muted-foreground text-[12px]">
+              Create a session from the sidebar to get started
+            </div>
+          )}
+        </div>
       </main>
     </div>
   );

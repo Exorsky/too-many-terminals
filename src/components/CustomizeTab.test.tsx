@@ -2,12 +2,16 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as ipc from '@/lib/ipc';
+import { resetSettingsForTest } from '@/lib/settings-store';
 import CustomizeTab from './CustomizeTab';
 
 vi.mock('@/lib/ipc');
 
 beforeEach(() => {
-  vi.mocked(ipc.loadSettings).mockResolvedValue({ selectedThemeId: 'default', customThemes: [] });
+  resetSettingsForTest();
+  vi.mocked(ipc.loadSettings).mockResolvedValue({
+    selectedThemeId: 'default', customThemes: [], showSessionBar: true, showMarkdownToggle: true,
+  });
   vi.mocked(ipc.saveSettings).mockResolvedValue(undefined);
 });
 
@@ -29,6 +33,7 @@ describe('CustomizeTab', () => {
     vi.mocked(ipc.loadSettings).mockResolvedValue({
       selectedThemeId: 'my-theme',
       customThemes: [{ id: 'my-theme', name: 'My Theme', colors: {} }],
+      showSessionBar: true, showMarkdownToggle: true,
     });
     render(<CustomizeTab />);
     expect(await screen.findByText('My Theme')).toBeInTheDocument();
@@ -38,7 +43,7 @@ describe('CustomizeTab', () => {
     render(<CustomizeTab />);
     await userEvent.click(await screen.findByText('Amber'));
 
-    expect(ipc.saveSettings).toHaveBeenCalledWith({ selectedThemeId: 'amber', customThemes: [] });
+    expect(ipc.saveSettings).toHaveBeenCalledWith(expect.objectContaining({ selectedThemeId: 'amber', customThemes: [] }));
     expect(document.documentElement.style.getPropertyValue('--primary')).toBe('#e8b45a');
   });
 
@@ -77,12 +82,13 @@ describe('CustomizeTab', () => {
     vi.mocked(ipc.loadSettings).mockResolvedValue({
       selectedThemeId: 'my-theme',
       customThemes: [{ id: 'my-theme', name: 'My Theme', colors: {} }],
+      showSessionBar: true, showMarkdownToggle: true,
     });
     render(<CustomizeTab />);
     await userEvent.click(await screen.findByLabelText('Delete My Theme'));
 
     expect(screen.queryByText('My Theme')).not.toBeInTheDocument();
-    expect(ipc.saveSettings).toHaveBeenCalledWith({ selectedThemeId: 'default', customThemes: [] });
+    expect(ipc.saveSettings).toHaveBeenCalledWith(expect.objectContaining({ selectedThemeId: 'default', customThemes: [] }));
   });
 
   it('built-in themes have no edit or delete buttons', async () => {

@@ -15,6 +15,8 @@ under `~/.claude/projects/<encoded-dir>/*.jsonl`. Read-only and offline; nothing
   original multi-project app) alongside the folder name shown on each row.
 - **Resume** (click / Enter / →) opens a new Claude tab, in that entry's project, with
   `claude --resume <sessionId>`.
+- **Read** (`▤` action / Space) opens the transcript as a rendered document — see
+  [session-reader.md](session-reader.md).
 - **Delete** (trash / Del) removes the transcript file after inline confirmation.
   Session ids are validated (`[A-Za-z0-9_-]+`) so no path escapes.
 - Panel UX: search across preview text and folder name (`/`), Today/Yesterday/Earlier

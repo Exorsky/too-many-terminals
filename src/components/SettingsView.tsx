@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Settings as SettingsIcon, Sparkles, SlidersHorizontal } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { patchSettings, useSettings } from '@/lib/settings-store';
 import CustomizeTab from './CustomizeTab';
 
 type SettingsTab = 'general' | 'customize';
@@ -10,14 +11,73 @@ const TABS: { id: SettingsTab; label: string; icon: typeof SlidersHorizontal }[]
   { id: 'customize', label: 'Customize', icon: Sparkles },
 ];
 
-function GeneralTab() {
+function Switch({ checked, disabled, onChange, label }: {
+  checked: boolean;
+  disabled?: boolean;
+  onChange: (next: boolean) => void;
+  label: string;
+}) {
   return (
-    <div className="flex flex-col items-center justify-center gap-1.5 text-center px-6 py-14 text-muted-foreground">
-      <SettingsIcon size={20} className="text-border-hover mb-1" />
-      <div className="text-[12.5px] text-foreground">No settings yet</div>
-      <div className="text-[11px] max-w-[34ch] leading-relaxed">
-        General app preferences will appear here.
+    <button
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={cn(
+        'relative w-8 h-[18px] rounded-full shrink-0 border-none cursor-pointer transition-colors duration-100',
+        checked ? 'bg-primary' : 'bg-border-hover',
+        disabled && 'opacity-40 cursor-not-allowed',
+      )}
+    >
+      <span
+        className={cn(
+          'absolute top-0.5 w-3.5 h-3.5 rounded-full bg-background transition-[left] duration-100',
+          checked ? 'left-4' : 'left-0.5',
+        )}
+      />
+    </button>
+  );
+}
+
+function SettingRow({ title, description, checked, disabled, onChange }: {
+  title: string;
+  description: string;
+  checked: boolean;
+  disabled?: boolean;
+  onChange: (next: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center gap-4 py-3 border-t border-border first:border-t-0">
+      <div className="flex-1 min-w-0">
+        <div className="text-[12.5px] text-foreground">{title}</div>
+        <div className="text-[11px] text-muted-foreground leading-relaxed">{description}</div>
       </div>
+      <Switch checked={checked} disabled={disabled} onChange={onChange} label={title} />
+    </div>
+  );
+}
+
+function GeneralTab() {
+  const settings = useSettings();
+  return (
+    <div className="flex flex-col px-5 py-3">
+      <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground pb-1">
+        Session bar
+      </div>
+      <SettingRow
+        title="Show the session bar"
+        description="A slim strip above the terminal with the session name and controls."
+        checked={settings.showSessionBar}
+        onChange={(v) => patchSettings({ showSessionBar: v })}
+      />
+      <SettingRow
+        title="Show the Markdown toggle"
+        description="The Terminal / Markdown switch in the bar. Off keeps the bar identity-only."
+        checked={settings.showMarkdownToggle}
+        disabled={!settings.showSessionBar}
+        onChange={(v) => patchSettings({ showMarkdownToggle: v })}
+      />
     </div>
   );
 }

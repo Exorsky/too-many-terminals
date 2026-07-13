@@ -10,6 +10,7 @@ Feature and architecture docs live in `docs/` — **keep them updated when featu
 - [docs/architecture.md](docs/architecture.md) — process model, IPC design, module boundaries
 - [docs/features/terminals.md](docs/features/terminals.md) — sidebar, tabs, PTY spawning per OS
 - [docs/features/session-history.md](docs/features/session-history.md) — past-session browsing/resume
+- [docs/features/session-reader.md](docs/features/session-reader.md) — reading a past session as rendered Markdown
 - [docs/features/usage-meter.md](docs/features/usage-meter.md) — daily token counter
 - [docs/features/workspace-persistence.md](docs/features/workspace-persistence.md) — restoring folder/tabs across restarts
 - [docs/features/tab-status-and-naming.md](docs/features/tab-status-and-naming.md) — Claude Code hooks: live status + auto-naming

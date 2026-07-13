@@ -45,6 +45,7 @@ pub fn run() {
             commands::home_dir,
             commands::list_sessions,
             commands::delete_session,
+            commands::read_transcript,
             commands::get_usage_stats,
             commands::load_workspace,
             commands::save_workspace,
