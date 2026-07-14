@@ -16,6 +16,12 @@ pty hasn't exited — i.e. Claude fired its **Notification** hook because it nee
 input or permission. Working, idle/done, `new`, shell, and exited tabs are all
 excluded: `requires_response` is the only state that should chase you.
 
+Note that Claude Code's Notification hook doubles as an idle timer — it also
+fires ~60s after a turn ends with a "Claude is waiting for your input" message,
+even when Claude asked nothing. That idle nudge is filtered out in
+`hook_server::route_message` (it inspects the forwarded notification `message`),
+so a finished-but-unanswered session no longer falsely lands in this strip.
+
 Each row shows the pulsing attention icon, the tab name, and its folder (with the
 folder's accent dot), so a waiting session tells you *where* it is at a glance.
 The header carries a live count badge. Clicking a row selects that tab (same

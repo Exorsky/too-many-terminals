@@ -56,7 +56,7 @@ through the pure `route_message` function (fully unit-tested, no I/O).
 | SessionStart | `tab:ready` | status → `idle` (has a session id) or `new`; also emits `claude-session-resolved` (reinforces/replaces the poll-based detection in `session_history.rs`) |
 | PreToolUse | `tab:status:working` | status → `working` |
 | Stop | `tab:status:idle` | status → `idle` |
-| Notification | `tab:status:input` | status → `requires_response` |
+| Notification | `tab:status:input` | status → `requires_response`, **unless** the notification is Claude Code's idle nudge (message contains "waiting for your input", fired ~60s after a turn ends even when nothing was asked) — that's ignored so a finished session doesn't falsely appear in "Waiting on you". The hook client forwards the notification `message` as `data` so the server can tell the two apart; a missing message defaults to `requires_response`. |
 | SessionEnd | `tab:closed` | ignored — real exits are already handled by the pty's own exit event; `/clear` is detected via the *next* SessionStart instead |
 | UserPromptSubmit (first prompt only) | `tab:generate-name` | queued for naming (see below) |
 

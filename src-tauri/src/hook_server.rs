@@ -55,7 +55,24 @@ fn route_message(msg: &HookMessage) -> Vec<RoutedAction> {
     match msg.event.as_str() {
         "tab:status:working" => vec![RoutedAction::Status { tab_id: msg.tab_id.clone(), status: "working" }],
         "tab:status:idle" => vec![RoutedAction::Status { tab_id: msg.tab_id.clone(), status: "idle" }],
-        "tab:status:input" => vec![RoutedAction::Status { tab_id: msg.tab_id.clone(), status: "requires_response" }],
+        // Claude Code's Notification hook fires both for genuine permission/
+        // input requests AND as an idle nudge ("Claude is waiting for your
+        // input") ~60s after a turn ends, even when Claude asked nothing. Only
+        // the former should chase the user; ignoring the idle nudge keeps a
+        // finished-but-unanswered session out of the "Waiting on you" strip.
+        // A missing message defaults to requires_response (fail toward
+        // surfacing).
+        "tab:status:input" => {
+            let is_idle_nudge = msg
+                .data
+                .as_deref()
+                .is_some_and(|m| m.to_lowercase().contains("waiting for your input"));
+            if is_idle_nudge {
+                vec![]
+            } else {
+                vec![RoutedAction::Status { tab_id: msg.tab_id.clone(), status: "requires_response" }]
+            }
+        }
 
         "tab:ready" => {
             let ready: Option<ReadyPayload> = msg.data.as_deref().and_then(|d| serde_json::from_str(d).ok());
@@ -197,9 +214,23 @@ mod tests {
     }
 
     #[test]
-    fn notification_maps_to_requires_response() {
+    fn notification_without_message_defaults_to_requires_response() {
         let actions = route_message(&msg("t1", "tab:status:input", None));
         assert_eq!(actions, vec![RoutedAction::Status { tab_id: "t1".into(), status: "requires_response" }]);
+    }
+
+    #[test]
+    fn permission_notification_maps_to_requires_response() {
+        let actions = route_message(&msg("t1", "tab:status:input", Some("Claude needs your permission to use Bash")));
+        assert_eq!(actions, vec![RoutedAction::Status { tab_id: "t1".into(), status: "requires_response" }]);
+    }
+
+    #[test]
+    fn idle_waiting_notification_is_ignored() {
+        // The ~60s idle nudge must not flip a finished session to
+        // requires_response (that's the false "Waiting on you" bug).
+        let actions = route_message(&msg("t1", "tab:status:input", Some("Claude is waiting for your input")));
+        assert!(actions.is_empty());
     }
 
     #[test]

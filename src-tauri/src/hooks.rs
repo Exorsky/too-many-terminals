@@ -234,7 +234,15 @@ pub fn run_hook_client(event_arg: &str) {
         })),
         "pre-tool-use" => Some(json!({ "tabId": tab_id, "event": "tab:status:working", "data": null })),
         "stop" => Some(json!({ "tabId": tab_id, "event": "tab:status:idle", "data": null })),
-        "notification" => Some(json!({ "tabId": tab_id, "event": "tab:status:input", "data": null })),
+        // Forward the Notification's `message` so the server can tell a real
+        // permission/input request from Claude Code's idle "waiting for your
+        // input" nudge (fired ~60s after a turn ends, even when nothing was
+        // asked). See `route_message`.
+        "notification" => Some(json!({
+            "tabId": tab_id,
+            "event": "tab:status:input",
+            "data": payload.get("message").and_then(Value::as_str),
+        })),
         "session-end" => Some(json!({ "tabId": tab_id, "event": "tab:closed", "data": null })),
         "prompt-submit" => {
             if naming_flag_path(&tab_id).exists() {
