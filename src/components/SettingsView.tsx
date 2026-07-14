@@ -69,15 +69,34 @@ function TestNotificationButton() {
     setTimeout(() => setState('idle'), 2500);
   };
   return (
-    <div className="flex items-center gap-3 py-3 border-t border-border">
-      <button
-        onClick={send}
-        className="px-2.5 py-1.5 rounded-sm border border-border bg-card text-foreground text-[11px] cursor-pointer hover:bg-white/5 hover:border-border-hover font-inherit"
-      >
-        Send a test notification
-      </button>
-      {state === 'sent' && <span className="text-[11px] text-success">Sent — check your notifications.</span>}
-      {state === 'blocked' && <span className="text-[11px] text-attention">Notifications are blocked by the OS.</span>}
+    <div className="py-3 border-t border-border">
+      <div className="flex items-center gap-3">
+        <button
+          onClick={send}
+          className="px-2.5 py-1.5 rounded-sm border border-border bg-card text-foreground text-[11px] cursor-pointer hover:bg-white/5 hover:border-border-hover font-inherit"
+        >
+          Send a test notification
+        </button>
+        {state === 'sent' && <span className="text-[11px] text-success">Sent — check your notifications.</span>}
+        {state === 'blocked' && <span className="text-[11px] text-attention">Notifications are blocked by the OS.</span>}
+      </div>
+      <div className="text-[11px] text-muted-foreground leading-relaxed pt-2">
+        Nothing showing up? The OS may be silently blocking notifications for this app —{' '}
+        {ipc.canOpenSystemNotificationSettings() ? (
+          <>
+            allow them in the{' '}
+            <button
+              onClick={() => ipc.openSystemNotificationSettings()}
+              className="p-0 bg-transparent border-none font-inherit text-[11px] text-foreground underline cursor-pointer hover:text-muted-foreground"
+            >
+              system notification settings
+            </button>
+            .
+          </>
+        ) : (
+          <>allow them in your system&apos;s notification settings.</>
+        )}
+      </div>
     </div>
   );
 }

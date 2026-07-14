@@ -46,6 +46,19 @@ On **Windows**, OS toasts generally require the app to be *installed* (a Start
 Menu shortcut registers the AppUserModelID); a bare `tauri dev` run may not
 surface banners. Test with an installed build if a dev run shows nothing.
 
+On **macOS** the caveat is stronger: notifications are tied to a bundled
+`.app`'s identifier, so a `tauri dev` run generally can't deliver them at all —
+test with a built `.app`. Even a bundled app can be **silently blocked**: the
+plugin reports "granted" on desktop regardless, so a system-side block (System
+Settings → Notifications → Too Many Terminals set to off/None, or
+Focus/Do Not Disturb) looks like a successful send that never appears. Because
+that block is undetectable from our side, the test button carries a permanent
+hint linking to the OS notification settings —
+`openSystemNotificationSettings()` in `ipc.ts` deep-links to the pane
+(`x-apple.systempreferences:` on macOS, `ms-settings:` on Windows; hidden on
+Linux, where no stable deep link exists). The custom URL schemes are allowed
+via an `opener:allow-open-url` scope in `capabilities/default.json`.
+
 ## The preference
 
 `notificationsEnabled` (default `true`, opt-out) lives in `AppSettings`
@@ -67,10 +80,12 @@ alongside the session-bar prefs, persisted in `settings.json` via the same
 ## Files
 
 - `src/lib/ipc.ts` — `ensureNotificationPermission`, `notify` (the only module
-  importing the notification plugin).
+  importing the notification plugin), `openSystemNotificationSettings` /
+  `canOpenSystemNotificationSettings`.
 - `src/App.tsx` — `maybeNotify`, `prevStatusRef`/`tabsRef`/`notificationsRef`,
   the permission-request effect, and the notify call in the status listener.
-- `src/components/SettingsView.tsx` — the Notifications switch (+ test).
+- `src/components/SettingsView.tsx` — the Notifications switch, the test
+  button, and the OS-settings hint under it.
 - `src-tauri/src/settings.rs` — `notifications_enabled` field + default (+ tests).
 - `src-tauri/src/lib.rs`, `src-tauri/Cargo.toml`,
   `src-tauri/capabilities/default.json` — plugin registration, dep, capability.

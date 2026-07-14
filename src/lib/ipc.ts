@@ -144,6 +144,27 @@ export async function notify(title: string, body: string): Promise<void> {
   }
 }
 
+/** Deep link to the OS notification settings pane, or null where there is
+ *  no stable one (Linux desktops vary). */
+function systemNotificationSettingsUrl(): string | null {
+  const ua = navigator.userAgent;
+  if (ua.includes('Mac')) return 'x-apple.systempreferences:com.apple.preference.notifications';
+  if (ua.includes('Windows')) return 'ms-settings:notifications';
+  return null;
+}
+
+export function canOpenSystemNotificationSettings(): boolean {
+  return systemNotificationSettingsUrl() !== null;
+}
+
+/** Opens the OS notification settings for the user to allow the app. The
+ *  plugin can't detect a system-side block (it reports "granted" on desktop
+ *  even when the OS drops the toast), so this is the recovery path. */
+export function openSystemNotificationSettings(): void {
+  const url = systemNotificationSettingsUrl();
+  if (url) void openUrl(url);
+}
+
 export function loadWorkspace(): Promise<WorkspaceState> {
   return invoke('load_workspace');
 }

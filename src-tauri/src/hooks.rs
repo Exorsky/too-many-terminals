@@ -140,25 +140,31 @@ pub fn remove_our_hooks(existing: Value) -> Value {
     Value::Object(root)
 }
 
-fn read_settings(path: &Path) -> Value {
-    fs::read_to_string(path)
-        .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or_else(|| json!({}))
-}
-
 /// Writes/merges the hook entries for a project directory. Called every time
-/// a Claude tab is spawned there — cheap (small JSON file), and necessary
-/// since the hook pipe path is keyed by this process's PID and changes every
-/// launch.
-pub fn install_hooks(cwd: &Path, exe: &str) -> Result<(), String> {
+/// a Claude tab is spawned there. Skips the write when the merged content is
+/// byte-identical to what's on disk (the usual case — the hook command only
+/// embeds the exe path; the per-launch pipe path travels via env vars):
+/// rewriting on every spawn re-triggers any file watcher running in that
+/// project (vite, webpack, etc.), and if the project's dev tooling reloads a
+/// page that respawns tabs, that becomes an infinite spawn loop. Returns
+/// whether the file was written.
+pub fn install_hooks(cwd: &Path, exe: &str) -> Result<bool, String> {
     let path = settings_path(cwd);
-    let updated = merge_settings(read_settings(&path), exe);
+    let existing_raw = fs::read_to_string(&path).ok();
+    let existing = existing_raw
+        .as_deref()
+        .and_then(|s| serde_json::from_str(s).ok())
+        .unwrap_or_else(|| json!({}));
+    let updated = merge_settings(existing, exe);
+    let json = serde_json::to_string_pretty(&updated).map_err(|e| e.to_string())?;
+    if existing_raw.as_deref() == Some(json.as_str()) {
+        return Ok(false);
+    }
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
-    let json = serde_json::to_string_pretty(&updated).map_err(|e| e.to_string())?;
-    fs::write(&path, json).map_err(|e| e.to_string())
+    fs::write(&path, json).map_err(|e| e.to_string())?;
+    Ok(true)
 }
 
 /// Removes just our hook entries from a project's settings, deleting the file
@@ -427,6 +433,23 @@ mod tests {
         let saved: Value = serde_json::from_str(&raw).unwrap();
         assert_eq!(saved["permissions"]["allow"][0], "Bash");
         assert_eq!(command_of(&saved, "SessionStart"), "\"/exe\" --too-many-terminals-hook session-start");
+    }
+
+    #[test]
+    fn reinstall_with_same_exe_skips_the_write() {
+        let tmp = tempfile::tempdir().unwrap();
+        assert!(install_hooks(tmp.path(), "/exe").unwrap(), "first install writes");
+        assert!(!install_hooks(tmp.path(), "/exe").unwrap(), "identical reinstall must not touch the file");
+    }
+
+    #[test]
+    fn reinstall_with_a_new_exe_path_rewrites() {
+        let tmp = tempfile::tempdir().unwrap();
+        assert!(install_hooks(tmp.path(), "/old-exe").unwrap());
+        assert!(install_hooks(tmp.path(), "/new-exe").unwrap(), "changed exe path must rewrite");
+        let raw = fs::read_to_string(settings_path(tmp.path())).unwrap();
+        let saved: Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(command_of(&saved, "SessionStart"), "\"/new-exe\" --too-many-terminals-hook session-start");
     }
 
     #[test]

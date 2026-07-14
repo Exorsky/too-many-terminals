@@ -45,6 +45,19 @@ describe('SettingsView', () => {
     expect(ipc.saveSettings).toHaveBeenCalledWith(expect.objectContaining({ notificationsEnabled: false }));
   });
 
+  it('links to the OS notification settings when the platform has a settings pane', async () => {
+    vi.mocked(ipc.canOpenSystemNotificationSettings).mockReturnValue(true);
+    render(<SettingsView />);
+    await userEvent.click(screen.getByRole('button', { name: 'system notification settings' }));
+    expect(ipc.openSystemNotificationSettings).toHaveBeenCalled();
+  });
+
+  it('omits the settings link on platforms without a notification settings pane', () => {
+    vi.mocked(ipc.canOpenSystemNotificationSettings).mockReturnValue(false);
+    render(<SettingsView />);
+    expect(screen.queryByRole('button', { name: 'system notification settings' })).not.toBeInTheDocument();
+  });
+
   it('switches to the Customize tab on click', async () => {
     render(<SettingsView />);
     await userEvent.click(screen.getByText('Customize'));

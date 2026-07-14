@@ -31,8 +31,11 @@ export default defineConfig(async () => ({
         }
       : undefined,
     watch: {
-      // 3. tell Vite to ignore watching `src-tauri`
-      ignored: ["**/src-tauri/**"],
+      // 3. tell Vite to ignore watching `src-tauri`, and `.claude` — the app
+      // itself writes hook entries into `<project>/.claude/settings.local.json`
+      // when a Claude tab spawns; when developing this repo with a tab open in
+      // it, watching that file would reload the page and respawn tabs forever.
+      ignored: ["**/src-tauri/**", "**/.claude/**"],
     },
   },
 }));

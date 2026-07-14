@@ -28,7 +28,13 @@ point straight at this executable.
    entries from before the rename get cleaned up, as are the old Electron-based
    ClaudeTerminal app's `node "<bundle>/hooks/on-<event>.js"` commands, which would
    otherwise spam MODULE_NOT_FOUND errors once that app is uninstalled). Runs on every
-   spawn since the pipe path is PID-scoped and changes every launch.
+   spawn, but **skips the write when the merged content is byte-identical** to what's
+   on disk — the usual case, since only the exe path is embedded (the PID-scoped pipe
+   path travels via env vars, step 2). Rewriting unconditionally used to re-trigger
+   file watchers in the project; when the project is itself a dev-served web app whose
+   watcher reloads the page (e.g. this repo under `tauri dev` with a tab open in it),
+   spawn → write → page reload → respawn became an infinite loop that leaked a `claude`
+   process per tab per second.
 2. `TOO_MANY_TERMINALS_TAB_ID` / `TOO_MANY_TERMINALS_PIPE` env vars are set on the pty child
    so the hook client (invoked by Claude Code, inheriting the pty's env) knows where
    to send messages and which tab they're for.
