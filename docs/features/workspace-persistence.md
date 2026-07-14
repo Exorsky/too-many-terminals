@@ -28,7 +28,24 @@ via `ipc.saveWorkspace`.
 ## Restoring on launch
 
 On startup `App.tsx` calls `ipc.loadWorkspace()` once, sets `projects` from the saved
-list, and respawns every saved tab at its own saved `cwd`:
+list, and re-adds every saved tab at its own saved `cwd`.
+
+### Lazy (dormant) restore
+
+Restored tabs are added **dormant** (`Tab.dormant = true`) — a lightweight placeholder
+with no pty/process behind it. A tab's pty is spawned only the first time it's actually
+shown as a live terminal, via the lazy-wake effect in `App.tsx` (`startPty` + the `wake`
+reducer action clearing the flag). This keeps reopening the app with N sessions from
+launching N `claude`/shell processes at once — each Claude session is a ~200 MB Node
+process, so restoring seven tabs used to cost ~1.4 GB up front. Now only the last-active
+tab (the one `add` leaves active) wakes on launch; the rest stay dormant until you click
+them.
+
+Reading a restored Claude session as markdown or having an overlay (History/Settings/
+Reader) up does **not** wake the tab — markdown reads straight from the transcript file,
+so there's no need to spawn the process.
+
+When a dormant tab does wake:
 
 - **Shell tabs** just start fresh (there's no shell state to resume).
 - **Claude tabs** pass `resumeSessionId` as `--resume <id>` if one was captured, so the
@@ -49,5 +66,6 @@ right before spawning, then polls (`session_history::find_new_session`, every 1s
 - `src-tauri/src/workspace.rs` (+ unit tests: round-trip, missing/corrupt file, directory creation)
 - `src-tauri/src/session_history.rs` — `existing_session_ids`, `find_new_session` (+ tests)
 - `src-tauri/src/commands.rs` — `load_workspace`, `save_workspace`, spawn-time session watcher
-- `src/App.tsx` — restore-on-mount effect, debounced save effect
-- `src/lib/tabs.ts` — `sessionResolved` action
+- `src/App.tsx` — restore-on-mount effect (dormant tabs), lazy-wake effect, `startPty`, debounced save effect
+- `src/lib/tabs.ts` — `sessionResolved` and `wake` actions
+- `src/types.ts` — `Tab.dormant` flag

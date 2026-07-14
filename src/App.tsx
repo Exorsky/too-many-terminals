@@ -135,9 +135,28 @@ export default function App() {
     return () => { unlisten.then((fn) => fn()); };
   }, []);
 
+  // Tabs whose pty has actually been spawned this session. Guards the lazy
+  // wake effect (and dormant restore) against spawning the same pty twice.
+  const spawnedRef = useRef<Set<string>>(new Set());
+
+  /** Spawns the pty for an existing tab (idempotent). Used both for freshly
+   *  created tabs and to lazily wake a dormant, restored tab on first view. */
+  const startPty = useCallback((tab: Tab) => {
+    if (spawnedRef.current.has(tab.id)) return;
+    spawnedRef.current.add(tab.id);
+    ipc.spawnPty({
+      tabId: tab.id,
+      kind: tab.kind === 'claude' ? 'claude' : tab.shellId!,
+      cwd: tab.cwd,
+      resumeSessionId: tab.resumeSessionId,
+      cols: INITIAL_COLS,
+      rows: INITIAL_ROWS,
+      onData: (data) => writeToTerminal(tab.id, data),
+    }).catch(() => dispatch({ type: 'exited', tabId: tab.id }));
+  }, []);
+
   /** Spawns a tab at an explicit project folder — used for user-initiated new
-   *  sessions and for restoring the previous workspace (folders loaded from
-   *  disk, which haven't reached React state yet at that point). */
+   *  sessions and for resuming a past session; the pty starts immediately. */
   const spawnTabAt = useCallback(
     (atCwd: string, kind: TabKind, shellId: string | null, name: string, resumeSessionId?: string | null) => {
       const tab: Tab = {
@@ -153,20 +172,15 @@ export default function App() {
       dispatch({ type: 'add', tab });
       setShowHistory(false);
       setShowSettings(false);
-      ipc.spawnPty({
-        tabId: tab.id,
-        kind: kind === 'claude' ? 'claude' : shellId!,
-        cwd: atCwd,
-        resumeSessionId: tab.resumeSessionId,
-        cols: INITIAL_COLS,
-        rows: INITIAL_ROWS,
-        onData: (data) => writeToTerminal(tab.id, data),
-      }).catch(() => dispatch({ type: 'exited', tabId: tab.id }));
+      startPty(tab);
     },
-    [],
+    [startPty],
   );
 
   // Restore the previous workspace (projects + open tabs) once on startup.
+  // Restored tabs are added *dormant* — no pty is spawned until a tab is first
+  // shown as a live terminal (see the lazy-wake effect below), so reopening the
+  // app with N sessions doesn't launch N claude/shell processes at once.
   useEffect(() => {
     let cancelled = false;
     ipc.loadWorkspace().then((ws) => {
@@ -174,14 +188,26 @@ export default function App() {
       setCollapsed(ws.collapsed);
       setProjects(ws.projects);
       for (const saved of ws.tabs) {
-        spawnTabAt(saved.cwd, saved.kind, saved.shellId, saved.name, saved.resumeSessionId);
+        dispatch({
+          type: 'add',
+          tab: {
+            id: crypto.randomUUID(),
+            kind: saved.kind,
+            name: saved.name,
+            shellId: saved.shellId,
+            cwd: saved.cwd,
+            resumeSessionId: saved.resumeSessionId,
+            exited: false,
+            status: 'new',
+            dormant: true,
+          },
+        });
       }
     }).catch(() => {}).finally(() => {
       if (!cancelled) setWorkspaceLoaded(true);
     });
     return () => { cancelled = true; };
-    // Runs once on mount; spawnTabAt has no reactive dependencies.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Runs once on mount.
   }, []);
 
   // Persist the workspace (debounced) whenever it changes, once the initial
@@ -291,6 +317,16 @@ export default function App() {
   const mdActive = canRead && activeTab !== null && mdTabs.has(activeTab.id);
   // Feed the notification guard: which tab is genuinely on screen right now.
   visibleTabIdRef.current = overlaysUp || mdActive ? null : activeTab?.id ?? null;
+
+  // Lazily spawn a dormant (restored) tab's pty the first time it's actually
+  // shown as a live terminal. Reading a session as markdown or having an
+  // overlay up doesn't need the process, so those don't wake it.
+  useEffect(() => {
+    if (!activeTab || !activeTab.dormant) return;
+    if (overlaysUp || mdActive) return;
+    startPty(activeTab);
+    dispatch({ type: 'wake', tabId: activeTab.id });
+  }, [activeTab, overlaysUp, mdActive, startPty]);
 
   const { turns, error } = useTranscript(
     mdActive && activeTab ? activeTab.cwd : null,

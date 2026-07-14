@@ -17,6 +17,10 @@ export interface Tab {
   /** True once the underlying pty process has exited. */
   exited: boolean;
   status: TabStatus;
+  /** True for a restored-workspace tab whose pty hasn't been spawned yet — it
+   *  stays a lightweight placeholder (no shell/claude process) until first
+   *  shown as a live terminal. Absent/false for normally-spawned tabs. */
+  dormant?: boolean;
 }
 
 /** A shell available on the current OS, provided by the Rust backend. */
