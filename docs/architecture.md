@@ -26,10 +26,15 @@ WebKitGTK) and a small Rust binary, keeping installers in the ~10–25 MB range.
 - **Commands** (`invoke`): `pty_spawn`, `pty_write`, `pty_resize`, `pty_kill`,
   `list_shells`, `home_dir`, `list_sessions`, `delete_session`, `get_usage_stats`.
   Slow filesystem scans are `#[tauri::command(async)]` so they don't block the IPC thread.
-- **PTY output**: one Tauri **Channel per tab**, passed to `pty_spawn`. The Rust reader
-  thread sends `InvokeResponseBody::Raw(Vec<u8>)`; JS receives an `ArrayBuffer` and feeds
-  `Uint8Array` straight into xterm (no base64, no UTF-8 chunk-splitting issues). If raw
-  channels misbehave on some webview, the fallback (base64) only touches `src/lib/ipc.ts`.
+- **PTY output**: one Tauri **Channel per tab**, passed to `pty_spawn`. A blocking reader
+  thread pushes raw chunks into an in-process channel; a second thread (`pty.rs::coalesce`)
+  batches bursts — appending further chunks that arrive within a short window (`BATCH_WINDOW`,
+  4 ms) up to a size cap (`BATCH_MAX_BYTES`, 64 KiB) — before sending one
+  `InvokeResponseBody::Raw(Vec<u8>)` across the IPC boundary. This collapses a flood of tiny
+  reads (`yes`, build output) into far fewer messages without perceptible latency; bytes and
+  order are preserved exactly. JS receives an `ArrayBuffer` and feeds `Uint8Array` straight
+  into xterm (no base64, no UTF-8 chunk-splitting issues). If raw channels misbehave on some
+  webview, the fallback (base64) only touches `src/lib/ipc.ts`.
 - **PTY exit**: a low-frequency `pty-exit` Tauri event with `{ tabId }`.
 
 ## Module boundaries
@@ -54,5 +59,6 @@ WebKitGTK) and a small Rust binary, keeping installers in the ~10–25 MB range.
 
 ## Known follow-ups
 
-- No PTY flow control yet (Electron version had pause/resume watermarks). Add ack-based
-  backpressure if `yes`-style floods cause UI jank.
+- Output is coalesced (see PTY output above) but there's no ack-based **flow control** yet
+  (Electron version had pause/resume watermarks). Add backpressure if a sustained flood
+  still outpaces the webview.
