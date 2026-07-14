@@ -51,6 +51,27 @@ When a dormant tab does wake:
 - **Claude tabs** pass `resumeSessionId` as `--resume <id>` if one was captured, so the
   exact conversation continues; otherwise they start a new session.
 
+### Auto-sleep (idle background sessions)
+
+The same dormant machinery reclaims memory from sessions you've left running. An interval
+in `App.tsx` (`SLEEP_CHECK_MS`, every 60s) puts a Claude tab **back** to sleep once it has
+been idle and off-screen for `AUTO_SLEEP_MS` (15 min). Sleeping kills the pty — freeing its
+~200 MB Node process — and flips the tab to dormant (`sleep` reducer action); the kept xterm
+buffer keeps the last output visible, and the tab respawns via `--resume` the next time it's
+shown (the lazy-wake effect).
+
+Guards, so nothing you're using disappears:
+
+- Only **Claude** tabs with a captured `resumeSessionId` sleep — shell tabs have no resumable
+  state, and a Claude tab we couldn't resume is left alone.
+- The tab **on screen** never sleeps, nor does one that's `working`. The per-tab idle timer
+  (`idleSinceRef`) resets the moment a tab stops being eligible.
+- The pty-exit from a sleep kill is expected, so `App.tsx` tracks those ids (`sleepingRef`)
+  and swallows the event instead of marking the tab `exited`.
+
+Dormant tabs (restored or slept) show a **moon** in the sidebar (`Sidebar.tsx`
+`TabIndicator`), distinct from the live idle/working/awaiting-input states.
+
 ## Learning a fresh Claude tab's session id
 
 A brand-new (non-resumed) Claude tab has no session id at spawn time — Claude Code
@@ -66,6 +87,7 @@ right before spawning, then polls (`session_history::find_new_session`, every 1s
 - `src-tauri/src/workspace.rs` (+ unit tests: round-trip, missing/corrupt file, directory creation)
 - `src-tauri/src/session_history.rs` — `existing_session_ids`, `find_new_session` (+ tests)
 - `src-tauri/src/commands.rs` — `load_workspace`, `save_workspace`, spawn-time session watcher
-- `src/App.tsx` — restore-on-mount effect (dormant tabs), lazy-wake effect, `startPty`, debounced save effect
-- `src/lib/tabs.ts` — `sessionResolved` and `wake` actions
+- `src/App.tsx` — restore-on-mount effect (dormant tabs), lazy-wake effect, auto-sleep interval, `startPty`/`sleepTab`, debounced save effect
+- `src/lib/tabs.ts` — `sessionResolved`, `wake`, and `sleep` actions
 - `src/types.ts` — `Tab.dormant` flag
+- `src/components/Sidebar.tsx` — `TabIndicator` moon for dormant tabs

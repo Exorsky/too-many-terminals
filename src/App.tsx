@@ -19,6 +19,11 @@ import type { SavedTab, SessionHistoryEntry, ShellOption, Tab, TabKind, TabStatu
 const INITIAL_COLS = 120;
 const INITIAL_ROWS = 40;
 const SAVE_DEBOUNCE_MS = 300;
+// Auto-sleep: an idle Claude tab that isn't the one on screen has its process
+// killed after this long, freeing its ~200 MB Node process. It stays as a
+// dormant tab and respawns via `--resume` when next shown.
+const AUTO_SLEEP_MS = 15 * 60 * 1000;
+const SLEEP_CHECK_MS = 60 * 1000;
 
 export default function App() {
   const [state, dispatch] = useReducer(tabsReducer, initialTabsState);
@@ -77,8 +82,19 @@ export default function App() {
     dispatch({ type: 'reorderTab', tabId, targetId, position });
   }, []);
 
+  // Tabs whose pty we intentionally killed to put them to sleep — their
+  // incoming pty-exit is expected and must not mark the tab as exited.
+  const sleepingRef = useRef<Set<string>>(new Set());
+  // Per-tab timestamp of when it first became eligible for auto-sleep (idle +
+  // backgrounded); cleared as soon as it stops being eligible.
+  const idleSinceRef = useRef<Map<string, number>>(new Map());
+
   useEffect(() => {
-    const unlisten = ipc.onPtyExit((tabId) => dispatch({ type: 'exited', tabId }));
+    const unlisten = ipc.onPtyExit((tabId) => {
+      // A kill we issued for sleep — swallow it; the tab lives on as dormant.
+      if (sleepingRef.current.delete(tabId)) return;
+      dispatch({ type: 'exited', tabId });
+    });
     return () => { unlisten.then((fn) => fn()); };
   }, []);
 
@@ -153,6 +169,18 @@ export default function App() {
       rows: INITIAL_ROWS,
       onData: (data) => writeToTerminal(tab.id, data),
     }).catch(() => dispatch({ type: 'exited', tabId: tab.id }));
+  }, []);
+
+  /** Puts an idle background tab to sleep: kills its pty (freeing the process)
+   *  but keeps the tab as dormant, so the lazy-wake effect respawns it via
+   *  `--resume` the next time it's shown. The kept xterm buffer keeps its last
+   *  output visible. */
+  const sleepTab = useCallback((tabId: string) => {
+    sleepingRef.current.add(tabId);
+    spawnedRef.current.delete(tabId);
+    idleSinceRef.current.delete(tabId);
+    dispatch({ type: 'sleep', tabId });
+    ipc.killPty(tabId);
   }, []);
 
   /** Spawns a tab at an explicit project folder — used for user-initiated new
@@ -327,6 +355,38 @@ export default function App() {
     startPty(activeTab);
     dispatch({ type: 'wake', tabId: activeTab.id });
   }, [activeTab, overlaysUp, mdActive, startPty]);
+
+  // Auto-sleep idle background Claude sessions. Every tick, a resumable Claude
+  // tab that's been idle and off-screen for AUTO_SLEEP_MS is put to sleep. The
+  // tab on screen, shell tabs, and sessions without a resume id are never
+  // touched. Reads live tabs/visibility from refs so the interval isn't torn
+  // down and rebuilt on every state change.
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const now = Date.now();
+      const visibleId = visibleTabIdRef.current;
+      for (const tab of tabsRef.current) {
+        const eligible =
+          tab.kind === 'claude' &&
+          !tab.dormant &&
+          !tab.exited &&
+          tab.status === 'idle' &&
+          !!tab.resumeSessionId &&
+          tab.id !== visibleId;
+        if (!eligible) {
+          idleSinceRef.current.delete(tab.id);
+          continue;
+        }
+        const since = idleSinceRef.current.get(tab.id);
+        if (since === undefined) {
+          idleSinceRef.current.set(tab.id, now);
+        } else if (now - since >= AUTO_SLEEP_MS) {
+          sleepTab(tab.id);
+        }
+      }
+    }, SLEEP_CHECK_MS);
+    return () => clearInterval(timer);
+  }, [sleepTab]);
 
   const { turns, error } = useTranscript(
     mdActive && activeTab ? activeTab.cwd : null,

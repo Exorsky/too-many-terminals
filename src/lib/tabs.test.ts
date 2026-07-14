@@ -105,6 +105,14 @@ describe('tabsReducer', () => {
     expect(state.tabs[1].dormant).toBe(true);
   });
 
+  it('sleep marks the tab dormant and clears any exited flag', () => {
+    let state = initialTabsState;
+    state = tabsReducer(state, { type: 'add', tab: makeTab('a', { kind: 'claude', status: 'idle', exited: true }) });
+    state = tabsReducer(state, { type: 'sleep', tabId: 'a' });
+    expect(state.tabs[0].dormant).toBe(true);
+    expect(state.tabs[0].exited).toBe(false);
+  });
+
   it('reorderTab drops before or after the target within its folder', () => {
     let state = stateWith('a', 'b', 'c');
     // "after c" lands a at the end — a plain insert-before couldn't reach it.

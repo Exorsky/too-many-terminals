@@ -16,6 +16,7 @@ export type TabsAction =
   | { type: 'sessionResolved'; tabId: string; sessionId: string }
   | { type: 'status'; tabId: string; status: TabStatus }
   | { type: 'wake'; tabId: string }
+  | { type: 'sleep'; tabId: string }
   | { type: 'reorderTab'; tabId: string; targetId: string; position: 'before' | 'after' };
 
 export function tabsReducer(state: TabsState, action: TabsAction): TabsState {
@@ -79,6 +80,16 @@ export function tabsReducer(state: TabsState, action: TabsAction): TabsState {
         ...state,
         tabs: state.tabs.map((t) =>
           t.id === action.tabId ? { ...t, dormant: false } : t,
+        ),
+      };
+
+    // Put an idle background tab back to sleep: its pty is killed but the tab
+    // stays (dormant), to be respawned via `--resume` when next shown.
+    case 'sleep':
+      return {
+        ...state,
+        tabs: state.tabs.map((t) =>
+          t.id === action.tabId ? { ...t, dormant: true, exited: false } : t,
         ),
       };
 

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type MutableRefObject } from 'react';
 import {
   CheckCircle2, ChevronRight, Circle, FileText, Folder, FolderPlus, History, Loader2,
-  MessageCircle, PanelLeftClose, PanelLeftOpen, Plus, Settings, Sparkles, TerminalSquare, X,
+  MessageCircle, Moon, PanelLeftClose, PanelLeftOpen, Plus, Settings, Sparkles, TerminalSquare, X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { PROJECT_COLORS, type ShellOption, type Tab, type TabStatus } from '@/types';
@@ -90,8 +90,13 @@ function DropLine({ pos, flush = false }: { pos: DropPos; flush?: boolean }) {
   );
 }
 
-/** Live status of a Claude tab, learned from Claude Code's own hooks. */
-export function TabIndicator({ status, size = 12 }: { status: TabStatus; size?: number }) {
+/** Live status of a Claude tab, learned from Claude Code's own hooks. A
+ *  dormant tab (restored-but-not-yet-shown, or auto-slept while idle) has no
+ *  live process, so it reads as a quiet moon regardless of its last status. */
+export function TabIndicator({ status, dormant, size = 12 }: { status: TabStatus; dormant?: boolean; size?: number }) {
+  if (dormant) {
+    return <Moon size={size} className="shrink-0 text-muted-foreground/50" />;
+  }
   switch (status) {
     case 'working':
       return <Loader2 size={size} className="shrink-0 text-warning animate-spin" />;
@@ -243,7 +248,7 @@ function TabRow({ tab, isActive, dragRef, markdownEnabled, onSelectTab, onCloseT
     tab.exited && 'opacity-50',
   );
   const icon = tab.kind === 'claude'
-    ? <TabIndicator status={tab.status} />
+    ? <TabIndicator status={tab.status} dormant={tab.dormant} />
     : <TerminalSquare size={12} className="shrink-0" />;
 
   if (editing) {
@@ -473,7 +478,7 @@ export default function Sidebar({
                 >
                   {isActive && <span className="absolute left-0 top-1 bottom-1 w-0.5 rounded-full bg-primary" />}
                   {tab.kind === 'claude'
-                    ? <TabIndicator status={tab.status} size={14} />
+                    ? <TabIndicator status={tab.status} dormant={tab.dormant} size={14} />
                     : <TerminalSquare size={14} className="shrink-0" />}
                 </button>
               );
