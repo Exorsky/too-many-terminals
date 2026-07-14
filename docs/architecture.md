@@ -55,7 +55,9 @@ WebKitGTK) and a small Rust binary, keeping installers in the ~10–25 MB range.
   login shell's PATH once (`$SHELL -lc 'echo $PATH'`) and injects it into every pty.
 - **Windows claude shim**: `claude` is an npm `.cmd` shim, spawned via `cmd.exe /c claude`.
 - **WebGL**: xterm tries the WebGL renderer and falls back to the DOM renderer on context
-  loss (common on WebKitGTK).
+  loss (common on WebKitGTK). The context is held only by the **visible** terminal —
+  `Terminal.tsx` disposes the WebGL addon when a tab is hidden and re-activates it on
+  re-show, so many open tabs don't exhaust the webview's WebGL2 context limit.
 
 ## Known follow-ups
 

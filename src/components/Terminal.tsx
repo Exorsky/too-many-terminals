@@ -6,11 +6,30 @@ import { WebglAddon } from '@xterm/addon-webgl';
 import '@xterm/xterm/css/xterm.css';
 import * as ipc from '@/lib/ipc';
 import { getActiveXtermTheme } from '@/lib/themes';
-import { terminalCache, flushPendingWrites } from './terminalCache';
+import { terminalCache, flushPendingWrites, type CachedTerminal } from './terminalCache';
 
 interface TerminalProps {
   tabId: string;
   isVisible: boolean;
+}
+
+/** Activate the WebGL renderer on an already-open terminal (no-op if it's
+ *  already on, or if WebGL2 is unavailable — the DOM renderer stays active).
+ *  Called both on first attach and whenever a hidden tab is shown again, since
+ *  the context is released while hidden. */
+function ensureWebgl(cached: CachedTerminal): void {
+  if (cached.webglAddon) return;
+  try {
+    const webglAddon = new WebglAddon();
+    webglAddon.onContextLoss(() => {
+      webglAddon.dispose();
+      cached.webglAddon = undefined;
+    });
+    cached.term.loadAddon(webglAddon);
+    cached.webglAddon = webglAddon;
+  } catch {
+    // WebGL unavailable — DOM renderer remains active
+  }
 }
 
 const Terminal = React.memo(function Terminal({ tabId, isVisible }: TerminalProps) {
@@ -80,26 +99,12 @@ const Terminal = React.memo(function Terminal({ tabId, isVisible }: TerminalProp
     if (!alreadyAttached) {
       container.innerHTML = '';
       term.open(container);
-
-      // Activate WebGL renderer (replaces default DOM renderer). On webviews
-      // without solid WebGL2 (WebKitGTK, some WKWebView), the DOM renderer
-      // stays active — slower but correct.
-      if (!cached.webglAddon) {
-        try {
-          const webglAddon = new WebglAddon();
-          webglAddon.onContextLoss(() => {
-            webglAddon.dispose();
-            if (cached) cached.webglAddon = undefined;
-          });
-          term.loadAddon(webglAddon);
-          cached.webglAddon = webglAddon;
-        } catch {
-          // WebGL unavailable — DOM renderer remains active
-        }
-      }
-
       attachedRef.current = tabId;
     }
+
+    // Activate WebGL now the terminal is visible — on first attach and on every
+    // re-show, since the context is released while the tab is hidden (below).
+    ensureWebgl(cached);
 
     // Defer initial fit to next frame so the container has final layout dimensions
     const rafId = requestAnimationFrame(() => {
@@ -122,11 +127,18 @@ const Terminal = React.memo(function Terminal({ tabId, isVisible }: TerminalProp
     };
   }, [tabId, isVisible]);
 
-  // Toggle cursor blink off for hidden terminals to stop idle GPU repaints
+  // Housekeeping for hidden terminals: stop idle cursor repaints, and release
+  // the WebGL context. Webviews cap the number of live WebGL2 contexts, so many
+  // open tabs each holding one would exhaust them and force the whole app onto
+  // the slow DOM renderer. The attach effect re-activates WebGL on re-show.
   useEffect(() => {
     const cached = terminalCache.get(tabId);
     if (!cached) return;
     cached.term.options.cursorBlink = isVisible;
+    if (!isVisible && cached.webglAddon) {
+      cached.webglAddon.dispose();
+      cached.webglAddon = undefined;
+    }
   }, [tabId, isVisible]);
 
   return (
