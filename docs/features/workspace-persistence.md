@@ -55,10 +55,15 @@ When a dormant tab does wake:
 
 The same dormant machinery reclaims memory from sessions you've left running. An interval
 in `App.tsx` (`SLEEP_CHECK_MS`, every 60s) puts a Claude tab **back** to sleep once it has
-been idle and off-screen for `AUTO_SLEEP_MS` (15 min). Sleeping kills the pty — freeing its
+been idle and off-screen for the configured threshold. Sleeping kills the pty — freeing its
 ~200 MB Node process — and flips the tab to dormant (`sleep` reducer action); the kept xterm
 buffer keeps the last output visible, and the tab respawns via `--resume` the next time it's
 shown (the lazy-wake effect).
+
+The threshold is user-configurable: **Settings → General → Sessions → Auto-sleep idle
+sessions** (`settings.autoSleepMinutes`, default 15 min; **Off** = 0 disables it entirely).
+The interval reads the value live through a ref (`autoSleepMsRef`), so changing it takes
+effect without restarting the timer.
 
 Guards, so nothing you're using disappears:
 

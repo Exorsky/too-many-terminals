@@ -23,6 +23,12 @@ A **Notifications** section adds one more switch — **Notify when a session
 needs you** (`notificationsEnabled`, default `true`) — gating the desktop
 notifications described in [notifications.md](notifications.md).
 
+A **Sessions** section adds a dropdown — **Auto-sleep idle sessions**
+(`autoSleepMinutes`, default `15`) — choosing how long an idle, off-screen
+Claude session may run before its process is freed. **Off** (0) disables it.
+See the auto-sleep section of
+[workspace-persistence.md](workspace-persistence.md).
+
 ## Settings store
 
 All settings reads/writes go through `src/lib/settings-store.ts` — a small
@@ -37,5 +43,6 @@ in-memory mirror of `AppSettings` with `loadSettings` (once), `patchSettings`
 - `src/components/CustomizeTab.tsx` — theme picker/editor (Customize sub-tab)
 - `src/lib/settings-store.ts` (+ tests) — shared settings state
 - Wiring: `App.tsx` (`showSettings` state, mutual exclusion with `showHistory`;
-  reads `showSessionBar`/`showMarkdownToggle` via `useSettings`),
+  reads `showSessionBar`/`showMarkdownToggle`/`autoSleepMinutes` via `useSettings`),
   `Sidebar.tsx` (`showSettings`/`onToggleSettings` props, footer + collapsed-rail buttons)
+- `src-tauri/src/settings.rs` — persisted `AppSettings` (incl. `auto_sleep_minutes`)

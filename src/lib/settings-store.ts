@@ -18,6 +18,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   showSessionBar: true,
   showMarkdownToggle: true,
   notificationsEnabled: true,
+  autoSleepMinutes: 15,
 };
 
 let current: AppSettings = { ...DEFAULT_SETTINGS };

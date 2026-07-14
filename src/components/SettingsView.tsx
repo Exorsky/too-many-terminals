@@ -12,6 +12,15 @@ const TABS: { id: SettingsTab; label: string; icon: typeof SlidersHorizontal }[]
   { id: 'customize', label: 'Customize', icon: Sparkles },
 ];
 
+const AUTO_SLEEP_OPTIONS = [
+  { label: 'Off', value: 0 },
+  { label: '2 minutes', value: 2 },
+  { label: '5 minutes', value: 5 },
+  { label: '15 minutes', value: 15 },
+  { label: '30 minutes', value: 30 },
+  { label: '60 minutes', value: 60 },
+];
+
 function Switch({ checked, disabled, onChange, label }: {
   checked: boolean;
   disabled?: boolean;
@@ -55,6 +64,33 @@ function SettingRow({ title, description, checked, disabled, onChange }: {
         <div className="text-[11px] text-muted-foreground leading-relaxed">{description}</div>
       </div>
       <Switch checked={checked} disabled={disabled} onChange={onChange} label={title} />
+    </div>
+  );
+}
+
+function ChoiceRow({ title, description, value, options, onChange }: {
+  title: string;
+  description: string;
+  value: number;
+  options: { label: string; value: number }[];
+  onChange: (next: number) => void;
+}) {
+  return (
+    <div className="flex items-center gap-4 py-3 border-t border-border first:border-t-0">
+      <div className="flex-1 min-w-0">
+        <div className="text-[12.5px] text-foreground">{title}</div>
+        <div className="text-[11px] text-muted-foreground leading-relaxed">{description}</div>
+      </div>
+      <select
+        aria-label={title}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="shrink-0 px-2 py-1 rounded-sm border border-border bg-card text-foreground text-[11px] cursor-pointer hover:border-border-hover focus:outline-none font-inherit"
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
     </div>
   );
 }
@@ -132,6 +168,17 @@ function GeneralTab() {
         onChange={(v) => patchSettings({ notificationsEnabled: v })}
       />
       <TestNotificationButton />
+
+      <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground pt-4 pb-1">
+        Sessions
+      </div>
+      <ChoiceRow
+        title="Auto-sleep idle sessions"
+        description="Free the process of an idle Claude session left off-screen this long. It stays in the sidebar and resumes right where it left off when you open it again."
+        value={settings.autoSleepMinutes}
+        options={AUTO_SLEEP_OPTIONS}
+        onChange={(v) => patchSettings({ autoSleepMinutes: v })}
+      />
     </div>
   );
 }

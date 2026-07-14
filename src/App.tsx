@@ -19,10 +19,8 @@ import type { SavedTab, SessionHistoryEntry, ShellOption, Tab, TabKind, TabStatu
 const INITIAL_COLS = 120;
 const INITIAL_ROWS = 40;
 const SAVE_DEBOUNCE_MS = 300;
-// Auto-sleep: an idle Claude tab that isn't the one on screen has its process
-// killed after this long, freeing its ~200 MB Node process. It stays as a
-// dormant tab and respawns via `--resume` when next shown.
-const AUTO_SLEEP_MS = 15 * 60 * 1000;
+// How often we scan for idle background sessions to auto-sleep. The threshold
+// itself is user-configurable (settings.autoSleepMinutes; 0 disables).
 const SLEEP_CHECK_MS = 60 * 1000;
 
 export default function App() {
@@ -110,6 +108,10 @@ export default function App() {
   tabsRef.current = state.tabs;
   const notificationsRef = useRef(settings.notificationsEnabled);
   notificationsRef.current = settings.notificationsEnabled;
+  // Auto-sleep threshold (ms), read live by the interval below without tearing
+  // it down on every settings change. 0 → auto-sleep disabled.
+  const autoSleepMsRef = useRef(0);
+  autoSleepMsRef.current = settings.autoSleepMinutes * 60 * 1000;
   // Last status we saw per tab, to detect the transition (not just the state).
   const prevStatusRef = useRef<Map<string, TabStatus>>(new Map());
   // The tab the user is actually looking at right now (active, app focused, no
@@ -357,12 +359,17 @@ export default function App() {
   }, [activeTab, overlaysUp, mdActive, startPty]);
 
   // Auto-sleep idle background Claude sessions. Every tick, a resumable Claude
-  // tab that's been idle and off-screen for AUTO_SLEEP_MS is put to sleep. The
-  // tab on screen, shell tabs, and sessions without a resume id are never
-  // touched. Reads live tabs/visibility from refs so the interval isn't torn
-  // down and rebuilt on every state change.
+  // tab that's been idle and off-screen for the configured threshold is put to
+  // sleep. The tab on screen, shell tabs, and sessions without a resume id are
+  // never touched. Reads live tabs/visibility/threshold from refs so the
+  // interval isn't torn down and rebuilt on every state change.
   useEffect(() => {
     const timer = setInterval(() => {
+      const threshold = autoSleepMsRef.current;
+      if (threshold <= 0) {
+        idleSinceRef.current.clear(); // disabled — drop any pending timers
+        return;
+      }
       const now = Date.now();
       const visibleId = visibleTabIdRef.current;
       for (const tab of tabsRef.current) {
@@ -380,7 +387,7 @@ export default function App() {
         const since = idleSinceRef.current.get(tab.id);
         if (since === undefined) {
           idleSinceRef.current.set(tab.id, now);
-        } else if (now - since >= AUTO_SLEEP_MS) {
+        } else if (now - since >= threshold) {
           sleepTab(tab.id);
         }
       }

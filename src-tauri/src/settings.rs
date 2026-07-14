@@ -20,6 +20,9 @@ pub struct AppSettings {
     /// Fire a desktop notification when an unfocused Claude session needs input
     /// or finishes. Defaults to true (opt-out) so it works out of the box.
     pub notifications_enabled: bool,
+    /// Minutes an idle, off-screen Claude session may stay running before it's
+    /// auto-slept. 0 disables auto-sleep. Defaults to 15.
+    pub auto_sleep_minutes: u32,
 }
 
 impl Default for AppSettings {
@@ -30,6 +33,7 @@ impl Default for AppSettings {
             show_session_bar: true,
             show_markdown_toggle: true,
             notifications_enabled: true,
+            auto_sleep_minutes: 15,
         }
     }
 }
@@ -85,6 +89,7 @@ mod tests {
             show_session_bar: false,
             show_markdown_toggle: true,
             notifications_enabled: false,
+            auto_sleep_minutes: 30,
         };
 
         save_settings(tmp.path(), &settings).unwrap();
@@ -100,6 +105,7 @@ mod tests {
         assert!(settings.show_session_bar);
         assert!(settings.show_markdown_toggle);
         assert!(settings.notifications_enabled);
+        assert_eq!(settings.auto_sleep_minutes, 15);
     }
 
     #[test]

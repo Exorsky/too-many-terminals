@@ -113,4 +113,8 @@ export interface AppSettings {
   showMarkdownToggle: boolean;
   /** Fire a desktop notification when an unfocused session needs input or finishes. */
   notificationsEnabled: boolean;
+  /** Minutes an idle, off-screen Claude session may stay running before it's
+   *  auto-slept (its process killed, respawned via --resume on next view).
+   *  0 disables auto-sleep entirely. */
+  autoSleepMinutes: number;
 }

@@ -10,7 +10,7 @@ vi.mock('@/lib/ipc');
 beforeEach(() => {
   resetSettingsForTest();
   vi.mocked(ipc.loadSettings).mockResolvedValue({
-    selectedThemeId: 'default', customThemes: [], showSessionBar: true, showMarkdownToggle: true, notificationsEnabled: true,
+    selectedThemeId: 'default', customThemes: [], showSessionBar: true, showMarkdownToggle: true, notificationsEnabled: true, autoSleepMinutes: 15,
   });
   vi.mocked(ipc.saveSettings).mockResolvedValue(undefined);
 });
@@ -56,6 +56,12 @@ describe('SettingsView', () => {
     vi.mocked(ipc.canOpenSystemNotificationSettings).mockReturnValue(false);
     render(<SettingsView />);
     expect(screen.queryByRole('button', { name: 'system notification settings' })).not.toBeInTheDocument();
+  });
+
+  it('changing the auto-sleep threshold persists it', async () => {
+    render(<SettingsView />);
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Auto-sleep idle sessions' }), '30');
+    expect(ipc.saveSettings).toHaveBeenCalledWith(expect.objectContaining({ autoSleepMinutes: 30 }));
   });
 
   it('switches to the Customize tab on click', async () => {
