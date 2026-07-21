@@ -64,6 +64,9 @@ pub fn run_naming_subprocess(prompt: &str) -> Option<String> {
     if let Some(path) = login_shell_path() {
         command.env("PATH", path);
     }
+    // On Windows `claude` runs through `cmd.exe`; without this flag that spawns
+    // a visible console window that flashes on screen every time we auto-name.
+    no_window(&mut command);
     let mut child = command.spawn().ok()?;
 
     if let Some(mut stdin) = child.stdin.take() {
@@ -88,13 +91,25 @@ pub fn run_naming_subprocess(prompt: &str) -> Option<String> {
 }
 
 #[cfg(windows)]
-fn kill_pid(pid: u32) {
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+/// Stops the spawned command from popping a console window on Windows. No-op
+/// elsewhere.
+#[cfg(windows)]
+fn no_window(command: &mut Command) {
     use std::os::windows::process::CommandExt;
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    let _ = Command::new("taskkill")
-        .args(["/PID", &pid.to_string(), "/T", "/F"])
-        .creation_flags(CREATE_NO_WINDOW)
-        .spawn();
+    command.creation_flags(CREATE_NO_WINDOW);
+}
+
+#[cfg(not(windows))]
+fn no_window(_command: &mut Command) {}
+
+#[cfg(windows)]
+fn kill_pid(pid: u32) {
+    let mut command = Command::new("taskkill");
+    command.args(["/PID", &pid.to_string(), "/T", "/F"]);
+    no_window(&mut command);
+    let _ = command.spawn();
 }
 
 #[cfg(not(windows))]
