@@ -64,21 +64,27 @@ The sidebar's "New session" menu opens terminal tabs of two kinds:
 
 ## Renaming a tab
 
-Double-click a tab's name to rename it in place (`Sidebar.tsx` `TabRow`, local `editing`
-state) — Enter commits, Escape reverts, blur commits, an empty/whitespace-only name is
-discarded. Renames go through the same `tabsReducer` `rename` action session history used
-internally, and persist like anything else in the workspace (see
-[workspace persistence](workspace-persistence.md)). Not tied to any context menu — see
-below.
+Double-click a tab's name — or pick **Rename** from its right-click menu — to rename it in
+place (`Sidebar.tsx` `TabRow`, local `editing` state): Enter commits, Escape reverts, blur
+commits, an empty/whitespace-only name is discarded. Renames go through the same
+`tabsReducer` `rename` action session history used internally, and persist like anything
+else in the workspace (see [workspace persistence](workspace-persistence.md)).
 
-## No native/web context menu
+## Tab context menu
 
-Right-click is disabled app-wide (`main.tsx`, a single `document`-level
-`contextmenu` listener that calls `preventDefault()`) instead of showing the
-webview's default browser-style menu (Inspect/Reload — out of place in a desktop app).
-The terminal used to silently copy-on-select/paste-on-right-click; that's removed too, so
-right-click currently does nothing anywhere. An app-native context menu (with real Copy/
-Paste/Rename/Close items) is a planned follow-up, not implemented yet.
+Right-clicking a tab row opens an app-native menu (Radix `ContextMenu`, wrapped in
+`src/components/ui/context-menu.tsx`) with three actions:
+
+- **Rename** — enters the same in-place edit as double-click.
+- **Open directory** — opens the tab's `cwd` (its project folder) in the OS file manager,
+  via `ipc.openDirectory` → the opener plugin's `openPath`. Needs the
+  `opener:allow-open-path` permission in `capabilities/default.json`.
+- **Close** — same as the row's `X` (`pty_kill` + tab removal).
+
+The webview's own browser-style menu (Inspect/Reload) is still suppressed app-wide
+(`main.tsx`, a single `document`-level `contextmenu` listener that calls `preventDefault()`);
+Radix's trigger opens our menu on the same event. Everywhere *outside* a tab row, right-click
+does nothing — the terminal's old copy-on-select/paste-on-right-click is gone.
 
 ## Flow
 
@@ -98,7 +104,8 @@ Paste/Rename/Close items) is a planned follow-up, not implemented yet.
 ## Files
 
 - `src/App.tsx`, `src/components/Sidebar.tsx`, `src/components/Terminal.tsx`,
-  `src/components/terminalCache.ts`, `src/lib/tabs.ts`, `src/main.tsx` (global contextmenu suppression)
+  `src/components/terminalCache.ts`, `src/components/ui/context-menu.tsx` (tab right-click menu),
+  `src/lib/tabs.ts`, `src/main.tsx` (global contextmenu suppression)
 - `src-tauri/src/pty.rs`, `shell.rs`, `claude.rs`, `commands.rs`
 
 ## Tests

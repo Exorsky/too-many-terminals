@@ -42,6 +42,7 @@ function renderSidebar(overrides: Partial<React.ComponentProps<typeof Sidebar>> 
     onSelectTab: vi.fn(),
     onCloseTab: vi.fn(),
     onReadTab: vi.fn(),
+    onOpenDirectory: vi.fn(),
     onNewClaudeTab: vi.fn(),
     onNewShellTab: vi.fn(),
     onRenameTab: vi.fn(),
@@ -83,6 +84,23 @@ describe('Sidebar', () => {
     await userEvent.click(closeButtons[0]);
     expect(props.onCloseTab).toHaveBeenCalledWith('claude-1');
     expect(props.onSelectTab).toHaveBeenCalledTimes(1); // close must not also select
+  });
+
+  it('right-click menu renames, opens the directory, and closes the tab', async () => {
+    const props = renderSidebar();
+
+    fireEvent.contextMenu(screen.getByText('claude-1'));
+    await userEvent.click(await screen.findByText('Open directory'));
+    expect(props.onOpenDirectory).toHaveBeenCalledWith(PROJECT);
+
+    fireEvent.contextMenu(screen.getByText('claude-1'));
+    await userEvent.click(await screen.findByText('Close'));
+    expect(props.onCloseTab).toHaveBeenCalledWith('claude-1');
+
+    fireEvent.contextMenu(screen.getByText('claude-1'));
+    await userEvent.click(await screen.findByText('Rename'));
+    // Rename swaps the row for an editable input seeded with the current name.
+    expect(screen.getByDisplayValue('claude-1')).toBeInTheDocument();
   });
 
   it('reads a live claude session once its id is known, not before', async () => {

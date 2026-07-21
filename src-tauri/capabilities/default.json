@@ -14,6 +14,10 @@
         { "url": "x-apple.systempreferences:*" },
         { "url": "ms-settings:notifications" }
       ]
+    },
+    {
+      "identifier": "opener:allow-open-path",
+      "allow": [{ "path": "**" }]
     }
   ]
 }

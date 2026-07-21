@@ -6,7 +6,7 @@
  */
 import { invoke, Channel } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import { openUrl } from '@tauri-apps/plugin-opener';
+import { openUrl, openPath } from '@tauri-apps/plugin-opener';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import {
   isPermissionGranted,
@@ -116,6 +116,11 @@ export function getUsageStats(): Promise<UsageStats> {
 
 export function openExternal(url: string): void {
   void openUrl(url);
+}
+
+/** Opens a directory in the OS file manager (Explorer/Finder/file manager). */
+export function openDirectory(dir: string): void {
+  void openPath(dir);
 }
 
 /** Ensures the OS notification permission is granted, asking once if needed.

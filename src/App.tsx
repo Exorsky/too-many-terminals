@@ -313,6 +313,10 @@ export default function App() {
     dispatch({ type: 'rename', tabId, name });
   }, []);
 
+  const handleOpenDirectory = useCallback((dir: string) => {
+    ipc.openDirectory(dir);
+  }, []);
+
   const handleResumeSession = useCallback(
     (dir: string, entry: SessionHistoryEntry) => {
       const name = entry.preview.slice(0, 30) || 'Claude';
@@ -415,6 +419,7 @@ export default function App() {
         onSelectTab={handleSelectTab}
         onCloseTab={handleCloseTab}
         onReadTab={handleReadTab}
+        onOpenDirectory={handleOpenDirectory}
         markdownEnabled={settings.showSessionBar && settings.showMarkdownToggle}
         onNewClaudeTab={handleNewClaudeTab}
         onNewShellTab={handleNewShellTab}

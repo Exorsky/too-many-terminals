@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type MutableRefObject } from 'react';
 import {
-  CheckCircle2, ChevronRight, Circle, FileText, Folder, FolderPlus, History, Loader2,
-  MessageCircle, Moon, PanelLeftClose, PanelLeftOpen, Plus, Settings, Sparkles, TerminalSquare, X,
+  CheckCircle2, ChevronRight, Circle, FileText, Folder, FolderOpen, FolderPlus, History, Loader2,
+  MessageCircle, Moon, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Settings, Sparkles, TerminalSquare, X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { PROJECT_COLORS, type ShellOption, type Tab, type TabStatus } from '@/types';
@@ -13,6 +13,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu';
 
 interface SidebarProps {
   tabs: Tab[];
@@ -25,6 +32,7 @@ interface SidebarProps {
   onSelectTab: (tabId: string) => void;
   onCloseTab: (tabId: string) => void;
   onReadTab: (tab: Tab) => void;
+  onOpenDirectory: (dir: string) => void;
   /** Whether the markdown reader is available (both prefs on) — gates the row's read icon. */
   markdownEnabled: boolean;
   onNewClaudeTab: (dir: string) => void;
@@ -204,7 +212,7 @@ function NewSessionMenu({ dir, shellOptions, onNewClaudeTab, onNewShellTab }: {
   );
 }
 
-function TabRow({ tab, isActive, dragRef, markdownEnabled, onSelectTab, onCloseTab, onReadTab, onRenameTab, onReorderTab }: {
+function TabRow({ tab, isActive, dragRef, markdownEnabled, onSelectTab, onCloseTab, onReadTab, onRenameTab, onOpenDirectory, onReorderTab }: {
   tab: Tab;
   isActive: boolean;
   dragRef: DragRef;
@@ -213,6 +221,7 @@ function TabRow({ tab, isActive, dragRef, markdownEnabled, onSelectTab, onCloseT
   onCloseTab: (tabId: string) => void;
   onReadTab: (tab: Tab) => void;
   onRenameTab: (tabId: string, name: string) => void;
+  onOpenDirectory: (dir: string) => void;
   onReorderTab: (tabId: string, targetId: string, position: DropPos) => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -238,6 +247,8 @@ function TabRow({ tab, isActive, dragRef, markdownEnabled, onSelectTab, onCloseT
     if (trimmed && trimmed !== tab.name) onRenameTab(tab.id, trimmed);
     setEditing(false);
   };
+
+  const startRename = () => { setDraft(tab.name); setEditing(true); };
 
   const rowClass = cn(
     'group relative flex items-center gap-2 w-[calc(100%-8px)] mx-1 my-0.5 px-2 py-1.5 rounded-sm',
@@ -273,70 +284,89 @@ function TabRow({ tab, isActive, dragRef, markdownEnabled, onSelectTab, onCloseT
   }
 
   return (
-    <div
-      className={cn(rowClass, 'cursor-pointer')}
-      draggable
-      onDragStart={(e) => {
-        dragRef.current = { kind: 'tab', id: tab.id, cwd: tab.cwd };
-        e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', tab.id);
-        e.stopPropagation();
-      }}
-      onDragEnd={() => { dragRef.current = null; setDropPos(null); }}
-      onDragOver={(e) => {
-        if (!canAccept()) return;
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
-        setDropPos(dropSide(e)); // identical value bails out of re-render, so no flicker
-      }}
-      onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropPos(null); }}
-      onDrop={(e) => {
-        const d = dragRef.current;
-        if (d?.kind === 'tab' && d.cwd === tab.cwd && d.id !== tab.id) {
-          e.preventDefault();
-          onReorderTab(d.id, tab.id, dropSide(e));
-        }
-        setDropPos(null);
-      }}
-      onClick={() => onSelectTab(tab.id)}
-      onDoubleClick={() => { setDraft(tab.name); setEditing(true); }}
-      title={tab.cwd}
-    >
-      {dropPos && <DropLine pos={dropPos} />}
-      {isActive && <span className="absolute left-0 top-1 bottom-1 w-0.5 rounded-full bg-primary" />}
-      {icon}
-      <span className="truncate flex-1">{tab.name}{tab.exited ? ' (exited)' : ''}</span>
-      {markdownEnabled && tab.kind === 'claude' && tab.resumeSessionId && (
-        <button
-          className={cn(
-            'flex items-center justify-center w-4 h-4 rounded-sm shrink-0 border-none cursor-pointer',
-            'bg-transparent text-muted-foreground/60 hover:text-[#6fd4c9] hover:bg-white/10',
-            'opacity-0 group-hover:opacity-100',
-          )}
-          onClick={(e) => { e.stopPropagation(); onReadTab(tab); }}
-          title="Read this session as Markdown"
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <div
+          className={cn(rowClass, 'cursor-pointer')}
+          draggable
+          onDragStart={(e) => {
+            dragRef.current = { kind: 'tab', id: tab.id, cwd: tab.cwd };
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', tab.id);
+            e.stopPropagation();
+          }}
+          onDragEnd={() => { dragRef.current = null; setDropPos(null); }}
+          onDragOver={(e) => {
+            if (!canAccept()) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            setDropPos(dropSide(e)); // identical value bails out of re-render, so no flicker
+          }}
+          onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropPos(null); }}
+          onDrop={(e) => {
+            const d = dragRef.current;
+            if (d?.kind === 'tab' && d.cwd === tab.cwd && d.id !== tab.id) {
+              e.preventDefault();
+              onReorderTab(d.id, tab.id, dropSide(e));
+            }
+            setDropPos(null);
+          }}
+          onClick={() => onSelectTab(tab.id)}
+          onDoubleClick={startRename}
+          title={tab.cwd}
         >
-          <FileText size={11} />
-        </button>
-      )}
-      <button
-        className={cn(
-          'flex items-center justify-center w-4 h-4 rounded-sm shrink-0 border-none cursor-pointer',
-          'bg-transparent text-muted-foreground/60 hover:text-foreground hover:bg-white/10',
-          'opacity-0 group-hover:opacity-100',
-        )}
-        onClick={(e) => { e.stopPropagation(); onCloseTab(tab.id); }}
-        title="Close tab"
-      >
-        <X size={11} />
-      </button>
-    </div>
+          {dropPos && <DropLine pos={dropPos} />}
+          {isActive && <span className="absolute left-0 top-1 bottom-1 w-0.5 rounded-full bg-primary" />}
+          {icon}
+          <span className="truncate flex-1">{tab.name}{tab.exited ? ' (exited)' : ''}</span>
+          {markdownEnabled && tab.kind === 'claude' && tab.resumeSessionId && (
+            <button
+              className={cn(
+                'flex items-center justify-center w-4 h-4 rounded-sm shrink-0 border-none cursor-pointer',
+                'bg-transparent text-muted-foreground/60 hover:text-[#6fd4c9] hover:bg-white/10',
+                'opacity-0 group-hover:opacity-100',
+              )}
+              onClick={(e) => { e.stopPropagation(); onReadTab(tab); }}
+              title="Read this session as Markdown"
+            >
+              <FileText size={11} />
+            </button>
+          )}
+          <button
+            className={cn(
+              'flex items-center justify-center w-4 h-4 rounded-sm shrink-0 border-none cursor-pointer',
+              'bg-transparent text-muted-foreground/60 hover:text-foreground hover:bg-white/10',
+              'opacity-0 group-hover:opacity-100',
+            )}
+            onClick={(e) => { e.stopPropagation(); onCloseTab(tab.id); }}
+            title="Close tab"
+          >
+            <X size={11} />
+          </button>
+        </div>
+      </ContextMenuTrigger>
+      <ContextMenuContent className="min-w-40">
+        <ContextMenuItem onSelect={startRename}>
+          <Pencil size={13} />
+          <span>Rename</span>
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={() => onOpenDirectory(tab.cwd)}>
+          <FolderOpen size={13} />
+          <span>Open directory</span>
+        </ContextMenuItem>
+        <ContextMenuSeparator />
+        <ContextMenuItem variant="destructive" onSelect={() => onCloseTab(tab.id)}>
+          <X size={13} />
+          <span>Close</span>
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
 
 function ProjectCard({
   dir, hue, tabs, activeTabId, showHistory, shellOptions, dragRef, markdownEnabled,
-  onSelectTab, onCloseTab, onReadTab, onRenameTab, onNewClaudeTab, onNewShellTab, onRemoveProject,
+  onSelectTab, onCloseTab, onReadTab, onRenameTab, onOpenDirectory, onNewClaudeTab, onNewShellTab, onRemoveProject,
   onReorderProject, onReorderTab,
 }: {
   dir: string;
@@ -351,6 +381,7 @@ function ProjectCard({
   onCloseTab: (tabId: string) => void;
   onReadTab: (tab: Tab) => void;
   onRenameTab: (tabId: string, name: string) => void;
+  onOpenDirectory: (dir: string) => void;
   onNewClaudeTab: (dir: string) => void;
   onNewShellTab: (dir: string, shellId: string) => void;
   onRemoveProject: (dir: string) => void;
@@ -422,6 +453,7 @@ function ProjectCard({
               onCloseTab={onCloseTab}
               onReadTab={onReadTab}
               onRenameTab={onRenameTab}
+              onOpenDirectory={onOpenDirectory}
               onReorderTab={onReorderTab}
             />
           ))}
@@ -434,7 +466,7 @@ function ProjectCard({
 
 export default function Sidebar({
   tabs, activeTabId, shellOptions, showHistory, showSettings, projects, collapsed, markdownEnabled,
-  onSelectTab, onCloseTab, onReadTab, onNewClaudeTab, onNewShellTab, onRenameTab, onToggleHistory, onToggleSettings,
+  onSelectTab, onCloseTab, onReadTab, onOpenDirectory, onNewClaudeTab, onNewShellTab, onRenameTab, onToggleHistory, onToggleSettings,
   onAddProject, onRemoveProject, onReorderProject, onReorderTab, onToggleCollapse,
 }: SidebarProps) {
   const dragRef = useRef<DragItem | null>(null);
@@ -561,6 +593,7 @@ export default function Sidebar({
                 onCloseTab={onCloseTab}
                 onReadTab={onReadTab}
                 onRenameTab={onRenameTab}
+                onOpenDirectory={onOpenDirectory}
                 onNewClaudeTab={onNewClaudeTab}
                 onNewShellTab={onNewShellTab}
                 onRemoveProject={onRemoveProject}
