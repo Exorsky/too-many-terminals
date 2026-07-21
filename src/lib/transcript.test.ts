@@ -23,6 +23,12 @@ describe('turnToMarkdown', () => {
     expect(turnToMarkdown({ role: 'assistant', timestamp: null, blocks: [{ kind: 'tool', name: 'TodoWrite', detail: '' }] }))
       .toBe('> TodoWrite');
   });
+
+  it('quotes every line of a multi-line command so it stays one blockquote', () => {
+    const block = { kind: 'tool' as const, name: 'PowerShell', detail: '$s = "x"\nnode $s list' };
+    expect(turnToMarkdown({ role: 'assistant', timestamp: null, blocks: [block] }))
+      .toBe('> PowerShell: $s = "x"\n> node $s list');
+  });
 });
 
 describe('transcriptToMarkdown', () => {

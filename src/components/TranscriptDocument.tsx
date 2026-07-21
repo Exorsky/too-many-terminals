@@ -72,9 +72,11 @@ export default function TranscriptDocument({ turns, view, fill = false }: {
                   b.kind === 'text' ? (
                     <Markdown key={j} source={b.text} />
                   ) : (
-                    <div key={j} className="inline-flex items-center gap-2 self-start max-w-full text-[11.5px] rounded-md border border-border bg-card px-2.5 py-1.5">
-                      <span className="text-warning shrink-0">{b.name}</span>
-                      {b.detail && <span className="text-foreground truncate font-mono">{b.detail}</span>}
+                    <div key={j} className="flex items-start gap-2 self-start max-w-full text-[11.5px] rounded-md border border-border bg-card px-2.5 py-1.5">
+                      <span className="text-warning shrink-0 font-semibold">{b.name}</span>
+                      {b.detail && (
+                        <pre className="m-0 min-w-0 font-mono text-[11px] leading-[1.5] text-foreground/90 whitespace-pre-wrap break-words">{b.detail}</pre>
+                      )}
                     </div>
                   ),
                 )}

@@ -23,6 +23,9 @@ const SAVE_DEBOUNCE_MS = 300;
 // How often we scan for idle background sessions to auto-sleep. The threshold
 // itself is user-configurable (settings.autoSleepMinutes; 0 disables).
 const SLEEP_CHECK_MS = 60 * 1000;
+// How often the on-screen transcript re-reads while its tab is working, so new
+// turns show up live as Claude answers.
+const LIVE_FOLLOW_MS = 1200;
 
 export default function App() {
   const [state, dispatch] = useReducer(tabsReducer, initialTabsState);
@@ -434,6 +437,18 @@ export default function App() {
       window.removeEventListener('mouseup', onUp);
     };
   }, [draggingSeam]);
+
+  // Live-follow: while the transcript is on screen, re-read it on a steady tick
+  // so new turns appear as Claude answers — including plain-text replies, which
+  // never flip the tab to `working`. The read is cheap to ignore when nothing
+  // changed (useTranscript skips identical content), so a quiet session doesn't
+  // re-render; only real growth updates the view.
+  useEffect(() => {
+    if (!mdReading || overlaysUp || !activeTab || activeTab.exited) return;
+    const timer = setInterval(() => setMdReload((k) => k + 1), LIVE_FOLLOW_MS);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mdReading, overlaysUp, activeTab?.id, activeTab?.exited]);
 
   const { turns, error } = useTranscript(
     mdReading && activeTab ? activeTab.cwd : null,

@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { FileText } from 'lucide-react';
 import type { MarkdownView } from './SessionBar';
 import type { TranscriptTurn } from '@/types';
@@ -23,12 +23,27 @@ interface MarkdownPaneProps {
  *  re-anchors to the bottom whenever the transcript reloads. */
 export default function MarkdownPane({ turns, error, view, label, fill = false, className }: MarkdownPaneProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  // Whether to keep the view pinned to the bottom. Starts true (open at bottom);
+  // flips off when the reader scrolls up and back on when they return to the
+  // end — so live updates tail the newest turns without yanking you off a spot.
+  const stickToBottom = useRef(true);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => el.removeEventListener('scroll', onScroll);
+  }, []);
 
   // Runs before paint so the jump is invisible. Keyed on `turns`: fires on the
-  // initial load and on every refresh, both of which surface content at the end.
+  // initial load and on every refresh; re-pins to the end only when we're
+  // already following it.
   useLayoutEffect(() => {
     const el = scrollRef.current;
-    if (el && turns && turns.length > 0) el.scrollTop = el.scrollHeight;
+    if (el && turns && turns.length > 0 && stickToBottom.current) el.scrollTop = el.scrollHeight;
   }, [turns]);
 
   return (

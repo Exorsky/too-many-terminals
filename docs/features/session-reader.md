@@ -18,10 +18,16 @@ terminal. Two surfaces, one shared body (`TranscriptDocument`):
    settings switches. The sidebar tab-row `▤` icon jumps straight into Markdown.
 
    The markdown pane (`MarkdownPane`) **opens scrolled to the bottom** and
-   re-anchors there on every Refresh — for a live, ever-growing session the newest
-   turns are what you land on. In Split, the terminal half stays a real live
-   process (unlike full Markdown, which needs none): it keeps a dormant tab awake
-   and still counts as "on screen" for notifications and auto-sleep.
+   **live-follows** the session: while it's on screen it re-reads the transcript
+   every `LIVE_FOLLOW_MS`, so new turns appear as Claude answers — including
+   plain-text replies, which never flip the tab to `working`. A re-read that
+   returns identical content is skipped (`useTranscript` fingerprints it), so a
+   quiet session doesn't re-render or flash; and re-reads keep the current turns
+   visible instead of blanking to a loading state. It only tails the bottom while
+   you're already there — scroll up to read history and it stays put until you
+   return to the end. In Split, the terminal half stays a real live process
+   (unlike full Markdown, which needs none): it keeps a dormant tab awake and
+   still counts as "on screen" for notifications and auto-sleep.
 2. **Full-pane overlay, via Session History** (`SessionReader`). A
    [history](session-history.md) row's `▤` action, or `Space`, opens a past
    session as an overlay with its own toolbar.
@@ -49,9 +55,11 @@ terminal).
   language-labelled), lists, bold, inline code, links — in a proportional
   reading face, deliberately unlike the monospace terminal.
 - **Your messages** kept as quiet monospace blocks (they were typed input).
-- **Tool calls** collapse to a chip: tool name + a one-line argument (the file
-  read, command run, pattern searched). Tool *results*, thinking, and images are
-  dropped by the parser to keep the read clean.
+- **Tool calls** render as a labelled chip: tool name + its key argument (the
+  file read, command run, pattern searched). A multi-line command keeps its line
+  breaks and wraps instead of being clipped to one line, so it reads like code.
+  Tool *results*, thinking, and images are dropped by the parser to keep the read
+  clean.
 
 ## Controls
 
@@ -71,9 +79,11 @@ is normalized (string, or an array of `text` / `tool_use` blocks) into
 `TranscriptBlock::{Text, Tool}`. Synthetic user text (slash-command echoes, hook
 caveats — same `looks_synthetic` rule as the preview) is skipped, as are
 tool-result-only user lines. Empty turns are dropped; malformed lines are
-skipped rather than failing the whole read. Session ids are validated
-(`[A-Za-z0-9_-]+`) before touching the filesystem, and turns are capped at
-`TRANSCRIPT_MAX_TURNS` as a guard.
+skipped rather than failing the whole read. A tool block's `detail` is its key
+argument with intra-line whitespace collapsed but **line breaks kept** (blank
+lines dropped), capped at `TOOL_DETAIL_MAX_CHARS`, so multi-line commands stay
+readable. Session ids are validated (`[A-Za-z0-9_-]+`) before touching the
+filesystem, and turns are capped at `TRANSCRIPT_MAX_TURNS` as a guard.
 
 ## Files
 

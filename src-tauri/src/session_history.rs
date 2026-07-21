@@ -15,7 +15,7 @@ const PREVIEW_SCAN_LINE_LIMIT: usize = 300;
 const TRANSCRIPT_MAX_TURNS: usize = 4000;
 /// One-line tool argument summaries (e.g. a file path or command) are clipped
 /// to this so a chip stays a chip.
-const TOOL_DETAIL_MAX_CHARS: usize = 140;
+const TOOL_DETAIL_MAX_CHARS: usize = 600;
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -247,12 +247,16 @@ fn summarize_tool_input(name: &str, input: &Value) -> String {
         ]),
     };
     raw.map(|s| {
-        s.split_whitespace()
+        // Collapse runs of spaces/tabs within a line but keep line breaks, so a
+        // multi-line command (Bash/PowerShell) stays readable instead of being
+        // flattened into one long strip. Blank lines are dropped.
+        let cleaned = s
+            .lines()
+            .map(|line| line.split_whitespace().collect::<Vec<_>>().join(" "))
+            .filter(|line| !line.is_empty())
             .collect::<Vec<_>>()
-            .join(" ")
-            .chars()
-            .take(TOOL_DETAIL_MAX_CHARS)
-            .collect()
+            .join("\n");
+        cleaned.chars().take(TOOL_DETAIL_MAX_CHARS).collect()
     })
     .unwrap_or_default()
 }
@@ -548,6 +552,19 @@ mod tests {
         assert_eq!(summarize_tool_input("Mystery", &unknown), "/x");
         let empty = serde_json::json!({"todos": []});
         assert_eq!(summarize_tool_input("TodoWrite", &empty), "");
+    }
+
+    #[test]
+    fn keeps_line_breaks_in_multiline_commands() {
+        // A real multi-line PowerShell command keeps its lines (intra-line
+        // whitespace collapsed, blank lines dropped) so it reads like code.
+        let ps = serde_json::json!({
+            "command": "$s = \"C:\\path\\cvlv.js\"\n\nSet-Location   \"C:\\Temp\"\nnode $s list"
+        });
+        assert_eq!(
+            summarize_tool_input("PowerShell", &ps),
+            "$s = \"C:\\path\\cvlv.js\"\nSet-Location \"C:\\Temp\"\nnode $s list"
+        );
     }
 
     #[test]

@@ -11,7 +11,10 @@ export function roleLabel(role: TranscriptTurn['role']): string {
 
 function blockToMarkdown(block: TranscriptBlock): string {
   if (block.kind === 'text') return block.text;
-  return block.detail ? `> ${block.name}: ${block.detail}` : `> ${block.name}`;
+  if (!block.detail) return `> ${block.name}`;
+  // Quote every line so a multi-line command stays a single blockquote.
+  const [first, ...rest] = block.detail.split('\n');
+  return [`> ${block.name}: ${first}`, ...rest.map((l) => `> ${l}`)].join('\n');
 }
 
 /** One turn's body as Markdown (no role heading) — used for per-turn copy. */
