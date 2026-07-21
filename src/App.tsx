@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { SquareTerminal } from 'lucide-react';
 import CommandPalette from '@/components/CommandPalette';
 import SessionBar, { type MarkdownView, type SessionMode } from '@/components/SessionBar';
 import SessionHistoryPanel from '@/components/SessionHistoryPanel';
@@ -6,14 +7,14 @@ import SessionReader from '@/components/SessionReader';
 import SettingsView from '@/components/SettingsView';
 import Sidebar from '@/components/Sidebar';
 import Terminal from '@/components/Terminal';
-import TranscriptDocument from '@/components/TranscriptDocument';
-import TranscriptStates from '@/components/TranscriptStates';
+import MarkdownPane from '@/components/MarkdownPane';
 import { disposeTerminal, writeToTerminal } from '@/components/terminalCache';
 import * as ipc from '@/lib/ipc';
 import { useSettings } from '@/lib/settings-store';
 import { initialTabsState, tabsReducer } from '@/lib/tabs';
 import { transcriptToMarkdown } from '@/lib/transcript';
 import { useTranscript } from '@/lib/use-transcript';
+import { cn } from '@/lib/utils';
 import type { SavedTab, SessionHistoryEntry, ShellOption, Tab, TabKind, TabStatus } from '@/types';
 
 const INITIAL_COLS = 120;
@@ -35,10 +36,17 @@ export default function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [workspaceLoaded, setWorkspaceLoaded] = useState(false);
   const settings = useSettings();
-  // Tabs currently showing the in-place markdown reader (remembered per tab).
-  const [mdTabs, setMdTabs] = useState<Set<string>>(new Set());
+  // Per-tab in-place view mode: absent = plain terminal; 'markdown' = full
+  // markdown reader; 'split' = terminal + markdown side by side. Remembered per
+  // tab (terminal is the default, so it isn't stored).
+  const [mdTabs, setMdTabs] = useState<Map<string, SessionMode>>(new Map());
   const [mdView, setMdView] = useState<MarkdownView>('rendered');
   const [mdReload, setMdReload] = useState(0);
+  // Split view: terminal-pane width as a fraction of the row, and whether the
+  // seam is being dragged. Clamped so neither pane can be squeezed away.
+  const [splitRatio, setSplitRatio] = useState(0.5);
+  const [draggingSeam, setDraggingSeam] = useState(false);
+  const splitRowRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     ipc.listShells().then(setShellOptions).catch(() => {});
@@ -272,19 +280,19 @@ export default function App() {
     disposeTerminal(tabId);
     setMdTabs((prev) => {
       if (!prev.has(tabId)) return prev;
-      const next = new Set(prev);
+      const next = new Map(prev);
       next.delete(tabId);
       return next;
     });
     dispatch({ type: 'close', tabId });
   }, []);
 
-  /** Flip a tab between its live terminal and the in-place markdown reader. */
+  /** Set a tab's view mode: terminal (default), full markdown, or split. */
   const setTabMode = useCallback((tabId: string, mode: SessionMode) => {
     setMdTabs((prev) => {
-      const next = new Set(prev);
-      if (mode === 'markdown') next.add(tabId);
-      else next.delete(tabId);
+      const next = new Map(prev);
+      if (mode === 'terminal') next.delete(tabId);
+      else next.set(tabId, mode);
       return next;
     });
   }, []);
@@ -339,7 +347,7 @@ export default function App() {
     setShowSettings(false);
     setReaderTarget(null);
     dispatch({ type: 'select', tabId: tab.id });
-    setMdTabs((prev) => new Set(prev).add(tab.id));
+    setMdTabs((prev) => new Map(prev).set(tab.id, 'markdown'));
   }, []);
 
   const activeTab = state.tabs.find((t) => t.id === state.activeTabId) ?? null;
@@ -348,19 +356,26 @@ export default function App() {
   const barVisible = settings.showSessionBar && activeTab !== null && !overlaysUp;
   // Markdown reading needs both prefs on (so there's always a bar toggle to leave it by).
   const canRead = settings.showSessionBar && settings.showMarkdownToggle && activeReadable;
-  const mdActive = canRead && activeTab !== null && mdTabs.has(activeTab.id);
-  // Feed the notification guard: which tab is genuinely on screen right now.
-  visibleTabIdRef.current = overlaysUp || mdActive ? null : activeTab?.id ?? null;
+  // The active tab's view mode (terminal unless it can be read AND is toggled).
+  const activeMode: SessionMode = (canRead && activeTab && mdTabs.get(activeTab.id)) || 'terminal';
+  // Markdown pane is on screen (markdown or split); its transcript must load.
+  const mdReading = activeMode === 'markdown' || activeMode === 'split';
+  // Markdown fully replaces the terminal (terminal hidden, no live process needed).
+  const mdFull = activeMode === 'markdown';
+  const splitActive = activeMode === 'split';
+  // Feed the notification guard: which tab is genuinely on screen right now. In
+  // split the terminal is still visible, so only full-markdown counts as hidden.
+  visibleTabIdRef.current = overlaysUp || mdFull ? null : activeTab?.id ?? null;
 
   // Lazily spawn a dormant (restored) tab's pty the first time it's actually
-  // shown as a live terminal. Reading a session as markdown or having an
-  // overlay up doesn't need the process, so those don't wake it.
+  // shown as a live terminal. Full-markdown reading or an overlay doesn't need
+  // the process; split does (the terminal half is live), so only mdFull blocks.
   useEffect(() => {
     if (!activeTab || !activeTab.dormant) return;
-    if (overlaysUp || mdActive) return;
+    if (overlaysUp || mdFull) return;
     startPty(activeTab);
     dispatch({ type: 'wake', tabId: activeTab.id });
-  }, [activeTab, overlaysUp, mdActive, startPty]);
+  }, [activeTab, overlaysUp, mdFull, startPty]);
 
   // Auto-sleep idle background Claude sessions. Every tick, a resumable Claude
   // tab that's been idle and off-screen for the configured threshold is put to
@@ -399,9 +414,30 @@ export default function App() {
     return () => clearInterval(timer);
   }, [sleepTab]);
 
+  // Drag-to-resize the split seam. Tracks the pointer on window (not the seam)
+  // so a fast drag doesn't outrun the 1px handle, and clamps the ratio so both
+  // panes keep a usable minimum.
+  useEffect(() => {
+    if (!draggingSeam) return;
+    const onMove = (e: MouseEvent) => {
+      const row = splitRowRef.current;
+      if (!row) return;
+      const r = row.getBoundingClientRect();
+      const ratio = (e.clientX - r.left) / r.width;
+      setSplitRatio(Math.min(0.75, Math.max(0.25, ratio)));
+    };
+    const onUp = () => setDraggingSeam(false);
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+  }, [draggingSeam]);
+
   const { turns, error } = useTranscript(
-    mdActive && activeTab ? activeTab.cwd : null,
-    mdActive && activeTab ? activeTab.resumeSessionId : null,
+    mdReading && activeTab ? activeTab.cwd : null,
+    mdReading && activeTab ? activeTab.resumeSessionId : null,
     mdReload,
   );
   const fullMarkdown = useMemo(() => (turns ? transcriptToMarkdown(turns) : ''), [turns]);
@@ -437,7 +473,7 @@ export default function App() {
           <SessionBar
             tab={activeTab}
             canRead={canRead}
-            mode={mdActive ? 'markdown' : 'terminal'}
+            mode={activeMode}
             view={mdView}
             turnsCount={turns ? turns.length : null}
             markdownText={fullMarkdown}
@@ -447,19 +483,72 @@ export default function App() {
           />
         )}
         <div className="relative flex-1 min-h-0">
-          {state.tabs.map((tab) => (
-            <Terminal
-              key={tab.id}
-              tabId={tab.id}
-              isVisible={tab.id === state.activeTabId && !overlaysUp && !mdActive}
-            />
-          ))}
-          {mdActive && (
-            <div className="absolute inset-0 overflow-y-auto scrollbar-thin bg-background">
-              <TranscriptStates turns={turns} error={error} />
-              {turns && turns.length > 0 && <TranscriptDocument turns={turns} view={mdView} />}
+          {/* Terminal (left) and markdown (right) share the pane: full-width
+              alone, or side by side in split mode, divided by a draggable seam. */}
+          <div ref={splitRowRef} className="absolute inset-0 flex">
+            <div
+              className={cn('relative flex flex-col min-w-0', mdFull ? 'hidden' : splitActive ? 'shrink-0' : 'flex-1')}
+              style={splitActive ? { width: `${splitRatio * 100}%` } : undefined}
+            >
+              {splitActive && (
+                <div className="flex items-center gap-1.5 h-7 px-3 shrink-0 border-b border-border bg-card">
+                  <SquareTerminal size={11} className="text-muted-foreground shrink-0" />
+                  <span className="font-mono text-[10px] tracking-[0.12em] uppercase text-muted-foreground">Terminal</span>
+                </div>
+              )}
+              <div className="relative flex-1 min-h-0">
+                {state.tabs.map((tab) => (
+                  <Terminal
+                    key={tab.id}
+                    tabId={tab.id}
+                    isVisible={tab.id === state.activeTabId && !overlaysUp && !mdFull}
+                  />
+                ))}
+                {!overlaysUp && !mdReading && state.tabs.length === 0 && projects.length === 0 && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-muted-foreground text-[12px]">
+                    <span>Select a folder to start a session</span>
+                    <button
+                      className="px-3 py-1.5 rounded-sm border border-border bg-card text-foreground text-[12px] cursor-pointer hover:bg-white/5"
+                      onClick={handleAddProject}
+                    >
+                      Choose folder…
+                    </button>
+                  </div>
+                )}
+                {!overlaysUp && !mdReading && state.tabs.length === 0 && projects.length > 0 && (
+                  <div className="absolute inset-0 flex items-center justify-center text-muted-foreground text-[12px]">
+                    Create a session from the sidebar to get started
+                  </div>
+                )}
+              </div>
             </div>
-          )}
+            {splitActive && (
+              <div
+                onMouseDown={() => setDraggingSeam(true)}
+                className="group relative w-px shrink-0 cursor-col-resize bg-border-hover shadow-[-14px_0_22px_-18px_rgba(0,0,0,0.9)]"
+                title="Drag to resize"
+              >
+                {/* wider invisible hit-area over the 1px line */}
+                <span className="absolute inset-y-0 -left-1.5 -right-1.5" />
+                <span className={cn(
+                  'absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-1 h-8 rounded-full bg-border-hover',
+                  'transition-colors group-hover:bg-muted-foreground',
+                  draggingSeam && 'bg-primary',
+                )} />
+              </div>
+            )}
+            {mdReading && (
+              <MarkdownPane
+                turns={turns}
+                error={error}
+                view={mdView}
+                label={splitActive ? 'Transcript' : undefined}
+                fill={splitActive}
+                className={splitActive ? 'flex-1 bg-card' : 'flex-1'}
+              />
+            )}
+            {draggingSeam && <div className="fixed inset-0 z-50 cursor-col-resize" />}
+          </div>
           {showHistory && projects.length > 0 && (
             <div className="absolute inset-0 bg-background">
               <SessionHistoryPanel projects={projects} onResume={handleResumeSession} onRead={handleReadSession} />
@@ -478,22 +567,6 @@ export default function App() {
           {showSettings && (
             <div className="absolute inset-0 bg-background">
               <SettingsView />
-            </div>
-          )}
-          {!overlaysUp && !mdActive && state.tabs.length === 0 && projects.length === 0 && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-muted-foreground text-[12px]">
-              <span>Select a folder to start a session</span>
-              <button
-                className="px-3 py-1.5 rounded-sm border border-border bg-card text-foreground text-[12px] cursor-pointer hover:bg-white/5"
-                onClick={handleAddProject}
-              >
-                Choose folder…
-              </button>
-            </div>
-          )}
-          {!overlaysUp && !mdActive && state.tabs.length === 0 && projects.length > 0 && (
-            <div className="absolute inset-0 flex items-center justify-center text-muted-foreground text-[12px]">
-              Create a session from the sidebar to get started
             </div>
           )}
         </div>

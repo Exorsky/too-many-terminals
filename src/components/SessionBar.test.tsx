@@ -47,6 +47,12 @@ describe('SessionBar', () => {
     expect(props.onSetMode).toHaveBeenCalledWith('markdown');
   });
 
+  it('flips to split from the toggle', async () => {
+    const props = renderBar();
+    await userEvent.click(screen.getByText('Split'));
+    expect(props.onSetMode).toHaveBeenCalledWith('split');
+  });
+
   it('shows Rendered/Raw, copy, and refresh while reading', async () => {
     const props = renderBar({ mode: 'markdown', turnsCount: 4, markdownText: '## You' });
     expect(screen.getByText('4 turns')).toBeInTheDocument();
@@ -56,6 +62,13 @@ describe('SessionBar', () => {
 
     await userEvent.click(screen.getByTitle('Re-read (a live session keeps growing)'));
     expect(props.onRefresh).toHaveBeenCalled();
+  });
+
+  it('shows the markdown controls in split mode too (pane is on screen)', () => {
+    renderBar({ mode: 'split', turnsCount: 7, markdownText: '## You' });
+    expect(screen.getByText('7 turns')).toBeInTheDocument();
+    expect(screen.getByText('Rendered')).toBeInTheDocument();
+    expect(screen.getByText('Copy all')).toBeInTheDocument();
   });
 
   it('hides the Terminal/Markdown toggle when reading is unavailable', () => {

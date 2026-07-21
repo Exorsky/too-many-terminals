@@ -1,9 +1,9 @@
-import { AlignLeft, Braces, FileText, RefreshCw, SquareTerminal } from 'lucide-react';
+import { AlignLeft, Braces, Columns2, FileText, RefreshCw, SquareTerminal } from 'lucide-react';
 import type { Tab } from '@/types';
 import { cn } from '@/lib/utils';
 import CopyButton from './CopyButton';
 
-export type SessionMode = 'terminal' | 'markdown';
+export type SessionMode = 'terminal' | 'markdown' | 'split';
 export type MarkdownView = 'rendered' | 'raw';
 
 interface SessionBarProps {
@@ -37,7 +37,9 @@ const STATUS_DOT: Record<Tab['status'], string> = {
 export default function SessionBar({
   tab, canRead, mode, view, turnsCount, markdownText, onSetMode, onSetView, onRefresh,
 }: SessionBarProps) {
-  const isMarkdown = mode === 'markdown';
+  // The markdown pane is on screen in both 'markdown' (full) and 'split' modes,
+  // so its controls (Rendered/Raw, copy, refresh, turn count) show for both.
+  const isReading = mode === 'markdown' || mode === 'split';
 
   return (
     <div className="flex items-center gap-3 h-10 px-3 shrink-0 border-b border-border bg-card">
@@ -49,7 +51,7 @@ export default function SessionBar({
         <span className="text-[12px] font-semibold text-foreground truncate">{tab.name}</span>
         <span className="text-muted-foreground opacity-50 shrink-0">·</span>
         <span className="text-[11px] text-muted-foreground truncate shrink-0" title={tab.cwd}>{folderName(tab.cwd)}</span>
-        {isMarkdown && turnsCount !== null && (
+        {isReading && turnsCount !== null && (
           <>
             <span className="text-muted-foreground opacity-50 shrink-0">·</span>
             <span className="text-[11px] text-muted-foreground tabular-nums shrink-0">{turnsCount} turns</span>
@@ -60,7 +62,7 @@ export default function SessionBar({
       <div className="flex-1" />
 
       {/* markdown controls — only while reading */}
-      {isMarkdown && (
+      {isReading && (
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-0.5 p-0.5 rounded-md border border-border bg-background">
             {(['rendered', 'raw'] as MarkdownView[]).map((v) => (
@@ -90,23 +92,33 @@ export default function SessionBar({
         </div>
       )}
 
-      {/* Terminal / Markdown toggle */}
+      {/* Terminal / Split / Markdown toggle */}
       {canRead && (
         <div className="flex items-center gap-0.5 p-0.5 rounded-md border border-border bg-background">
           <button
             onClick={() => onSetMode('terminal')}
             className={cn(
               'inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-[5px] cursor-pointer font-inherit transition-colors',
-              !isMarkdown ? 'bg-secondary text-foreground' : 'text-muted-foreground hover:text-foreground',
+              mode === 'terminal' ? 'bg-secondary text-foreground' : 'text-muted-foreground hover:text-foreground',
             )}
           >
             <SquareTerminal size={12} /> Terminal
           </button>
           <button
+            onClick={() => onSetMode('split')}
+            title="Terminal and Markdown side by side"
+            className={cn(
+              'inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-[5px] cursor-pointer font-inherit transition-colors',
+              mode === 'split' ? 'bg-secondary text-[#6fd4c9]' : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            <Columns2 size={12} /> Split
+          </button>
+          <button
             onClick={() => onSetMode('markdown')}
             className={cn(
               'inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-[5px] cursor-pointer font-inherit transition-colors',
-              isMarkdown ? 'bg-secondary text-[#6fd4c9]' : 'text-muted-foreground hover:text-foreground',
+              mode === 'markdown' ? 'bg-secondary text-[#6fd4c9]' : 'text-muted-foreground hover:text-foreground',
             )}
           >
             <FileText size={12} /> Markdown

@@ -18,13 +18,17 @@ const NODE_STYLES: Record<TranscriptTurn['role'], string> = {
  *  body behind both the History overlay (`SessionReader`) and the in-place
  *  markdown view (`SessionBar`). Presentational: callers own loading, error,
  *  empty, and the surrounding chrome. */
-export default function TranscriptDocument({ turns, view }: {
+export default function TranscriptDocument({ turns, view, fill = false }: {
   turns: TranscriptTurn[];
   view: 'rendered' | 'raw';
+  /** Fill the container width (split pane) instead of a centered reading
+   *  measure. The pane already constrains width, so an extra cap just leaves
+   *  the text floating in a narrow column with uneven side gaps. */
+  fill?: boolean;
 }) {
   if (view === 'raw') {
     return (
-      <div className="max-w-[820px] mx-auto px-5 py-7">
+      <div className={cn('py-7', fill ? 'px-7' : 'max-w-[820px] mx-auto px-5')}>
         <pre className="m-0 font-mono text-[12.5px] leading-[1.62] text-muted-foreground whitespace-pre-wrap break-words">
           {transcriptToMarkdown(turns)}
         </pre>
@@ -33,7 +37,7 @@ export default function TranscriptDocument({ turns, view }: {
   }
 
   return (
-    <div className="max-w-[760px] mx-auto px-5 py-7">
+    <div className={cn('py-7', fill ? 'px-7' : 'max-w-[760px] mx-auto px-5')}>
       {turns.map((turn, i) => {
         const showRole = i === 0 || turns[i - 1].role !== turn.role;
         return (
