@@ -36,6 +36,7 @@ function renderSidebar(overrides: Partial<React.ComponentProps<typeof Sidebar>> 
     shellOptions: SHELLS,
     showHistory: false,
     showSettings: false,
+    showHome: false,
     projects: [PROJECT],
     collapsed: false,
     markdownEnabled: true,
@@ -48,6 +49,7 @@ function renderSidebar(overrides: Partial<React.ComponentProps<typeof Sidebar>> 
     onRenameTab: vi.fn(),
     onToggleHistory: vi.fn(),
     onToggleSettings: vi.fn(),
+    onGoHome: vi.fn(),
     onAddProject: vi.fn(),
     onRemoveProject: vi.fn(),
     onReorderProject: vi.fn(),
@@ -335,5 +337,14 @@ describe('Sidebar', () => {
     fireEvent.dragStart(screen.getByText('project'), { dataTransfer });
     fireEvent.drop(screen.getByText('other'), { dataTransfer });
     expect(props.onReorderProject).toHaveBeenCalledWith(PROJECT, other, expect.stringMatching(/^(before|after)$/));
+  });
+  it('goes Home from the wordmark, expanded or collapsed', async () => {
+    const expanded = renderSidebar();
+    await userEvent.click(screen.getByRole('button', { name: /too many terminals/i }));
+    expect(expanded.onGoHome).toHaveBeenCalled();
+    cleanup();
+    const railed = renderSidebar({ collapsed: true });
+    await userEvent.click(screen.getByRole('button', { name: 'Home' }));
+    expect(railed.onGoHome).toHaveBeenCalled();
   });
 });

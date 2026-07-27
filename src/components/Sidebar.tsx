@@ -3,8 +3,8 @@ import {
   CheckCircle2, ChevronRight, Circle, FileText, Folder, FolderOpen, FolderPlus, History, Loader2,
   MessageCircle, Moon, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Settings, Sparkles, TerminalSquare, X,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { PROJECT_COLORS, type ShellOption, type Tab, type TabStatus } from '@/types';
+import { cn, folderName } from '@/lib/utils';
+import { projectHue, type ShellOption, type Tab, type TabStatus } from '@/types';
 import UsageMeter from './UsageMeter';
 import {
   DropdownMenu,
@@ -27,6 +27,7 @@ interface SidebarProps {
   shellOptions: ShellOption[];
   showHistory: boolean;
   showSettings: boolean;
+  showHome: boolean;
   projects: string[];
   collapsed: boolean;
   onSelectTab: (tabId: string) => void;
@@ -40,6 +41,7 @@ interface SidebarProps {
   onRenameTab: (tabId: string, name: string) => void;
   onToggleHistory: () => void;
   onToggleSettings: () => void;
+  onGoHome: () => void;
   onAddProject: () => void;
   onRemoveProject: (dir: string) => void;
   onReorderProject: (sourceDir: string, targetDir: string, position: DropPos) => void;
@@ -65,16 +67,6 @@ type DropPos = 'before' | 'after';
 function dropSide(e: { clientY: number; currentTarget: HTMLElement }): DropPos {
   const r = e.currentTarget.getBoundingClientRect();
   return e.clientY < r.top + r.height / 2 ? 'before' : 'after';
-}
-
-function folderName(dir: string): string {
-  return dir.split(/[/\\]/).filter(Boolean).pop() ?? dir;
-}
-
-/** Sequential per-project accent color, in the order folders were added —
- *  same scheme the original multi-project app used. */
-function projectHue(index: number): number {
-  return PROJECT_COLORS[index % PROJECT_COLORS.length].hue;
 }
 
 /** The insertion line shown while dragging — a glowing accent bar with a
@@ -465,8 +457,8 @@ function ProjectCard({
 }
 
 export default function Sidebar({
-  tabs, activeTabId, shellOptions, showHistory, showSettings, projects, collapsed, markdownEnabled,
-  onSelectTab, onCloseTab, onReadTab, onOpenDirectory, onNewClaudeTab, onNewShellTab, onRenameTab, onToggleHistory, onToggleSettings,
+  tabs, activeTabId, shellOptions, showHistory, showSettings, showHome, projects, collapsed, markdownEnabled,
+  onSelectTab, onCloseTab, onReadTab, onOpenDirectory, onNewClaudeTab, onNewShellTab, onRenameTab, onToggleHistory, onToggleSettings, onGoHome,
   onAddProject, onRemoveProject, onReorderProject, onReorderTab, onToggleCollapse,
 }: SidebarProps) {
   const dragRef = useRef<DragItem | null>(null);
@@ -518,6 +510,17 @@ export default function Sidebar({
           </div>
 
           <button
+            data-active={showHome}
+            className={cn(
+              'flex items-center justify-center w-8 h-8 mt-1 rounded-md border-none cursor-pointer bg-transparent shrink-0',
+              showHome ? 'text-foreground bg-white/8' : 'text-muted-foreground hover:text-foreground hover:bg-white/5',
+            )}
+            onClick={onGoHome}
+            title="Home"
+          >
+            <TerminalSquare size={15} />
+          </button>
+          <button
             data-active={showHistory}
             className={cn(
               'flex items-center justify-center w-8 h-8 my-1 rounded-md border-none cursor-pointer bg-transparent shrink-0',
@@ -551,8 +554,19 @@ export default function Sidebar({
         <>
           {/* Header */}
           <div className="flex items-center gap-1.5 h-10 px-2.5 border-b border-border shrink-0">
-            <TerminalSquare size={15} className="text-primary shrink-0" />
-            <span className="text-[12px] font-semibold tracking-wide text-foreground/90 truncate">Too Many Terminals</span>
+            <button
+              data-active={showHome}
+              className={cn(
+                'flex items-center gap-1.5 min-w-0 -mx-1 px-1 py-1 rounded-sm border-none cursor-pointer bg-transparent',
+                'transition-colors duration-100',
+                showHome ? 'text-foreground' : 'text-foreground/90 hover:bg-white/5',
+              )}
+              onClick={onGoHome}
+              title="Home"
+            >
+              <TerminalSquare size={15} className={cn('shrink-0', showHome ? 'text-primary' : 'text-primary/70')} />
+              <span className="text-[12px] font-semibold tracking-wide truncate">Too Many Terminals</span>
+            </button>
             <button
               className="flex items-center justify-center w-6 h-6 ml-auto rounded-sm text-muted-foreground hover:text-foreground hover:bg-white/8 border-none cursor-pointer shrink-0"
               onClick={onToggleCollapse}

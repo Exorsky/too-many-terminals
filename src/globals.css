@@ -103,3 +103,158 @@
 .scrollbar-thin::-webkit-scrollbar-track {
   background: transparent;
 }
+
+/* --- Home screen: the night skyline built from session history ----------
+   Each folder is a tower, each past session a lit window. See
+   docs/features/home-screen.md. Colors are night-scene-only extensions of
+   the theme tokens; window light comes from the folder's own accent hue. */
+.home {
+  background:
+    radial-gradient(120% 78% at 50% 104%, #101623 0%, transparent 62%),
+    linear-gradient(180deg, #07080b 0%, #090b11 100%);
+}
+.home-serif {
+  font-family: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
+}
+.home-horizon {
+  position: absolute;
+  left: 0; right: 0; bottom: 34px;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, #262b36 12%, #2d3340 50%, #262b36 88%, transparent);
+}
+.home-ground {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 34px;
+  pointer-events: none;
+  background: linear-gradient(180deg, #0a0d13, #070809);
+}
+
+.home-tower {
+  position: relative;
+  padding: 7px 6px 0;
+  border: 1px solid #1c2029;
+  border-bottom: 0;
+  background: linear-gradient(180deg, #12151c 0%, #0b0d12 100%);
+  transform-origin: 50% 100%;
+  animation: home-rise 0.62s cubic-bezier(0.16, 0.9, 0.3, 1) both;
+}
+/* light spilling from the windows onto the street */
+.home-tower::after {
+  content: '';
+  position: absolute;
+  left: 50%; bottom: -22px;
+  width: 190%; height: 44px;
+  transform: translateX(-50%);
+  pointer-events: none;
+  background: radial-gradient(50% 50% at 50% 0%, hsl(var(--hue) 60% 58% / 0.13), transparent 70%);
+}
+
+.home-beacon {
+  position: absolute;
+  top: -9px; left: 50%;
+  width: 3px; height: 3px;
+  margin-left: -1.5px;
+  border-radius: 50%;
+  background: var(--attention);
+  box-shadow: 0 0 7px 1px hsl(24 100% 68% / 0.8);
+  animation: home-beat 3.2s ease-in-out infinite;
+}
+.home-beacon::before {
+  content: '';
+  position: absolute;
+  left: 1px; top: 3px;
+  width: 1px; height: 8px;
+  background: linear-gradient(180deg, #2a2f3a, transparent);
+}
+
+.home-win {
+  width: 7px;
+  height: 5px;
+  padding: 0;
+  background: hsl(var(--hue) 22% 42% / 0.13);
+}
+.home-win-lit {
+  background: hsl(var(--hue) 78% var(--l) / var(--a));
+  box-shadow: 0 0 5px hsl(var(--hue) 80% 62% / calc(var(--a) * 0.5));
+  cursor: pointer;
+  animation: home-lit 0.5s ease both;
+  transition: transform 0.12s ease, box-shadow 0.18s ease;
+}
+.home-win-lit:hover,
+.home-win-lit:focus-visible {
+  --a: 1;
+  --l: 82%;
+  transform: scale(1.55);
+  box-shadow: 0 0 11px 1px hsl(var(--hue) 85% 68% / 0.85);
+  z-index: 2;
+}
+.home-win-lit.home-flicker { animation: home-flick 0.9s steps(1) 1; }
+
+@keyframes home-rise { from { transform: translateY(101%); } }
+@keyframes home-lit { from { opacity: 0; } }
+@keyframes home-beat { 0%, 100% { opacity: 0.25; } 50% { opacity: 1; } }
+@keyframes home-flick {
+  0%, 100% { opacity: 1; }
+  18%, 42% { opacity: 0.28; }
+  30% { opacity: 0.9; }
+}
+
+.home-act {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 12px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  font-size: 11.5px;
+  color: #c3c7d1;
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+}
+.home-act:hover { background: #191b22; border-color: var(--border-hover); color: var(--foreground); }
+.home-act-primary { border-color: #2f3a5c; background: #141726; color: #cfd8f5; }
+.home-act-primary:hover { background: #1a1f33; border-color: #46558a; }
+
+@media (prefers-reduced-motion: reduce) {
+  .home-tower, .home-win-lit, .home-beacon { animation: none; }
+}
+
+/* Live sessions in the city. A window that is open right now sits at full
+   brightness with a ring; the two states that mean something at a glance
+   borrow the sidebar's own status colours (warning/attention) and are told
+   apart by rhythm — a slow breath while Claude works, a sharp double-blink
+   when it is blocked on you. */
+.home-win-live {
+  box-shadow:
+    0 0 0 1px hsl(var(--hue) 70% 58% / 0.45),
+    0 0 7px hsl(var(--hue) 80% 62% / 0.55);
+}
+.home-win-working {
+  background: var(--warning);
+  box-shadow: 0 0 0 1px hsl(38 84% 64% / 0.5), 0 0 8px hsl(38 84% 64% / 0.55);
+  animation: home-lit 0.5s ease both, home-breathe 2.4s ease-in-out infinite;
+}
+.home-win-waiting {
+  background: var(--attention);
+  box-shadow: 0 0 0 1px hsl(24 100% 68% / 0.6), 0 0 10px 1px hsl(24 100% 68% / 0.7);
+  animation: home-lit 0.5s ease both, home-blink 1.6s ease-in-out infinite;
+}
+/* hover/focus must still read as "you are pointing at this one" */
+.home-win-working:hover, .home-win-working:focus-visible,
+.home-win-waiting:hover, .home-win-waiting:focus-visible {
+  animation-play-state: paused;
+  transform: scale(1.55);
+}
+
+@keyframes home-breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+@keyframes home-blink {
+  0%, 62%, 100% { opacity: 1; }
+  14%, 38% { opacity: 0.2; }
+  26% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-win-working, .home-win-waiting { animation: none; }
+}

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { SquareTerminal } from 'lucide-react';
 import CommandPalette from '@/components/CommandPalette';
+import HomeScreen from '@/components/HomeScreen';
 import SessionBar, { type MarkdownView, type SessionMode } from '@/components/SessionBar';
 import SessionHistoryPanel from '@/components/SessionHistoryPanel';
 import SessionReader from '@/components/SessionReader';
@@ -34,6 +35,10 @@ export default function App() {
   const [homeDir, setHomeDir] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  // Home is the resting screen: implicit when no tab is open, reachable any time
+  // from the sidebar wordmark, and where every launch starts — a restored
+  // workspace opens on the city, not on whichever tab happened to be last.
+  const [showHome, setShowHome] = useState(true);
   const [readerTarget, setReaderTarget] = useState<{ projectDir: string; entry: SessionHistoryEntry } | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -213,6 +218,7 @@ export default function App() {
       dispatch({ type: 'add', tab });
       setShowHistory(false);
       setShowSettings(false);
+      setShowHome(false);
       startPty(tab);
     },
     [startPty],
@@ -303,6 +309,7 @@ export default function App() {
   const handleSelectTab = useCallback((tabId: string) => {
     setShowHistory(false);
     setShowSettings(false);
+    setShowHome(false);
     dispatch({ type: 'select', tabId });
   }, []);
 
@@ -356,6 +363,9 @@ export default function App() {
   const activeTab = state.tabs.find((t) => t.id === state.activeTabId) ?? null;
   const activeReadable = !!activeTab && activeTab.kind === 'claude' && !!activeTab.resumeSessionId;
   const overlaysUp = showHistory || showSettings || readerTarget !== null;
+  // Home covers the terminal too, but unlike the overlays it *is* the resting
+  // state when nothing is open, so it gets its own flag.
+  const homeUp = showHome || state.tabs.length === 0;
   const barVisible = settings.showSessionBar && activeTab !== null && !overlaysUp;
   // Markdown reading needs both prefs on (so there's always a bar toggle to leave it by).
   const canRead = settings.showSessionBar && settings.showMarkdownToggle && activeReadable;
@@ -368,17 +378,17 @@ export default function App() {
   const splitActive = activeMode === 'split';
   // Feed the notification guard: which tab is genuinely on screen right now. In
   // split the terminal is still visible, so only full-markdown counts as hidden.
-  visibleTabIdRef.current = overlaysUp || mdFull ? null : activeTab?.id ?? null;
+  visibleTabIdRef.current = overlaysUp || homeUp || mdFull ? null : activeTab?.id ?? null;
 
   // Lazily spawn a dormant (restored) tab's pty the first time it's actually
   // shown as a live terminal. Full-markdown reading or an overlay doesn't need
   // the process; split does (the terminal half is live), so only mdFull blocks.
   useEffect(() => {
     if (!activeTab || !activeTab.dormant) return;
-    if (overlaysUp || mdFull) return;
+    if (overlaysUp || homeUp || mdFull) return;
     startPty(activeTab);
     dispatch({ type: 'wake', tabId: activeTab.id });
-  }, [activeTab, overlaysUp, mdFull, startPty]);
+  }, [activeTab, overlaysUp, homeUp, mdFull, startPty]);
 
   // Auto-sleep idle background Claude sessions. Every tick, a resumable Claude
   // tab that's been idle and off-screen for the configured threshold is put to
@@ -475,8 +485,10 @@ export default function App() {
         onNewClaudeTab={handleNewClaudeTab}
         onNewShellTab={handleNewShellTab}
         onRenameTab={handleRenameTab}
-        onToggleHistory={() => { setShowHistory((v) => !v); setShowSettings(false); }}
-        onToggleSettings={() => { setShowSettings((v) => !v); setShowHistory(false); }}
+        onToggleHistory={() => { setShowHistory((v) => !v); setShowSettings(false); setShowHome(false); }}
+        onToggleSettings={() => { setShowSettings((v) => !v); setShowHistory(false); setShowHome(false); }}
+        showHome={homeUp}
+        onGoHome={() => { setShowHome((v) => !v); setShowHistory(false); setShowSettings(false); }}
         onAddProject={handleAddProject}
         onRemoveProject={handleRemoveProject}
         onReorderProject={handleReorderProject}
@@ -516,24 +528,19 @@ export default function App() {
                   <Terminal
                     key={tab.id}
                     tabId={tab.id}
-                    isVisible={tab.id === state.activeTabId && !overlaysUp && !mdFull}
+                    isVisible={tab.id === state.activeTabId && !overlaysUp && !homeUp && !mdFull}
                   />
                 ))}
-                {!overlaysUp && !mdReading && state.tabs.length === 0 && projects.length === 0 && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-muted-foreground text-[12px]">
-                    <span>Select a folder to start a session</span>
-                    <button
-                      className="px-3 py-1.5 rounded-sm border border-border bg-card text-foreground text-[12px] cursor-pointer hover:bg-white/5"
-                      onClick={handleAddProject}
-                    >
-                      Choose folder…
-                    </button>
-                  </div>
-                )}
-                {!overlaysUp && !mdReading && state.tabs.length === 0 && projects.length > 0 && (
-                  <div className="absolute inset-0 flex items-center justify-center text-muted-foreground text-[12px]">
-                    Create a session from the sidebar to get started
-                  </div>
+                {!overlaysUp && !mdReading && homeUp && (
+                  <HomeScreen
+                    projects={projects}
+                    tabs={state.tabs}
+                    onResume={handleResumeSession}
+                    onSelectTab={handleSelectTab}
+                    onNewSession={handleNewClaudeTab}
+                    onAddProject={handleAddProject}
+                    onOpenHistory={() => { setShowHistory(true); setShowSettings(false); setShowHome(false); }}
+                  />
                 )}
               </div>
             </div>

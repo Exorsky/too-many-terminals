@@ -3,7 +3,7 @@ import { ArrowRight, FileText, History, Loader2, Search, Trash2, X } from 'lucid
 import type { SessionHistoryEntry } from '@/types';
 import { relativeTime } from '@/lib/relative-time';
 import * as ipc from '@/lib/ipc';
-import { cn } from '@/lib/utils';
+import { cn, folderName } from '@/lib/utils';
 
 interface HistoryEntry extends SessionHistoryEntry {
   /** Which open project this session belongs to. */
@@ -18,10 +18,6 @@ interface SessionHistoryPanelProps {
 
 type DayGroup = 'Today' | 'Yesterday' | 'Earlier';
 const DAY_GROUPS: DayGroup[] = ['Today', 'Yesterday', 'Earlier'];
-
-function folderName(dir: string): string {
-  return dir.split(/[/\\]/).filter(Boolean).pop() ?? dir;
-}
 
 function startOfDay(d: Date): number {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();

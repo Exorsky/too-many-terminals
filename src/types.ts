@@ -41,6 +41,11 @@ export const PROJECT_COLORS = [
   { name: 'yellow', hue: 55  },
 ] as const;
 
+/** Sequential per-project accent color, in the order folders were added. */
+export function projectHue(index: number): number {
+  return PROJECT_COLORS[index % PROJECT_COLORS.length].hue;
+}
+
 // --- Local usage stats (scanned from ~/.claude/projects/**/*.jsonl) ---
 
 export interface UsageStats {

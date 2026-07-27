@@ -9,6 +9,7 @@ Feature and architecture docs live in `docs/` — **keep them updated when featu
 
 - [docs/architecture.md](docs/architecture.md) — process model, IPC design, module boundaries
 - [docs/features/terminals.md](docs/features/terminals.md) — sidebar, tabs, PTY spawning per OS
+- [docs/features/home-screen.md](docs/features/home-screen.md) — idle Home: a skyline built from your session history
 - [docs/features/attention-inbox.md](docs/features/attention-inbox.md) — "Waiting on you" strip: sessions blocked on you
 - [docs/features/command-palette.md](docs/features/command-palette.md) — Ctrl+Shift+P fuzzy jump to any open terminal
 - [docs/features/notifications.md](docs/features/notifications.md) — desktop notifications when an unfocused session needs you
