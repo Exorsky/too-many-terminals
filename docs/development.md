@@ -17,6 +17,10 @@
 | `pnpm build` | typecheck + vite build only |
 | `pnpm tauri build` | release bundles (NSIS on Windows, dmg/app on macOS, deb/appimage on Linux) |
 
+A dev run titles its window **Too Many Terminals (Dev)** (`cfg!(debug_assertions)`
+in `lib.rs`'s setup hook), so it is never confused with an installed build
+running beside it.
+
 ## Manual PTY verification checklist
 
 Automated tests cover logic, not real ptys. After touching `pty.rs`/`Terminal.tsx`, verify

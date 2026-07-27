@@ -30,6 +30,13 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .manage(PtyManager::default())
         .setup(|app| {
+            // A dev run and an installed build look identical once they're both
+            // open — mark the debug one so you always know which is which.
+            if cfg!(debug_assertions) {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.set_title("Too Many Terminals (Dev)");
+                }
+            }
             let handle = app.handle().clone();
             let pipe_path = hook_server::pipe_path();
             let naming_queue = namer::NamingQueue::spawn(handle.clone());
