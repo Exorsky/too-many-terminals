@@ -35,5 +35,5 @@ Feature and architecture docs live in `docs/` — **keep them updated when featu
 - **Conventional commits** (`feat:`, `fix:`, `docs:`, `test:`, `chore:`, `build:`); scope by area (`pty`, `ui`, `tabs`, `history`, `usage`).
 - **SemVer** `Major.Minor.Patch`. The version source of truth is `src-tauri/tauri.conf.json`; keep `package.json` and `src-tauri/Cargo.toml` in sync when bumping (see docs/development.md).
 - All frontend↔backend calls go through `src/lib/ipc.ts` — never import `@tauri-apps/api` elsewhere. Tests mock this one module.
-- Rust modules keep Tauri types out of core logic (`pty.rs`, `session_history.rs`, `usage.rs`, `shell.rs` are plain Rust; `commands.rs` is the thin Tauri adapter) so they stay unit-testable.
+- Rust modules keep Tauri types out of core logic (`pty.rs`, `session_history.rs`, `session_usage.rs`, `shell.rs` are plain Rust; `commands.rs` is the thin Tauri adapter) so they stay unit-testable.
 - New features need tests (vitest for frontend logic/components, cargo test for Rust) and a doc page under `docs/features/`.

@@ -19,7 +19,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   showMarkdownToggle: true,
   notificationsEnabled: true,
   autoSleepMinutes: 15,
-  usageRefreshSeconds: 60,
+  usageRefreshSeconds: 300,
 };
 
 let current: AppSettings = { ...DEFAULT_SETTINGS };

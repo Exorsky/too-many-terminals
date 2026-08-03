@@ -50,29 +50,11 @@ export function projectHue(index: number): number {
   return PROJECT_COLORS[index % PROJECT_COLORS.length].hue;
 }
 
-// --- Local usage stats (scanned from ~/.claude/projects/**/*.jsonl) ---
+// --- Session usage (an estimate of the current 5-hour / 7-day rate-limit
+// windows, scanned from ~/.claude/projects/**/*.jsonl) ---
 
-export interface UsageStats {
-  /** False if there's nothing to report (e.g. brand-new install, no activity today). */
-  available: boolean;
-  /** ISO date (YYYY-MM-DD) the stats are for — always "today" in UTC. */
-  date: string;
-  /** "Fresh" tokens: input + output + cache-write. Excludes cache reads, which
-   *  are near-free re-reads of context already primed and would otherwise
-   *  dwarf this number in any session with a long conversation history. */
-  totalTokens: number;
-  byModel: Record<string, number>;
-  /** Cache-read tokens, tracked separately since they're billed at a small
-   *  fraction of the input rate and aren't "new" consumption. */
-  cacheReadTokens: number;
-}
-
-// --- Session usage (an estimate of the current 5-hour rate-limit window) ---
-
-export interface SessionUsageStats {
-  /** False only when there's no transcript history at all to estimate from. */
-  available: boolean;
-  /** Tokens used in the current 5-hour block; 0 when idle (no active block). */
+export interface UsageWindow {
+  /** Tokens used in the current block; 0 when idle (no active block). */
   tokensUsed: number;
   /** ISO start of the current block, if one is active. */
   blockStartIso: string | null;
@@ -84,6 +66,20 @@ export interface SessionUsageStats {
   estimatedLimitTokens: number | null;
   /** How many completed blocks the estimate is based on. */
   blocksSeen: number;
+}
+
+export interface SessionUsageStats {
+  /** False only when there's no transcript history at all to estimate from. */
+  available: boolean;
+  /** The 5-hour rolling session window. */
+  session: UsageWindow;
+  /** The 7-day rolling week window. */
+  week: UsageWindow;
+  /** Fresh tokens by model, scoped to the current week's active block (not
+   *  all-time) — empty if the week window is idle. */
+  byModel: Record<string, number>;
+  /** Cache-read tokens for the current week's active block. */
+  cacheReadTokens: number;
 }
 
 // --- Session history (past Claude Code sessions for the current project) ---

@@ -30,8 +30,8 @@ See the auto-sleep section of
 [workspace-persistence.md](workspace-persistence.md).
 
 A **Usage** section adds a dropdown — **Refresh interval**
-(`usageRefreshSeconds`, default `60`, options 15s/30s/1m/5m) — how often the
-sidebar's usage meter re-reads token usage from disk. See
+(`usageRefreshSeconds`, default `300` (5 minutes), options 15s/30s/1m/5m) —
+how often the sidebar's usage meter re-reads token usage from disk. See
 [usage-meter.md](usage-meter.md).
 
 ## Settings store

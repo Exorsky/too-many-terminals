@@ -17,14 +17,14 @@ WebKitGTK) and a small Rust binary, keeping installers in the ~10–25 MB range.
 │ Terminal.tsx — xterm.js     │◄───────┤ shell.rs — per-OS shells     │
 │ terminalCache.ts            │channel │ claude.rs — claude CLI cmd   │
 │ SessionHistoryPanel.tsx     │ events │ session_history.rs           │
-│ UsageMeter.tsx              │        │ usage.rs                     │
+│ UsageMeter.tsx              │        │ session_usage.rs             │
 └─────────────────────────────┘        └──────────────────────────────┘
 ```
 
 ## IPC design
 
 - **Commands** (`invoke`): `pty_spawn`, `pty_write`, `pty_resize`, `pty_kill`,
-  `list_shells`, `home_dir`, `list_sessions`, `delete_session`, `get_usage_stats`.
+  `list_shells`, `home_dir`, `list_sessions`, `delete_session`, `get_session_usage_stats`.
   Slow filesystem scans are `#[tauri::command(async)]` so they don't block the IPC thread.
 - **PTY output**: one Tauri **Channel per tab**, passed to `pty_spawn`. A blocking reader
   thread pushes raw chunks into an in-process channel; a second thread (`pty.rs::coalesce`)
@@ -41,7 +41,7 @@ WebKitGTK) and a small Rust binary, keeping installers in the ~10–25 MB range.
 
 - `src/lib/ipc.ts` is the **only** frontend module importing `@tauri-apps/api`.
   Components depend on its interface; vitest automocks it.
-- Rust core modules (`pty.rs`, `shell.rs`, `claude.rs`, `session_history.rs`, `usage.rs`)
+- Rust core modules (`pty.rs`, `shell.rs`, `claude.rs`, `session_history.rs`, `session_usage.rs`)
   take plain arguments (`&Path` roots, `Platform` enum) instead of touching Tauri state or
   `cfg!` directly, so `cargo test` covers all three platforms' logic on any host.
 - `commands.rs` adapts those modules to Tauri (State, Channel, AppHandle) and contains no

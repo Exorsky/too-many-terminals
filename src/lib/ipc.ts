@@ -13,7 +13,7 @@ import {
   requestPermission,
   sendNotification,
 } from '@tauri-apps/plugin-notification';
-import type { AppSettings, SessionHistoryEntry, SessionUsageStats, ShellOption, TabStatus, TranscriptTurn, UsageStats, WorkspaceState } from '@/types';
+import type { AppSettings, SessionHistoryEntry, SessionUsageStats, ShellOption, TabStatus, TranscriptTurn, WorkspaceState } from '@/types';
 
 export interface DirEntry {
   name: string;
@@ -116,12 +116,9 @@ export function readTranscript(projectDir: string, sessionId: string): Promise<T
   return invoke('read_transcript', { projectDir, sessionId });
 }
 
-export function getUsageStats(): Promise<UsageStats> {
-  return invoke('get_usage_stats');
-}
-
-/** An estimate of the current 5-hour rate-limit window, reconstructed from
- *  local transcript timestamps — see docs/features/usage-meter.md. */
+/** An estimate of the current 5-hour session and 7-day week rate-limit
+ *  windows, reconstructed from local transcript timestamps — see
+ *  docs/features/usage-meter.md. */
 export function getSessionUsageStats(): Promise<SessionUsageStats> {
   return invoke('get_session_usage_stats');
 }

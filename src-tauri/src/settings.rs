@@ -36,7 +36,7 @@ impl Default for AppSettings {
             show_markdown_toggle: true,
             notifications_enabled: true,
             auto_sleep_minutes: 15,
-            usage_refresh_seconds: 60,
+            usage_refresh_seconds: 300,
         }
     }
 }
@@ -93,7 +93,7 @@ mod tests {
             show_markdown_toggle: true,
             notifications_enabled: false,
             auto_sleep_minutes: 30,
-            usage_refresh_seconds: 300,
+            usage_refresh_seconds: 15,
         };
 
         save_settings(tmp.path(), &settings).unwrap();
@@ -110,7 +110,7 @@ mod tests {
         assert!(settings.show_markdown_toggle);
         assert!(settings.notifications_enabled);
         assert_eq!(settings.auto_sleep_minutes, 15);
-        assert_eq!(settings.usage_refresh_seconds, 60);
+        assert_eq!(settings.usage_refresh_seconds, 300);
     }
 
     #[test]

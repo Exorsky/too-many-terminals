@@ -185,12 +185,6 @@ pub fn read_transcript(
 }
 
 #[tauri::command(async)]
-pub fn get_usage_stats() -> Result<crate::usage::UsageStats, String> {
-    let root = projects_root().ok_or("could not resolve home directory")?;
-    Ok(crate::usage::usage_stats(&root))
-}
-
-#[tauri::command(async)]
 pub fn get_session_usage_stats() -> Result<crate::session_usage::SessionUsageStats, String> {
     let root = projects_root().ok_or("could not resolve home directory")?;
     Ok(crate::session_usage::session_usage_stats(&root))

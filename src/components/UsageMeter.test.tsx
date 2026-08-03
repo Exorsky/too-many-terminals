@@ -1,31 +1,22 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { SessionUsageStats, UsageStats } from '@/types';
+import type { SessionUsageStats, UsageWindow } from '@/types';
 
 vi.mock('@/lib/ipc');
 
 import * as ipc from '@/lib/ipc';
 import UsageMeter, { formatDuration, formatTokens } from './UsageMeter';
 
-const DAILY_STATS: UsageStats = {
-  available: true,
-  date: '2026-07-12',
-  totalTokens: 1_234_000,
-  byModel: { 'claude-sonnet-5': 1_000_000, 'claude-haiku-4-5': 234_000 },
-  cacheReadTokens: 42,
+const EMPTY_WINDOW: UsageWindow = {
+  tokensUsed: 0, blockStartIso: null, blockEndIso: null, estimatedLimitTokens: null, blocksSeen: 0,
 };
 
-const DAILY_UNAVAILABLE: UsageStats = { ...DAILY_STATS, available: false };
-
-const SESSION_UNAVAILABLE: SessionUsageStats = {
-  available: false, tokensUsed: 0, blockStartIso: null, blockEndIso: null, estimatedLimitTokens: null, blocksSeen: 0,
+const UNAVAILABLE: SessionUsageStats = {
+  available: false, session: EMPTY_WINDOW, week: EMPTY_WINDOW, byModel: {}, cacheReadTokens: 0,
 };
 
-const SESSION_IDLE: SessionUsageStats = { ...SESSION_UNAVAILABLE, available: true };
-
-const SESSION_ACTIVE: SessionUsageStats = {
-  available: true,
+const ACTIVE_SESSION: UsageWindow = {
   tokensUsed: 45_200,
   blockStartIso: '2026-07-12T08:00:00.000Z',
   blockEndIso: new Date(Date.now() + 2 * 60 * 60 * 1000 + 60 * 1000).toISOString(), // ~2h1m out
@@ -33,9 +24,16 @@ const SESSION_ACTIVE: SessionUsageStats = {
   blocksSeen: 6,
 };
 
-function mockStats(daily: UsageStats, session: SessionUsageStats) {
-  vi.mocked(ipc.getUsageStats).mockResolvedValue(daily);
-  vi.mocked(ipc.getSessionUsageStats).mockResolvedValue(session);
+const ACTIVE_WEEK: UsageWindow = {
+  tokensUsed: 1_000_000,
+  blockStartIso: '2026-07-10T00:00:00.000Z',
+  blockEndIso: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(), // ~3d out
+  estimatedLimitTokens: 4_000_000,
+  blocksSeen: 8,
+};
+
+function mockStats(stats: SessionUsageStats) {
+  vi.mocked(ipc.getSessionUsageStats).mockResolvedValue(stats);
 }
 
 afterEach(cleanup);
@@ -49,26 +47,73 @@ describe('formatTokens', () => {
 });
 
 describe('formatDuration', () => {
-  it('shows hours and minutes, or just minutes under an hour', () => {
+  it('shows hours and minutes under a day, days and hours beyond it', () => {
     expect(formatDuration(3 * 3600 + 25 * 60)).toBe('3h 25m');
     expect(formatDuration(9 * 60)).toBe('9m');
+    expect(formatDuration(2 * 86400 + 5 * 3600)).toBe('2d 5h');
     expect(formatDuration(-30)).toBe('0m');
   });
 });
 
 describe('UsageMeter', () => {
-  it('renders nothing when both daily and session stats are unavailable', async () => {
-    mockStats(DAILY_UNAVAILABLE, SESSION_UNAVAILABLE);
+  it('renders nothing when there is no transcript history at all', async () => {
+    mockStats(UNAVAILABLE);
     const { container } = render(<UsageMeter />);
-    await vi.waitFor(() => expect(ipc.getUsageStats).toHaveBeenCalled());
+    await vi.waitFor(() => expect(ipc.getSessionUsageStats).toHaveBeenCalled());
     expect(container).toBeEmptyDOMElement();
   });
 
-  it('shows total and expands to a per-model breakdown', async () => {
-    mockStats(DAILY_STATS, SESSION_UNAVAILABLE);
+  it('shows "no active window" for each window when idle', async () => {
+    mockStats({ ...UNAVAILABLE, available: true });
+    render(<UsageMeter />);
+    expect(await screen.findByText('Session: no active window')).toBeInTheDocument();
+    expect(screen.getByText('This week: no active window')).toBeInTheDocument();
+  });
+
+  it('shows percentage, tokens, and countdown for an active session window', async () => {
+    mockStats({ available: true, session: ACTIVE_SESSION, week: EMPTY_WINDOW, byModel: {}, cacheReadTokens: 0 });
     render(<UsageMeter />);
 
-    const toggle = await screen.findByText('1.2M tokens today');
+    // 45_200 / 120_000 ≈ 38%
+    expect(await screen.findByText('38%')).toBeInTheDocument();
+    expect(screen.getByText(/45k \/ ~120k tokens/)).toBeInTheDocument();
+    expect(screen.getByText(/resets in 2h/)).toBeInTheDocument();
+    expect(screen.getByRole('progressbar', { name: 'Session usage' })).toHaveAttribute('aria-valuenow', '38');
+  });
+
+  it('shows the week window alongside the session window', async () => {
+    mockStats({ available: true, session: ACTIVE_SESSION, week: ACTIVE_WEEK, byModel: {}, cacheReadTokens: 0 });
+    render(<UsageMeter />);
+
+    expect(await screen.findByText('25%')).toBeInTheDocument(); // 1_000_000 / 4_000_000
+    expect(screen.getByText(/resets in 3d/)).toBeInTheDocument();
+  });
+
+  it('shows a calibrating notice instead of a bar when there is no estimate yet', async () => {
+    mockStats({
+      available: true,
+      session: { ...ACTIVE_SESSION, estimatedLimitTokens: null, blocksSeen: 0 },
+      week: EMPTY_WINDOW,
+      byModel: {},
+      cacheReadTokens: 0,
+    });
+    render(<UsageMeter />);
+
+    expect(await screen.findByText(/Estimating your usual limit/)).toBeInTheDocument();
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+  });
+
+  it('expands the model breakdown, scoped to the current week', async () => {
+    mockStats({
+      available: true,
+      session: EMPTY_WINDOW,
+      week: ACTIVE_WEEK,
+      byModel: { 'claude-sonnet-5': 1_000_000, 'claude-haiku-4-5': 234_000 },
+      cacheReadTokens: 42,
+    });
+    render(<UsageMeter />);
+
+    const toggle = await screen.findByText('Breakdown by model');
     await userEvent.click(toggle);
 
     expect(screen.getByText('claude-sonnet-5')).toBeInTheDocument();
@@ -76,28 +121,10 @@ describe('UsageMeter', () => {
     expect(screen.getByText('cache reads (near-free)')).toBeInTheDocument();
   });
 
-  it('shows "no active session" when there is history but no live block', async () => {
-    mockStats(DAILY_UNAVAILABLE, SESSION_IDLE);
+  it('hides the breakdown toggle when the week has nothing to show', async () => {
+    mockStats({ available: true, session: ACTIVE_SESSION, week: EMPTY_WINDOW, byModel: {}, cacheReadTokens: 0 });
     render(<UsageMeter />);
-    expect(await screen.findByText('No active session')).toBeInTheDocument();
-  });
-
-  it('shows the active block\'s usage, countdown, and progress bar', async () => {
-    mockStats(DAILY_UNAVAILABLE, SESSION_ACTIVE);
-    render(<UsageMeter />);
-
-    expect(await screen.findByText(/45k \/ ~120k/)).toBeInTheDocument();
-    expect(screen.getByText(/resets in 2h/)).toBeInTheDocument();
-    const bar = screen.getByRole('progressbar');
-    // 45_200 / 120_000 ≈ 37.7%
-    expect(bar).toHaveAttribute('aria-valuenow', '38');
-  });
-
-  it('shows a calibrating notice instead of a bar when there is no estimate yet', async () => {
-    mockStats(DAILY_UNAVAILABLE, { ...SESSION_ACTIVE, estimatedLimitTokens: null, blocksSeen: 0 });
-    render(<UsageMeter />);
-
-    expect(await screen.findByText(/Estimating your usual limit/)).toBeInTheDocument();
-    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+    await screen.findByText('38%');
+    expect(screen.queryByText('Breakdown by model')).not.toBeInTheDocument();
   });
 });
