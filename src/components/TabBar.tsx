@@ -11,10 +11,13 @@ interface TabBarProps {
 }
 
 /** A strip of open tabs docked above the content pane. Renders whatever it's
- *  given — the icon logic below covers all three tab kinds — but App.tsx
- *  currently only ever feeds it file tabs: a session is already always-open
- *  from the moment it's created, so it lives in the sidebar and SessionBar
- *  instead (see docs/features/file-explorer.md). */
+ *  given — the icon logic below covers all three tab kinds — but App.tsx only
+ *  ever feeds it every open file tab plus a *single* slot for whichever
+ *  session/terminal was last active. A session doesn't get a permanent row
+ *  here the way a file does (it's already always-open — sidebar + SessionBar
+ *  own it); this is just a "come back here" pointer so switching between the
+ *  session you were on and any open files doesn't need a sidebar detour. See
+ *  docs/features/file-explorer.md. */
 export default function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab }: TabBarProps) {
   if (tabs.length === 0) return null;
 

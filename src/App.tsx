@@ -15,7 +15,7 @@ import MarkdownPane from '@/components/MarkdownPane';
 import { disposeTerminal, writeToTerminal } from '@/components/terminalCache';
 import * as ipc from '@/lib/ipc';
 import { useSettings } from '@/lib/settings-store';
-import { initialTabsState, tabsReducer } from '@/lib/tabs';
+import { initialTabsState, tabBarTabs, tabsReducer } from '@/lib/tabs';
 import { transcriptToMarkdown } from '@/lib/transcript';
 import { useTranscript } from '@/lib/use-transcript';
 import { cn } from '@/lib/utils';
@@ -42,6 +42,7 @@ export default function App() {
   const [filesPanelWidth, setFilesPanelWidth] = useState(260);
   const [draggingFilesSeam, setDraggingFilesSeam] = useState(false);
   const filesPanelRef = useRef<HTMLDivElement>(null);
+  const lastSessionTabIdRef = useRef<string | null>(null);
   // Home is the resting screen: implicit when no tab is open, reachable any time
   // from the sidebar wordmark, and where every launch starts — a restored
   // workspace opens on the city, not on whichever tab happened to be last.
@@ -402,6 +403,12 @@ export default function App() {
   const activeReadable = !!activeTab && activeTab.kind === 'claude' && !!activeTab.resumeSessionId;
   const overlaysUp = showHistory || showSettings || readerTarget !== null;
   const fileUp = !!activeTab && activeTab.kind === 'file';
+  // The session/terminal you were last on, kept as a single tab up top (see
+  // tabBarTabs) so you can bounce between it and any open file tabs without
+  // detouring through the sidebar. Written during render (not an effect) so
+  // TabBar reads the current render's value instead of lagging a frame
+  // behind; overwriting with the same id on a re-render is harmless.
+  if (activeTab && activeTab.kind !== 'file') lastSessionTabIdRef.current = activeTab.id;
   // Home covers the terminal too, but unlike the overlays it *is* the resting
   // state when nothing is open, so it gets its own flag.
   const homeUp = showHome || state.tabs.length === 0;
@@ -559,11 +566,16 @@ export default function App() {
         onToggleCollapse={() => setCollapsed((v) => !v)}
       />
       <main className="relative flex-1 min-w-0 flex flex-col" data-terminal-area>
-        {/* Only file tabs go here — a session is already always-open the moment
-            it's created, so listing every one permanently just added clutter.
-            SessionBar below already shows whichever session you just clicked. */}
+        {/* Open file tabs, plus a single slot for whichever session/terminal you
+            were last on — not every session (that's the sidebar's job), just a
+            "come back here" pointer so session <-> file needs no sidebar trip. */}
         {!overlaysUp && (
-          <TabBar tabs={state.tabs.filter((t) => t.kind === 'file')} activeTabId={state.activeTabId} onSelectTab={handleSelectTab} onCloseTab={handleCloseTab} />
+          <TabBar
+            tabs={tabBarTabs(state.tabs, lastSessionTabIdRef.current)}
+            activeTabId={state.activeTabId}
+            onSelectTab={handleSelectTab}
+            onCloseTab={handleCloseTab}
+          />
         )}
         {barVisible && activeTab && (
           <SessionBar

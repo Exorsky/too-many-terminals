@@ -122,4 +122,4 @@ Manual PTY verification checklist: docs/development.md.
 
 See also: [workspace persistence](workspace-persistence.md) for how open tabs survive
 an app restart, and [file explorer](file-explorer.md) for `TabBar` — the strip of open
-file tabs docked above the content pane (sessions stay sidebar/SessionBar-only).
+file tabs (plus a single slot for your last-active session) docked above the content pane.

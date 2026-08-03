@@ -7,11 +7,17 @@ in place.
 
 Open files live on their own axis from Claude/shell sessions: a session is
 already always-open the moment it's created (spawned pty, listed in the
-sidebar, shown in `SessionBar` when active), so it doesn't need a tab you
-"open" — but a file does. File tabs render in their own strip, `TabBar.tsx`,
-docked above the content pane, and are deliberately excluded from the
-sidebar's per-project session list and from the command palette (both stay
-scoped to "jump to a terminal").
+sidebar, shown in `SessionBar` when active), so it doesn't get a permanent
+row of its own up top the way a file does — that would just be every session
+that exists, all the time. Instead, `TabBar.tsx` (docked above the content
+pane, above `SessionBar`) shows every open file tab plus a single slot for
+whichever session/terminal you were last on: pick a session from the sidebar,
+work in a file, and that one session tab stays there to click back to,
+without a sidebar detour. Picking a *different* session from the sidebar
+replaces that slot — it's a "come back here" pointer, not a history of every
+session you've touched. File tabs are still excluded from the sidebar's
+per-project session list and from the command palette (both stay scoped to
+"jump to a terminal").
 
 ## Behavior
 
@@ -66,9 +72,9 @@ scoped to "jump to a terminal").
 - `src/lib/ipc.ts` — `DirEntry`, `listDir`, `readFile`, `writeFile`.
 - `src/lib/file-search.ts` (+ test) — the bounded breadth-first filename search.
 - `src/components/FileTree.tsx` (+ test) — the recursive, lazily-loaded tree node.
-- `src/components/TabBar.tsx` (+ test) — the top strip of open file tabs
-  (kind-agnostic internally — reuses `Sidebar.tsx`'s exported `TabIndicator` —
-  but `App.tsx` only ever feeds it file tabs).
+- `src/components/TabBar.tsx` (+ test) — the top strip; kind-agnostic
+  internally (reuses `Sidebar.tsx`'s exported `TabIndicator`) so it renders
+  whatever tab list it's given.
 - `src/components/FileExplorerPanel.tsx` (+ test) — the panel: header, search
   box, and per-project trees or search results.
 - `src/components/Editor.tsx` (+ test) — the CodeMirror 6 instance: creates once
@@ -80,9 +86,12 @@ scoped to "jump to a terminal").
 - `src/lib/tabs.ts` (+ test) — `dirty` reducer action.
 - Wiring in `App.tsx`: `showFiles` state (defaults `true`), the resize seam,
   `handleOpenFile`, one `FileViewer` mounted per file tab (not just the active
-  one — same pattern as the `Terminal` map), `TabBar` above `SessionBar`
-  (which hides itself for a file tab, since the strip already shows its name),
-  and the `window.confirm` guards in `handleCloseTab` / `handleRemoveProject`.
+  one — same pattern as the `Terminal` map), `lastSessionTabIdRef` (updated
+  during render, not an effect — see its comment) feeding the single session
+  slot into `TabBar` alongside the file tabs, `TabBar` sitting above
+  `SessionBar` (which hides itself for a file tab, since the strip already
+  shows its name), and the `window.confirm` guards in `handleCloseTab` /
+  `handleRemoveProject`.
 
 ## Scope / follow-ups
 

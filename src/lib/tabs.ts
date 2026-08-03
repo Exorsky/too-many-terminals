@@ -118,3 +118,14 @@ export function tabsReducer(state: TabsState, action: TabsAction): TabsState {
     }
   }
 }
+
+/** Which tabs the top TabBar should show: every open file tab, plus a single
+ *  slot for whichever session/terminal you were last on (if it's still
+ *  open) — not a row per session, just a "come back here" pointer so
+ *  switching between the session you were on and any open files doesn't need
+ *  a sidebar detour. */
+export function tabBarTabs(tabs: Tab[], lastSessionTabId: string | null): Tab[] {
+  const files = tabs.filter((t) => t.kind === 'file');
+  const session = tabs.find((t) => t.id === lastSessionTabId && t.kind !== 'file');
+  return session ? [session, ...files] : files;
+}

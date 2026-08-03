@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { initialTabsState, tabsReducer, type TabsState } from './tabs';
+import { initialTabsState, tabBarTabs, tabsReducer, type TabsState } from './tabs';
 import type { Tab } from '@/types';
 
 function makeTab(id: string, overrides: Partial<Tab> = {}): Tab {
@@ -147,5 +147,28 @@ describe('tabsReducer', () => {
     const next = tabsReducer(state, { type: 'reorderTab', tabId: 'a', targetId: 'b', position: 'before' });
     expect(next).toBe(state);
     expect(next.tabs.map((t) => t.id)).toEqual(['a', 'b']);
+  });
+});
+
+describe('tabBarTabs', () => {
+  const claudeTab = makeTab('claude-1', { kind: 'claude' });
+  const shellTab = makeTab('shell-1', { kind: 'shell' });
+  const fileA = makeTab('file-a', { kind: 'file', path: '/proj/a.md' });
+  const fileB = makeTab('file-b', { kind: 'file', path: '/proj/b.md' });
+
+  it('lists every file tab when there is no last session', () => {
+    expect(tabBarTabs([fileA, fileB, claudeTab], null)).toEqual([fileA, fileB]);
+  });
+
+  it('puts the last session tab first, ahead of the file tabs', () => {
+    expect(tabBarTabs([fileA, claudeTab, fileB], 'claude-1')).toEqual([claudeTab, fileA, fileB]);
+  });
+
+  it('drops the session slot once that tab is closed', () => {
+    expect(tabBarTabs([fileA, shellTab], 'claude-1')).toEqual([fileA]);
+  });
+
+  it('never shows a file tab in the session slot', () => {
+    expect(tabBarTabs([fileA], 'file-a')).toEqual([fileA]);
   });
 });
