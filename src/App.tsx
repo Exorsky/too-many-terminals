@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'r
 import { SquareTerminal } from 'lucide-react';
 import CommandPalette from '@/components/CommandPalette';
 import FileExplorerPanel from '@/components/FileExplorerPanel';
-import FileTabBar from '@/components/FileTabBar';
 import FileViewer from '@/components/FileViewer';
 import HomeScreen from '@/components/HomeScreen';
 import SessionBar, { type MarkdownView, type SessionMode } from '@/components/SessionBar';
@@ -10,6 +9,7 @@ import SessionHistoryPanel from '@/components/SessionHistoryPanel';
 import SessionReader from '@/components/SessionReader';
 import SettingsView from '@/components/SettingsView';
 import Sidebar from '@/components/Sidebar';
+import TabBar from '@/components/TabBar';
 import Terminal from '@/components/Terminal';
 import MarkdownPane from '@/components/MarkdownPane';
 import { disposeTerminal, writeToTerminal } from '@/components/terminalCache';
@@ -405,10 +405,9 @@ export default function App() {
   // Home covers the terminal too, but unlike the overlays it *is* the resting
   // state when nothing is open, so it gets its own flag.
   const homeUp = showHome || state.tabs.length === 0;
-  // File tabs get their own strip (FileTabBar) instead — showing the session
-  // bar too would just repeat the name.
+  // Every tab already has a row in TabBar — for a file tab that's enough on
+  // its own (no mode toggle applies), so the session bar stays claude/shell-only.
   const barVisible = settings.showSessionBar && activeTab !== null && !overlaysUp && !fileUp;
-  const fileTabs = state.tabs.filter((t) => t.kind === 'file');
   // Markdown reading needs both prefs on (so there's always a bar toggle to leave it by).
   const canRead = settings.showSessionBar && settings.showMarkdownToggle && activeReadable;
   // The active tab's view mode (terminal unless it can be read AND is toggled).
@@ -560,8 +559,11 @@ export default function App() {
         onToggleCollapse={() => setCollapsed((v) => !v)}
       />
       <main className="relative flex-1 min-w-0 flex flex-col" data-terminal-area>
+        {/* Only file tabs go here — a session is already always-open the moment
+            it's created, so listing every one permanently just added clutter.
+            SessionBar below already shows whichever session you just clicked. */}
         {!overlaysUp && (
-          <FileTabBar tabs={fileTabs} activeTabId={state.activeTabId} onSelectTab={handleSelectTab} onCloseTab={handleCloseTab} />
+          <TabBar tabs={state.tabs.filter((t) => t.kind === 'file')} activeTabId={state.activeTabId} onSelectTab={handleSelectTab} onCloseTab={handleCloseTab} />
         )}
         {barVisible && activeTab && (
           <SessionBar

@@ -1,20 +1,21 @@
-import { File, X } from 'lucide-react';
+import { File, TerminalSquare, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Tab } from '@/types';
+import { TabIndicator } from './Sidebar';
 
-interface FileTabBarProps {
-  /** Already filtered to kind === 'file'. */
+interface TabBarProps {
   tabs: Tab[];
   activeTabId: string | null;
   onSelectTab: (tabId: string) => void;
   onCloseTab: (tabId: string) => void;
 }
 
-/** Open file tabs live on their own axis from Claude/shell sessions — a
- *  session is "what I'm working on", a file is "what I have open" — so they
- *  get their own strip docked above the content pane instead of mixing into
- *  the sidebar's per-project session list. */
-export default function FileTabBar({ tabs, activeTabId, onSelectTab, onCloseTab }: FileTabBarProps) {
+/** A strip of open tabs docked above the content pane. Renders whatever it's
+ *  given — the icon logic below covers all three tab kinds — but App.tsx
+ *  currently only ever feeds it file tabs: a session is already always-open
+ *  from the moment it's created, so it lives in the sidebar and SessionBar
+ *  instead (see docs/features/file-explorer.md). */
+export default function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab }: TabBarProps) {
   if (tabs.length === 0) return null;
 
   return (
@@ -28,13 +29,18 @@ export default function FileTabBar({ tabs, activeTabId, onSelectTab, onCloseTab 
               'group relative flex items-center gap-1.5 pl-3 pr-1.5 max-w-[220px] shrink-0 border-r border-border',
               'text-[11px] cursor-pointer select-none',
               isActive ? 'bg-background text-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-white/4',
+              tab.exited && 'opacity-50',
             )}
             onClick={() => onSelectTab(tab.id)}
-            title={tab.path}
+            title={tab.kind === 'file' ? tab.path : tab.cwd}
           >
             {isActive && <span className="absolute left-0 right-0 top-0 h-0.5 bg-[#6fd4c9]" />}
-            <File size={11} className="shrink-0" />
-            <span className="truncate">{tab.name}</span>
+            {tab.kind === 'claude'
+              ? <TabIndicator status={tab.status} dormant={tab.dormant} size={11} />
+              : tab.kind === 'file'
+              ? <File size={11} className="shrink-0" />
+              : <TerminalSquare size={11} className="shrink-0" />}
+            <span className="truncate">{tab.name}{tab.exited ? ' (exited)' : ''}</span>
             {tab.dirty && <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-warning" title="Unsaved changes" />}
             <button
               type="button"

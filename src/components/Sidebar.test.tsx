@@ -79,7 +79,7 @@ describe('Sidebar', () => {
     expect(screen.getByText('two (exited)')).toBeInTheDocument();
   });
 
-  it('excludes file tabs — they live in the top FileTabBar, not the session list', () => {
+  it('excludes file tabs — they live in the top TabBar, not the session list', () => {
     renderSidebar({
       tabs: [makeTab('one'), makeTab('README.md', { kind: 'file', path: `${PROJECT}\\README.md` })],
     });
