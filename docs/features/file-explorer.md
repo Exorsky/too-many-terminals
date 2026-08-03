@@ -1,15 +1,21 @@
 # File explorer
 
 A file browser and editor docked to the right edge of the window, toggled from
-the sidebar (the folder-tree icon, next to History/Settings). Browse every open
-project's files, open one as a tab, and edit it in place.
+the sidebar (the folder-tree icon, next to History/Settings) — **open by
+default**. Browse every open project's files, open one as a tab, and edit it
+in place.
+
+Open files live on their own axis from Claude/shell sessions: a session is
+"what I'm working on" (sidebar, left); a file is "what I have open" (its own
+strip, top). They're deliberately not mixed into the same list.
 
 ## Behavior
 
 - **Tree.** One lazily-loaded tree per open project folder. A directory fetches
   its own children (`list_dir`) only the first time it's expanded — opening a
-  project with a large `node_modules` never walks it up front. The project root
-  itself starts expanded; everything below it starts collapsed.
+  project with a large `node_modules` never walks it up front. Everything
+  starts collapsed, including the project root row itself — nothing
+  auto-expands.
 - **Find files.** Typing in the search box switches the panel to a flat,
   breadth-first filename search across every open project (`src/lib/file-search.ts`),
   skipping the usual noisy directories (`node_modules`, `.git`, `dist`, …) and
@@ -19,7 +25,10 @@ project's files, open one as a tab, and edit it in place.
 - **Opening a file.** Clicking a file (in the tree or in search results) opens
   it as a tab of `kind: 'file'` — the same `Tab`/`tabsReducer` every Claude and
   shell tab uses, just with `path`/`dirty` fields and no pty behind it. Clicking
-  a file that's already open reuses that tab instead of duplicating it.
+  a file that's already open reuses that tab instead of duplicating it. File
+  tabs render in `FileTabBar.tsx`, a strip docked above the content pane —
+  they're excluded from the sidebar's per-project session list and from the
+  command palette (both are scoped to "jump to a terminal").
 - **Editing.** Every open file tab gets its own `FileViewer`/`Editor`
   (CodeMirror 6) instance that stays mounted the whole time the tab is open —
   hidden via `display:none` when it isn't the active tab, exactly like
@@ -56,6 +65,7 @@ project's files, open one as a tab, and edit it in place.
 - `src/lib/ipc.ts` — `DirEntry`, `listDir`, `readFile`, `writeFile`.
 - `src/lib/file-search.ts` (+ test) — the bounded breadth-first filename search.
 - `src/components/FileTree.tsx` (+ test) — the recursive, lazily-loaded tree node.
+- `src/components/FileTabBar.tsx` (+ test) — the top strip of open file tabs.
 - `src/components/FileExplorerPanel.tsx` (+ test) — the panel: header, search
   box, and per-project trees or search results.
 - `src/components/Editor.tsx` (+ test) — the CodeMirror 6 instance: creates once
@@ -65,10 +75,11 @@ project's files, open one as a tab, and edit it in place.
   save state, the Source/Preview toggle, hides via `display:none` when inactive.
 - `src/types.ts` — `TabKind` gained `'file'`; `Tab` gained optional `path`/`dirty`.
 - `src/lib/tabs.ts` (+ test) — `dirty` reducer action.
-- Wiring in `App.tsx`: `showFiles` state, the resize seam, `handleOpenFile`, one
-  `FileViewer` mounted per file tab (not just the active one — same pattern as
-  the `Terminal` map), and the `window.confirm` guards in `handleCloseTab` /
-  `handleRemoveProject`.
+- Wiring in `App.tsx`: `showFiles` state (defaults `true`), the resize seam,
+  `handleOpenFile`, one `FileViewer` mounted per file tab (not just the active
+  one — same pattern as the `Terminal` map), `FileTabBar` above `SessionBar`
+  (which hides itself for a file tab, since the strip already shows its name),
+  and the `window.confirm` guards in `handleCloseTab` / `handleRemoveProject`.
 
 ## Scope / follow-ups
 

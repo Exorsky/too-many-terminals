@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'r
 import { SquareTerminal } from 'lucide-react';
 import CommandPalette from '@/components/CommandPalette';
 import FileExplorerPanel from '@/components/FileExplorerPanel';
+import FileTabBar from '@/components/FileTabBar';
 import FileViewer from '@/components/FileViewer';
 import HomeScreen from '@/components/HomeScreen';
 import SessionBar, { type MarkdownView, type SessionMode } from '@/components/SessionBar';
@@ -37,7 +38,7 @@ export default function App() {
   const [homeDir, setHomeDir] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [showFiles, setShowFiles] = useState(false);
+  const [showFiles, setShowFiles] = useState(true);
   const [filesPanelWidth, setFilesPanelWidth] = useState(260);
   const [draggingFilesSeam, setDraggingFilesSeam] = useState(false);
   const filesPanelRef = useRef<HTMLDivElement>(null);
@@ -404,7 +405,10 @@ export default function App() {
   // Home covers the terminal too, but unlike the overlays it *is* the resting
   // state when nothing is open, so it gets its own flag.
   const homeUp = showHome || state.tabs.length === 0;
-  const barVisible = settings.showSessionBar && activeTab !== null && !overlaysUp;
+  // File tabs get their own strip (FileTabBar) instead — showing the session
+  // bar too would just repeat the name.
+  const barVisible = settings.showSessionBar && activeTab !== null && !overlaysUp && !fileUp;
+  const fileTabs = state.tabs.filter((t) => t.kind === 'file');
   // Markdown reading needs both prefs on (so there's always a bar toggle to leave it by).
   const canRead = settings.showSessionBar && settings.showMarkdownToggle && activeReadable;
   // The active tab's view mode (terminal unless it can be read AND is toggled).
@@ -556,6 +560,9 @@ export default function App() {
         onToggleCollapse={() => setCollapsed((v) => !v)}
       />
       <main className="relative flex-1 min-w-0 flex flex-col" data-terminal-area>
+        {!overlaysUp && (
+          <FileTabBar tabs={fileTabs} activeTabId={state.activeTabId} onSelectTab={handleSelectTab} onCloseTab={handleCloseTab} />
+        )}
         {barVisible && activeTab && (
           <SessionBar
             tab={activeTab}

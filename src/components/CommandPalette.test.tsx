@@ -51,6 +51,11 @@ describe('CommandPalette', () => {
     expect(screen.getByText('PowerShell')).toBeInTheDocument();
   });
 
+  it('excludes file tabs — they live in their own strip, not this "jump to a terminal" list', () => {
+    renderPalette({ tabs: [...TABS, makeTab('README.md', { kind: 'file', path: 'C:\\Users\\x\\project\\README.md' })] });
+    expect(screen.queryByText('README.md')).not.toBeInTheDocument();
+  });
+
   it('fuzzy-filters by name', async () => {
     renderPalette();
     await userEvent.keyboard('mig');

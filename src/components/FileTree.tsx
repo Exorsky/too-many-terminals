@@ -60,7 +60,8 @@ export interface FileTreeProps {
 
 /** A lazily-loaded file tree for one project folder — each directory fetches
  *  its own children the first time it's expanded, so opening a project never
- *  walks the whole tree (node_modules included) up front. */
+ *  walks the whole tree (node_modules included) up front. Starts fully
+ *  collapsed, including the project root itself. */
 export default function FileTree({ root, activePath, onOpen }: FileTreeProps) {
-  return <Node entry={root} depth={0} defaultOpen activePath={activePath} onOpen={onOpen} />;
+  return <Node entry={root} depth={0} activePath={activePath} onOpen={onOpen} />;
 }

@@ -11,13 +11,24 @@ const ROOT = { name: 'project', path: '/proj', isDir: true };
 afterEach(cleanup);
 
 describe('FileTree', () => {
-  it('loads and shows the root folder children on mount (root starts expanded)', async () => {
+  it('starts fully collapsed, including the project root', async () => {
+    vi.mocked(ipc.listDir).mockResolvedValue([{ name: 'src', path: '/proj/src', isDir: true }]);
+
+    render(<FileTree root={ROOT} activePath={null} onOpen={vi.fn()} />);
+
+    expect(screen.getByText('project')).toBeInTheDocument();
+    expect(screen.queryByText('src')).not.toBeInTheDocument();
+    expect(ipc.listDir).not.toHaveBeenCalled();
+  });
+
+  it('loads and shows the root folder children once expanded', async () => {
     vi.mocked(ipc.listDir).mockResolvedValue([
       { name: 'src', path: '/proj/src', isDir: true },
       { name: 'README.md', path: '/proj/README.md', isDir: false },
     ]);
 
     render(<FileTree root={ROOT} activePath={null} onOpen={vi.fn()} />);
+    fireEvent.click(screen.getByText('project'));
 
     expect(await screen.findByText('src')).toBeInTheDocument();
     expect(screen.getByText('README.md')).toBeInTheDocument();
@@ -32,6 +43,7 @@ describe('FileTree', () => {
     });
 
     render(<FileTree root={ROOT} activePath={null} onOpen={vi.fn()} />);
+    fireEvent.click(screen.getByText('project'));
 
     await screen.findByText('src');
     expect(ipc.listDir).not.toHaveBeenCalledWith('/proj/src');
@@ -45,6 +57,7 @@ describe('FileTree', () => {
     const onOpen = vi.fn();
 
     render(<FileTree root={ROOT} activePath={null} onOpen={onOpen} />);
+    fireEvent.click(screen.getByText('project'));
     fireEvent.click(await screen.findByText('App.tsx'));
 
     expect(onOpen).toHaveBeenCalledWith('/proj/App.tsx');

@@ -46,7 +46,8 @@ export default function CommandPalette({ open, tabs, onClose, onSelectTab }: Com
   }, [open]);
 
   const results = useMemo(() => {
-    const scored = tabs.map((tab) => {
+    // File tabs live in their own strip (FileTabBar), not among terminals.
+    const scored = tabs.filter((tab) => tab.kind !== 'file').map((tab) => {
       const haystack = `${tab.name} ${folderName(tab.cwd)} ${
         tab.kind === 'claude' ? STATUS_TERMS[tab.status] : 'shell terminal'
       }`;

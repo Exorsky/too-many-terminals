@@ -493,7 +493,7 @@ export default function Sidebar({
           </div>
 
           <div className="flex-1 overflow-y-auto overflow-x-hidden w-full py-2 flex flex-col items-center gap-1.5 scrollbar-thin">
-            {tabs.map((tab) => {
+            {tabs.filter((tab) => tab.kind !== 'file').map((tab) => {
               const isActive = !showHistory && tab.id === activeTabId;
               return (
                 <button
@@ -617,7 +617,7 @@ export default function Sidebar({
                 key={dir}
                 dir={dir}
                 hue={projectHue(index)}
-                tabs={tabs.filter((t) => t.cwd === dir)}
+                tabs={tabs.filter((t) => t.cwd === dir && t.kind !== 'file')}
                 activeTabId={activeTabId}
                 showHistory={showHistory}
                 shellOptions={shellOptions}

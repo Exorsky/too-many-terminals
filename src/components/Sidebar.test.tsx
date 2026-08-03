@@ -79,6 +79,14 @@ describe('Sidebar', () => {
     expect(screen.getByText('two (exited)')).toBeInTheDocument();
   });
 
+  it('excludes file tabs — they live in the top FileTabBar, not the session list', () => {
+    renderSidebar({
+      tabs: [makeTab('one'), makeTab('README.md', { kind: 'file', path: `${PROJECT}\\README.md` })],
+    });
+    expect(screen.getByText('one')).toBeInTheDocument();
+    expect(screen.queryByText('README.md')).not.toBeInTheDocument();
+  });
+
   it('selects a tab on click and closes via the row button', async () => {
     const props = renderSidebar();
     await userEvent.click(screen.getByText('PowerShell'));
