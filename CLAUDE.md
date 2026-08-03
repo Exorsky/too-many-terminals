@@ -8,7 +8,10 @@ Tauri 2 (Rust backend + system webview) + React 19 + Tailwind v4 + xterm.js.
 Feature and architecture docs live in `docs/` — **keep them updated when features change**:
 
 - [docs/architecture.md](docs/architecture.md) — process model, IPC design, module boundaries
-- [docs/features/terminals.md](docs/features/terminals.md) — sidebar, tabs, PTY spawning per OS
+- [docs/design.md](docs/design.md) — visual/interaction design system: color and type
+  vocabulary, shape rules, the status vocabulary, and when to reach for a tab strip vs. a
+  left rail vs. a menu vs. a context menu
+- [docs/features/terminals.md](docs/features/terminals.md) — sidebar (folders, pinning, drag-reorder), tabs, PTY spawning per OS
 - [docs/features/file-explorer.md](docs/features/file-explorer.md) — file tree + CodeMirror editor docked to the right edge
 - [docs/features/home-screen.md](docs/features/home-screen.md) — idle Home: a skyline built from your session history
 - [docs/features/attention-inbox.md](docs/features/attention-inbox.md) — "Waiting on you" strip: sessions blocked on you
@@ -19,7 +22,7 @@ Feature and architecture docs live in `docs/` — **keep them updated when featu
 - [docs/features/usage-meter.md](docs/features/usage-meter.md) — official 5h/7d rate-limit percentages
 - [docs/features/workspace-persistence.md](docs/features/workspace-persistence.md) — restoring folder/tabs across restarts
 - [docs/features/tab-status-and-naming.md](docs/features/tab-status-and-naming.md) — Claude Code hooks: live status + auto-naming
-- [docs/features/settings.md](docs/features/settings.md) — Settings view (General/Customize sub-tabs)
+- [docs/features/settings.md](docs/features/settings.md) — Settings view (left-rail categories: Interface/Notifications/Sessions/Customize)
 - [docs/features/themes.md](docs/features/themes.md) — theme presets + custom theme editor
 - [docs/development.md](docs/development.md) — dev/test/build commands, release process
 

@@ -14,14 +14,17 @@ where you left off.
   "projects": ["C:\\Users\\me\\project", "C:\\Users\\me\\other"],
   "collapsed": false,
   "tabs": [
-    { "kind": "claude", "name": "Claude", "shellId": null, "resumeSessionId": "…", "cwd": "C:\\Users\\me\\project" },
-    { "kind": "powershell", "name": "PowerShell", "shellId": "powershell", "resumeSessionId": null, "cwd": "C:\\Users\\me\\other" }
+    { "kind": "claude", "name": "Claude", "shellId": null, "resumeSessionId": "…", "cwd": "C:\\Users\\me\\project", "pinned": true },
+    { "kind": "powershell", "name": "PowerShell", "shellId": "powershell", "resumeSessionId": null, "cwd": "C:\\Users\\me\\other", "pinned": false }
   ]
 }
 ```
 
+`pinned` (see [Pinning a session](terminals.md#pinning-a-session)) defaults to `false` via
+`#[serde(default)]`, so a workspace file saved before the field existed still loads.
+
 `projects` is stored separately from `tabs` so a folder with zero open tabs still
-reappears as an (empty) card next launch. Exited tabs are dropped before saving. The
+reappears as an (empty) group next launch. Exited tabs are dropped before saving. The
 frontend (`App.tsx`) debounces writes 300ms after any change to tabs/projects/collapsed,
 via `ipc.saveWorkspace`.
 

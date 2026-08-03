@@ -63,8 +63,7 @@ via an `opener:allow-open-url` scope in `capabilities/default.json`.
 
 `notificationsEnabled` (default `true`, opt-out) lives in `AppSettings`
 alongside the session-bar prefs, persisted in `settings.json` via the same
-[settings store](settings.md). The General tab exposes it under a
-**Notifications** heading.
+[settings store](settings.md). Settings' **Notifications** category exposes it.
 
 ## Platform / follow-ups
 

@@ -1,16 +1,23 @@
 # Usage meter
 
-The sidebar footer shows the two rate-limit windows Anthropic actually
-enforces, with the **official** percentages — the same numbers `/usage` prints
-inside Claude Code:
+The sidebar's bottom row is a single always-on strip: both rate-limit
+percentages Anthropic actually enforces, with the **official** numbers —
+the same figures `/usage` prints inside Claude Code — plus a "more" trigger.
+Opening it reveals the detail and the rest of the footer's navigation:
 
 1. **Session** — the 5-hour window: percent used, a progress bar, a live
    countdown to reset.
 2. **This week** — the same, for the 7-day window.
+3. **History / Files / Settings** — the same three destinations the footer
+   always had, now menu items instead of a mismatched row (one wide label
+   button next to two bare icon squares). A check mark shows whichever one is
+   currently open.
 
-The meter disappears entirely when there's nothing to report. A window the API
-doesn't return (e.g. no weekly limit on your plan) is omitted rather than
-faked.
+A window the API doesn't return (e.g. no weekly limit on your plan) is
+omitted from both the trigger and the menu, rather than faked. If usage is
+unavailable entirely, the trigger just drops its percentage chips — History,
+Files, and Settings stay reachable regardless, since they're navigation, not
+usage display.
 
 ## Where the numbers come from
 
@@ -76,11 +83,12 @@ percentage as live.
 - `src-tauri/Cargo.toml` — `reqwest` with **rustls** rather than the default
   native-tls, so the one network call needs no system OpenSSL on Linux.
 - `src-tauri/src/settings.rs` — `usage_refresh_seconds` (default 300).
-- `src/components/UsageMeter.tsx` (+ `UsageMeter.test.tsx`) — `WindowRow`; the
-  reset countdown ticks locally every second so it doesn't stall between
-  polls. The bar uses the themeable `usage` color below 70%, then escalates to
-  `warning` and `destructive` — that escalation is deliberately not themeable,
-  it's a signal rather than decoration. See [themes.md](themes.md).
+- `src/components/SidebarFooter.tsx` (+ `SidebarFooter.test.tsx`) — the trigger
+  button, `UsageRow`, and the History/Files/Settings menu items. The reset
+  countdown ticks locally every second so it doesn't stall between polls. The
+  bar uses the themeable `usage` color below 70%, then escalates to `warning`
+  and `destructive` — that escalation is deliberately not themeable, it's a
+  signal rather than decoration. See [themes.md](themes.md).
 - `src/components/SettingsView.tsx` — the refresh-interval dropdown (5m/15m/
   30m; nothing faster, see above).
 - `src/types.ts` — `UsageWindow`, `SessionUsageStats`.

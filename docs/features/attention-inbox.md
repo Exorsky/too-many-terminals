@@ -1,8 +1,11 @@
 # “Waiting on you” inbox
 
-A pinned strip at the top of the sidebar that gathers every Claude session which
+A strip near the top of the sidebar that gathers every Claude session which
 **stopped and is blocked on you** — one place to answer the "which of my twelve
-terminals needs me?" question without hunting through collapsed folder cards.
+terminals needs me?" question without hunting through collapsed folders. Don't
+confuse this with the user-controlled [Pinned section](terminals.md#pinning-a-session)
+right above it — this one fills itself automatically from live session state, and
+you can't add or remove a row from it directly.
 
 The strip is the first payoff of a simple idea: the app already knows each Claude
 tab's live state from Claude Code's hooks (see
@@ -29,12 +32,12 @@ The header carries a live count badge. Clicking a row selects that tab (same
 
 ## Where it lives
 
-`AttentionStrip` (in `Sidebar.tsx`) renders in the expanded sidebar, **pinned
-between the header and the scrolling project list** (`shrink-0`) so it stays put
-while you scroll folders. Its own list caps at `max-h-[38vh]` and scrolls
-internally if the queue is ever long. When nothing is waiting the component
-returns `null`, so it collapses to zero height and costs no space — the empty
-state *is* the absence of the strip.
+`AttentionStrip` (in `Sidebar.tsx`) renders in the expanded sidebar, fixed
+(`shrink-0`) between the search row/Pinned strip above and the scrolling
+project list below, so it stays put while you scroll folders. Its own list
+caps at `max-h-[38vh]` and scrolls internally if the queue is ever long. When
+nothing is waiting the component returns `null`, so it collapses to zero
+height and costs no space — the empty state *is* the absence of the strip.
 
 It needs no new props: `Sidebar` already receives `tabs`, `projects`,
 `activeTabId`, `showHistory`, and `onSelectTab`, and the strip derives its list

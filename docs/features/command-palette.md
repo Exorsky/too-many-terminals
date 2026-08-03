@@ -1,9 +1,11 @@
 # Command palette
 
 A fuzzy switcher over every open terminal, summoned from anywhere with
-**Ctrl/Cmd+Shift+P**. Type a fragment of a tab's name, its folder, or a status
-word, and jump straight to it — the fast path for "which terminal was that?"
-without scanning collapsed sidebar cards.
+**Ctrl/Cmd+Shift+P** — or the **Search sessions** row at the top of the sidebar,
+a visible entry point to the same shortcut for anyone who wouldn't otherwise
+discover it. Type a fragment of a tab's name, its folder, or a status word, and
+jump straight to it — the fast path for "which terminal was that?" without
+scanning collapsed folders.
 
 ## Why Ctrl+Shift+P (not Ctrl+K)
 
@@ -17,7 +19,8 @@ app-wide.
 
 - The shortcut listener is registered in `App.tsx` on `window` in the **capture
   phase** (`addEventListener(..., true)`), so it fires before the focused xterm
-  can swallow the key. It toggles `paletteOpen`.
+  can swallow the key. It toggles `paletteOpen`; the sidebar's search row
+  (`onOpenSearch`) just sets it `true`.
 - Opening resets the query and selection and focuses the input. `Escape`, a
   click on the backdrop, or choosing a result closes it.
 - **Matching** is `fuzzyScore` (`src/lib/fuzzy.ts`): a case-insensitive

@@ -17,7 +17,7 @@ WebKitGTK) and a small Rust binary, keeping installers in the ~10–25 MB range.
 │ Terminal.tsx — xterm.js     │◄───────┤ shell.rs — per-OS shells     │
 │ terminalCache.ts            │channel │ claude.rs — claude CLI cmd   │
 │ SessionHistoryPanel.tsx     │ events │ session_history.rs           │
-│ UsageMeter.tsx              │        │ session_usage.rs             │
+│ SidebarFooter.tsx           │        │ session_usage.rs             │
 └─────────────────────────────┘        └──────────────────────────────┘
 ```
 

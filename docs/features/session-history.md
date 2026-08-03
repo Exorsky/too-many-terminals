@@ -1,6 +1,6 @@
 # Session history
 
-The History button (sidebar footer) opens a panel of past Claude Code sessions merged
+The History item (sidebar footer menu) opens a panel of past Claude Code sessions merged
 across every open project folder, read from the transcripts Claude Code itself writes
 under `~/.claude/projects/<encoded-dir>/*.jsonl`. Read-only and offline; nothing uploaded.
 
