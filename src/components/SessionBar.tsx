@@ -1,4 +1,4 @@
-import { AlignLeft, Braces, Columns2, FileText, RefreshCw, SquareTerminal } from 'lucide-react';
+import { AlignLeft, Braces, Columns2, File, FileText, RefreshCw, SquareTerminal } from 'lucide-react';
 import type { Tab } from '@/types';
 import { cn } from '@/lib/utils';
 import CopyButton from './CopyButton';
@@ -47,6 +47,8 @@ export default function SessionBar({
       <div className="flex items-center gap-2 min-w-0">
         {tab.kind === 'claude'
           ? <span className={cn('w-[7px] h-[7px] rounded-full shrink-0', STATUS_DOT[tab.status])} />
+          : tab.kind === 'file'
+          ? <File size={12} className="text-muted-foreground shrink-0" />
           : <SquareTerminal size={12} className="text-muted-foreground shrink-0" />}
         <span className="text-[12px] font-semibold text-foreground truncate">{tab.name}</span>
         <span className="text-muted-foreground opacity-50 shrink-0">·</span>

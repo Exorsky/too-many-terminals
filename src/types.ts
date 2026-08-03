@@ -1,4 +1,4 @@
-export type TabKind = 'claude' | 'shell';
+export type TabKind = 'claude' | 'shell' | 'file';
 
 /** Live state of a Claude tab, learned from Claude Code's own hooks
  *  (SessionStart/PreToolUse/Stop/Notification). Meaningless for shell tabs,
@@ -21,6 +21,8 @@ export interface Tab {
    *  stays a lightweight placeholder (no shell/claude process) until first
    *  shown as a live terminal. Absent/false for normally-spawned tabs. */
   dormant?: boolean;
+  /** Absolute file path — set only for kind === 'file'. */
+  path?: string;
 }
 
 /** A shell available on the current OS, provided by the Rust backend. */

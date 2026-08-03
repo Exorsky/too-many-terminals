@@ -15,6 +15,12 @@ import {
 } from '@tauri-apps/plugin-notification';
 import type { AppSettings, SessionHistoryEntry, ShellOption, TabStatus, TranscriptTurn, UsageStats, WorkspaceState } from '@/types';
 
+export interface DirEntry {
+  name: string;
+  path: string;
+  isDir: boolean;
+}
+
 export interface SpawnPtyOptions {
   tabId: string;
   /** "claude" or a shell id from listShells(). */
@@ -184,6 +190,16 @@ export function loadSettings(): Promise<AppSettings> {
 
 export function saveSettings(settings: AppSettings): Promise<void> {
   return invoke('save_settings', { settings });
+}
+
+/** One level of a directory (folders first, then files, alphabetical). */
+export function listDir(dir: string): Promise<DirEntry[]> {
+  return invoke('list_dir', { dir });
+}
+
+/** Reads a file as text for the file viewer. Rejects binary or oversized files. */
+export function readFile(path: string): Promise<string> {
+  return invoke('read_file', { path });
 }
 
 /** Removes just this app's hook entries from a project's

@@ -4,6 +4,7 @@ use tauri::ipc::{Channel, InvokeResponseBody};
 use tauri::{AppHandle, Emitter, State};
 
 use crate::claude::{claude_command, login_shell_path, resume_flags};
+use crate::files;
 use crate::hooks;
 use crate::pty::PtyManager;
 use crate::session_history::{projects_root, SessionHistoryEntry};
@@ -230,4 +231,14 @@ pub fn save_settings(settings: AppSettings) -> Result<(), String> {
 #[tauri::command(async)]
 pub fn uninstall_hooks(cwd: String) -> Result<(), String> {
     hooks::uninstall_hooks(std::path::Path::new(&cwd))
+}
+
+#[tauri::command(async)]
+pub fn list_dir(dir: String) -> Result<Vec<files::DirEntry>, String> {
+    files::list_dir(std::path::Path::new(&dir))
+}
+
+#[tauri::command(async)]
+pub fn read_file(path: String) -> Result<String, String> {
+    files::read_text(std::path::Path::new(&path))
 }

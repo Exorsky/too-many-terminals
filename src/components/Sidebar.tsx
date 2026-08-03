@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type MutableRefObject } from 'react';
 import {
-  CheckCircle2, ChevronRight, Circle, FileText, Folder, FolderOpen, FolderPlus, History, Loader2,
+  CheckCircle2, ChevronRight, Circle, File, FileText, Folder, FolderOpen, FolderPlus, FolderTree, History, Loader2,
   MessageCircle, Moon, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Settings, Sparkles, TerminalSquare, X,
 } from 'lucide-react';
 import { cn, folderName } from '@/lib/utils';
@@ -28,6 +28,7 @@ interface SidebarProps {
   showHistory: boolean;
   showSettings: boolean;
   showHome: boolean;
+  showFiles: boolean;
   projects: string[];
   collapsed: boolean;
   onSelectTab: (tabId: string) => void;
@@ -41,6 +42,7 @@ interface SidebarProps {
   onRenameTab: (tabId: string, name: string) => void;
   onToggleHistory: () => void;
   onToggleSettings: () => void;
+  onToggleFiles: () => void;
   onGoHome: () => void;
   onAddProject: () => void;
   onRemoveProject: (dir: string) => void;
@@ -252,6 +254,8 @@ function TabRow({ tab, isActive, dragRef, markdownEnabled, onSelectTab, onCloseT
   );
   const icon = tab.kind === 'claude'
     ? <TabIndicator status={tab.status} dormant={tab.dormant} />
+    : tab.kind === 'file'
+    ? <File size={12} className="shrink-0" />
     : <TerminalSquare size={12} className="shrink-0" />;
 
   if (editing) {
@@ -457,8 +461,8 @@ function ProjectCard({
 }
 
 export default function Sidebar({
-  tabs, activeTabId, shellOptions, showHistory, showSettings, showHome, projects, collapsed, markdownEnabled,
-  onSelectTab, onCloseTab, onReadTab, onOpenDirectory, onNewClaudeTab, onNewShellTab, onRenameTab, onToggleHistory, onToggleSettings, onGoHome,
+  tabs, activeTabId, shellOptions, showHistory, showSettings, showHome, showFiles, projects, collapsed, markdownEnabled,
+  onSelectTab, onCloseTab, onReadTab, onOpenDirectory, onNewClaudeTab, onNewShellTab, onRenameTab, onToggleHistory, onToggleSettings, onToggleFiles, onGoHome,
   onAddProject, onRemoveProject, onReorderProject, onReorderTab, onToggleCollapse,
 }: SidebarProps) {
   const dragRef = useRef<DragItem | null>(null);
@@ -503,6 +507,8 @@ export default function Sidebar({
                   {isActive && <span className="absolute left-0 top-1 bottom-1 w-0.5 rounded-full bg-primary" />}
                   {tab.kind === 'claude'
                     ? <TabIndicator status={tab.status} dormant={tab.dormant} size={14} />
+                    : tab.kind === 'file'
+                    ? <File size={14} className="shrink-0" />
                     : <TerminalSquare size={14} className="shrink-0" />}
                 </button>
               );
@@ -530,6 +536,17 @@ export default function Sidebar({
             title="Browse past sessions"
           >
             <History size={15} />
+          </button>
+          <button
+            data-active={showFiles}
+            className={cn(
+              'flex items-center justify-center w-8 h-8 rounded-md border-none cursor-pointer bg-transparent shrink-0',
+              showFiles ? 'text-foreground bg-white/8' : 'text-muted-foreground hover:text-foreground hover:bg-white/5',
+            )}
+            onClick={onToggleFiles}
+            title="File explorer"
+          >
+            <FolderTree size={15} />
           </button>
           <button
             className="flex items-center justify-center w-8 h-8 rounded-md border-none cursor-pointer bg-transparent text-muted-foreground hover:text-foreground hover:bg-white/5 shrink-0"
@@ -642,6 +659,19 @@ export default function Sidebar({
               {showHistory && <span className="absolute left-0 top-1.5 bottom-1.5 w-0.5 bg-primary" />}
               <History size={14} />
               <span>History</span>
+            </button>
+            <button
+              data-active={showFiles}
+              className={cn(
+                'relative flex items-center justify-center w-9 h-9 text-[12px] cursor-pointer shrink-0',
+                'bg-transparent border-none border-l border-l-border font-inherit transition-colors duration-100',
+                showFiles ? 'text-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-white/4',
+              )}
+              onClick={onToggleFiles}
+              title="File explorer"
+            >
+              {showFiles && <span className="absolute left-0 top-1.5 bottom-1.5 w-0.5 bg-primary" />}
+              <FolderTree size={14} />
             </button>
             <button
               data-active={showSettings}

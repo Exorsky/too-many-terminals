@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { SquareTerminal } from 'lucide-react';
 import CommandPalette from '@/components/CommandPalette';
+import FileExplorerPanel from '@/components/FileExplorerPanel';
+import FileViewer from '@/components/FileViewer';
 import HomeScreen from '@/components/HomeScreen';
 import SessionBar, { type MarkdownView, type SessionMode } from '@/components/SessionBar';
 import SessionHistoryPanel from '@/components/SessionHistoryPanel';
@@ -35,6 +37,10 @@ export default function App() {
   const [homeDir, setHomeDir] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showFiles, setShowFiles] = useState(false);
+  const [filesPanelWidth, setFilesPanelWidth] = useState(260);
+  const [draggingFilesSeam, setDraggingFilesSeam] = useState(false);
+  const filesPanelRef = useRef<HTMLDivElement>(null);
   // Home is the resting screen: implicit when no tab is open, reachable any time
   // from the sidebar wordmark, and where every launch starts — a restored
   // workspace opens on the city, not on whichever tab happened to be last.
@@ -264,7 +270,8 @@ export default function App() {
     if (!workspaceLoaded) return;
     const timer = setTimeout(() => {
       const tabs: SavedTab[] = state.tabs
-        .filter((t) => !t.exited)
+        // File tabs aren't restored across restarts yet (no path in SavedTab).
+        .filter((t) => !t.exited && t.kind !== 'file')
         .map((t) => ({ kind: t.kind, name: t.name, shellId: t.shellId, resumeSessionId: t.resumeSessionId, cwd: t.cwd }));
       ipc.saveWorkspace({ projects, collapsed, tabs }).catch(() => {});
     }, SAVE_DEBOUNCE_MS);
@@ -312,6 +319,31 @@ export default function App() {
     setShowHome(false);
     dispatch({ type: 'select', tabId });
   }, []);
+
+  /** Opens a file from the explorer as a read-only tab — reuses the tab if
+   *  that file is already open instead of duplicating it. No pty involved. */
+  const handleOpenFile = useCallback((dir: string, path: string) => {
+    const existing = state.tabs.find((t) => t.kind === 'file' && t.path === path);
+    if (existing) {
+      handleSelectTab(existing.id);
+      return;
+    }
+    const tab: Tab = {
+      id: crypto.randomUUID(),
+      kind: 'file',
+      name: path.split(/[/\\]/).pop() || path,
+      shellId: null,
+      cwd: dir,
+      resumeSessionId: null,
+      exited: false,
+      status: 'new',
+      path,
+    };
+    dispatch({ type: 'add', tab });
+    setShowHistory(false);
+    setShowSettings(false);
+    setShowHome(false);
+  }, [state.tabs, handleSelectTab]);
 
   // Command palette — Ctrl/Cmd+Shift+P from anywhere. Capture phase so it fires
   // before the focused xterm swallows the key; Shift+P (not Ctrl+K) to avoid
@@ -363,6 +395,7 @@ export default function App() {
   const activeTab = state.tabs.find((t) => t.id === state.activeTabId) ?? null;
   const activeReadable = !!activeTab && activeTab.kind === 'claude' && !!activeTab.resumeSessionId;
   const overlaysUp = showHistory || showSettings || readerTarget !== null;
+  const fileUp = !!activeTab && activeTab.kind === 'file';
   // Home covers the terminal too, but unlike the overlays it *is* the resting
   // state when nothing is open, so it gets its own flag.
   const homeUp = showHome || state.tabs.length === 0;
@@ -448,6 +481,26 @@ export default function App() {
     };
   }, [draggingSeam]);
 
+  // Drag-to-resize the file explorer panel, same pattern as the split seam
+  // above but tracking width from the panel's own right edge (it's docked to
+  // the window edge, not a fixed-position row).
+  useEffect(() => {
+    if (!draggingFilesSeam) return;
+    const onMove = (e: MouseEvent) => {
+      const panel = filesPanelRef.current;
+      if (!panel) return;
+      const r = panel.getBoundingClientRect();
+      setFilesPanelWidth(Math.min(480, Math.max(200, r.right - e.clientX)));
+    };
+    const onUp = () => setDraggingFilesSeam(false);
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+  }, [draggingFilesSeam]);
+
   // Live-follow: while the transcript is on screen, re-read it on a steady tick
   // so new turns appear as Claude answers — including plain-text replies, which
   // never flip the tab to `working`. The read is cheap to ignore when nothing
@@ -475,6 +528,7 @@ export default function App() {
         shellOptions={shellOptions}
         showHistory={showHistory}
         showSettings={showSettings}
+        showFiles={showFiles}
         projects={projects}
         collapsed={collapsed}
         onSelectTab={handleSelectTab}
@@ -487,6 +541,7 @@ export default function App() {
         onRenameTab={handleRenameTab}
         onToggleHistory={() => { setShowHistory((v) => !v); setShowSettings(false); setShowHome(false); }}
         onToggleSettings={() => { setShowSettings((v) => !v); setShowHistory(false); setShowHome(false); }}
+        onToggleFiles={() => setShowFiles((v) => !v)}
         showHome={homeUp}
         onGoHome={() => { setShowHome((v) => !v); setShowHistory(false); setShowSettings(false); }}
         onAddProject={handleAddProject}
@@ -524,14 +579,19 @@ export default function App() {
                 </div>
               )}
               <div className="relative flex-1 min-h-0">
-                {state.tabs.map((tab) => (
+                {state.tabs.filter((tab) => tab.kind !== 'file').map((tab) => (
                   <Terminal
                     key={tab.id}
                     tabId={tab.id}
                     isVisible={tab.id === state.activeTabId && !overlaysUp && !homeUp && !mdFull}
                   />
                 ))}
-                {!overlaysUp && !mdReading && homeUp && (
+                {!overlaysUp && fileUp && activeTab?.path && (
+                  <div className="absolute inset-0 flex flex-col bg-background">
+                    <FileViewer path={activeTab.path} />
+                  </div>
+                )}
+                {!overlaysUp && !mdReading && !fileUp && homeUp && (
                   <HomeScreen
                     projects={projects}
                     tabs={state.tabs}
@@ -593,6 +653,26 @@ export default function App() {
           )}
         </div>
       </main>
+      {showFiles && (
+        <>
+          <div
+            onMouseDown={() => setDraggingFilesSeam(true)}
+            className="relative w-px shrink-0 cursor-col-resize bg-border-hover"
+            title="Drag to resize"
+          >
+            {/* wider invisible hit-area over the 1px line */}
+            <span className="absolute inset-y-0 -left-1.5 -right-1.5" />
+          </div>
+          <div ref={filesPanelRef} style={{ width: filesPanelWidth }} className="shrink-0 border-l border-border overflow-hidden">
+            <FileExplorerPanel
+              projects={projects}
+              activePath={fileUp ? activeTab?.path ?? null : null}
+              onOpenFile={handleOpenFile}
+            />
+          </div>
+        </>
+      )}
+      {draggingFilesSeam && <div className="fixed inset-0 z-50 cursor-col-resize" />}
       <CommandPalette
         open={paletteOpen}
         tabs={state.tabs}

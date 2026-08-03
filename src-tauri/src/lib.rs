@@ -1,5 +1,6 @@
 mod claude;
 mod commands;
+mod files;
 mod hook_server;
 mod hooks;
 mod namer;
@@ -60,6 +61,8 @@ pub fn run() {
             commands::load_settings,
             commands::save_settings,
             commands::uninstall_hooks,
+            commands::list_dir,
+            commands::read_file,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
