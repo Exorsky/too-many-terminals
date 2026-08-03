@@ -113,6 +113,16 @@ describe('tabsReducer', () => {
     expect(state.tabs[0].exited).toBe(false);
   });
 
+  it('dirty updates only the named tab', () => {
+    let state = stateWith('a', 'b');
+    state = tabsReducer(state, { type: 'dirty', tabId: 'a', dirty: true });
+    expect(state.tabs[0].dirty).toBe(true);
+    expect(state.tabs[1].dirty).toBeUndefined();
+
+    state = tabsReducer(state, { type: 'dirty', tabId: 'a', dirty: false });
+    expect(state.tabs[0].dirty).toBe(false);
+  });
+
   it('reorderTab drops before or after the target within its folder', () => {
     let state = stateWith('a', 'b', 'c');
     // "after c" lands a at the end — a plain insert-before couldn't reach it.

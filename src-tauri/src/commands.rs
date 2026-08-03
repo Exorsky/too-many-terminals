@@ -242,3 +242,8 @@ pub fn list_dir(dir: String) -> Result<Vec<files::DirEntry>, String> {
 pub fn read_file(path: String) -> Result<String, String> {
     files::read_text(std::path::Path::new(&path))
 }
+
+#[tauri::command(async)]
+pub fn write_file(path: String, root: String, contents: String) -> Result<(), String> {
+    files::write_text(std::path::Path::new(&path), std::path::Path::new(&root), &contents)
+}

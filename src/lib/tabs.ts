@@ -17,6 +17,7 @@ export type TabsAction =
   | { type: 'status'; tabId: string; status: TabStatus }
   | { type: 'wake'; tabId: string }
   | { type: 'sleep'; tabId: string }
+  | { type: 'dirty'; tabId: string; dirty: boolean }
   | { type: 'reorderTab'; tabId: string; targetId: string; position: 'before' | 'after' };
 
 export function tabsReducer(state: TabsState, action: TabsAction): TabsState {
@@ -90,6 +91,14 @@ export function tabsReducer(state: TabsState, action: TabsAction): TabsState {
         ...state,
         tabs: state.tabs.map((t) =>
           t.id === action.tabId ? { ...t, dormant: true, exited: false } : t,
+        ),
+      };
+
+    case 'dirty':
+      return {
+        ...state,
+        tabs: state.tabs.map((t) =>
+          t.id === action.tabId ? { ...t, dirty: action.dirty } : t,
         ),
       };
 

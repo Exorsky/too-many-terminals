@@ -23,6 +23,8 @@ export interface Tab {
   dormant?: boolean;
   /** Absolute file path — set only for kind === 'file'. */
   path?: string;
+  /** True when a file tab has unsaved editor changes. */
+  dirty?: boolean;
 }
 
 /** A shell available on the current OS, provided by the Rust backend. */

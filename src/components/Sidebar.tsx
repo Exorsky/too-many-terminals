@@ -315,6 +315,9 @@ function TabRow({ tab, isActive, dragRef, markdownEnabled, onSelectTab, onCloseT
           {isActive && <span className="absolute left-0 top-1 bottom-1 w-0.5 rounded-full bg-primary" />}
           {icon}
           <span className="truncate flex-1">{tab.name}{tab.exited ? ' (exited)' : ''}</span>
+          {tab.kind === 'file' && tab.dirty && (
+            <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-warning" title="Unsaved changes" />
+          )}
           {markdownEnabled && tab.kind === 'claude' && tab.resumeSessionId && (
             <button
               className={cn(

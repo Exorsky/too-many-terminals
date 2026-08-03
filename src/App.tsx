@@ -74,12 +74,15 @@ export default function App() {
   }, [projects, homeDir]);
 
   const handleRemoveProject = useCallback((dir: string) => {
-    for (const tab of state.tabs) {
-      if (tab.cwd === dir) {
-        ipc.killPty(tab.id);
-        disposeTerminal(tab.id);
-        dispatch({ type: 'close', tabId: tab.id });
-      }
+    const tabsInDir = state.tabs.filter((t) => t.cwd === dir);
+    const dirtyCount = tabsInDir.filter((t) => t.dirty).length;
+    if (dirtyCount > 0 && !window.confirm(
+      `${dirtyCount} file${dirtyCount === 1 ? '' : 's'} in this folder ${dirtyCount === 1 ? 'has' : 'have'} unsaved changes. Remove folder without saving?`,
+    )) return;
+    for (const tab of tabsInDir) {
+      ipc.killPty(tab.id);
+      disposeTerminal(tab.id);
+      dispatch({ type: 'close', tabId: tab.id });
     }
     setProjects((prev) => prev.filter((p) => p !== dir));
     ipc.uninstallHooks(dir).catch(() => {});
@@ -292,6 +295,8 @@ export default function App() {
   );
 
   const handleCloseTab = useCallback((tabId: string) => {
+    const tab = state.tabs.find((t) => t.id === tabId);
+    if (tab?.dirty && !window.confirm(`“${tab.name}” has unsaved changes. Close without saving?`)) return;
     ipc.killPty(tabId);
     disposeTerminal(tabId);
     setMdTabs((prev) => {
@@ -301,7 +306,7 @@ export default function App() {
       return next;
     });
     dispatch({ type: 'close', tabId });
-  }, []);
+  }, [state.tabs]);
 
   /** Set a tab's view mode: terminal (default), full markdown, or split. */
   const setTabMode = useCallback((tabId: string, mode: SessionMode) => {
@@ -586,11 +591,14 @@ export default function App() {
                     isVisible={tab.id === state.activeTabId && !overlaysUp && !homeUp && !mdFull}
                   />
                 ))}
-                {!overlaysUp && fileUp && activeTab?.path && (
-                  <div className="absolute inset-0 flex flex-col bg-background">
-                    <FileViewer path={activeTab.path} />
-                  </div>
-                )}
+                {state.tabs.filter((tab) => tab.kind === 'file').map((tab) => (
+                  <FileViewer
+                    key={tab.id}
+                    tab={tab}
+                    isVisible={tab.id === state.activeTabId && !overlaysUp && !homeUp}
+                    onDirtyChange={(tabId, dirty) => dispatch({ type: 'dirty', tabId, dirty })}
+                  />
+                ))}
                 {!overlaysUp && !mdReading && !fileUp && homeUp && (
                   <HomeScreen
                     projects={projects}

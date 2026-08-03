@@ -202,6 +202,12 @@ export function readFile(path: string): Promise<string> {
   return invoke('read_file', { path });
 }
 
+/** Overwrites a file. `root` must be the project folder it was opened from —
+ *  the backend refuses to write outside it. */
+export function writeFile(path: string, root: string, contents: string): Promise<void> {
+  return invoke('write_file', { path, root, contents });
+}
+
 /** Removes just this app's hook entries from a project's
  *  `.claude/settings.local.json` (leaves any user-authored hooks alone). */
 export function uninstallHooks(cwd: string): Promise<void> {

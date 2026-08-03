@@ -63,6 +63,7 @@ pub fn run() {
             commands::uninstall_hooks,
             commands::list_dir,
             commands::read_file,
+            commands::write_file,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

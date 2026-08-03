@@ -44,6 +44,19 @@ pub fn read_text(path: &Path) -> Result<String, String> {
     std::fs::read_to_string(path).map_err(|_| "Not a text file".to_string())
 }
 
+/// Overwrites an existing file with editor contents. `root` must be the open
+/// project folder the file was opened from — canonicalizing both sides and
+/// checking containment closes off `../` and symlink escapes, since this is
+/// the one call in the app that writes wherever it's pointed.
+pub fn write_text(path: &Path, root: &Path, contents: &str) -> Result<(), String> {
+    let real_root = root.canonicalize().map_err(|e| e.to_string())?;
+    let real_path = path.canonicalize().map_err(|e| e.to_string())?;
+    if !real_path.starts_with(&real_root) {
+        return Err("File is outside the open project folder".to_string());
+    }
+    std::fs::write(real_path, contents).map_err(|e| e.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -85,5 +98,27 @@ mod tests {
         let file = tmp.path().join("bin.dat");
         std::fs::write(&file, [0xff, 0xfe, 0x00, 0xff, 0x00, 0x01]).unwrap();
         assert!(read_text(&file).is_err());
+    }
+
+    #[test]
+    fn writes_a_file_inside_the_root() {
+        let tmp = tempfile::tempdir().unwrap();
+        let file = tmp.path().join("notes.md");
+        std::fs::write(&file, "old").unwrap();
+
+        write_text(&file, tmp.path(), "new content").unwrap();
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), "new content");
+    }
+
+    #[test]
+    fn refuses_to_write_outside_the_root() {
+        let root = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let file = outside.path().join("secret.txt");
+        std::fs::write(&file, "old").unwrap();
+
+        let err = write_text(&file, root.path(), "new content").unwrap_err();
+        assert!(err.contains("outside"));
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), "old");
     }
 }
