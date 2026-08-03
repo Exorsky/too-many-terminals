@@ -30,8 +30,10 @@ See the auto-sleep section of
 [workspace-persistence.md](workspace-persistence.md).
 
 A **Usage** section adds a dropdown — **Refresh interval**
-(`usageRefreshSeconds`, default `300` (5 minutes), options 15s/30s/1m/5m) —
-how often the sidebar's usage meter re-reads token usage from disk. See
+(`usageRefreshSeconds`, default `300` (5 minutes), options 5m/15m/30m) — how
+often the sidebar's usage meter re-fetches your rate-limit percentages.
+Nothing faster is offered because Anthropic's usage endpoint rate-limits and
+the backend enforces its own 5-minute floor. See
 [usage-meter.md](usage-meter.md).
 
 ## Settings store

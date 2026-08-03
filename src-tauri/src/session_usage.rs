@@ -1,407 +1,314 @@
-use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::io::{BufRead, BufReader};
-use std::path::Path;
-use std::time::SystemTime;
+use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use chrono::{DateTime, Duration, Utc};
 use serde::Serialize;
 use serde_json::Value;
 
-/// Anthropic doesn't publish an API for this, so the whole module is a local
-/// estimate: real rolling-window usage blocks (5-hour session, 7-day week)
-/// reconstructed from your own transcript timestamps — the same rolling
-/// windows Claude's own rate limiting uses — with each window's ceiling
-/// calibrated from the biggest block you've actually hit rather than a
-/// hardcoded plan number (which changes over time and isn't the same for
-/// everyone). Read-only, offline, no credentials.
-const SESSION_DURATION: Duration = Duration::hours(5);
-const WEEK_DURATION: Duration = Duration::days(7);
-/// How far back to look for block history. Bounds the scan; needs to be well
-/// past a week so the 7-day window has enough completed blocks to calibrate
-/// from (5 blocks × 7 days = 35 days minimum for a percentile estimate).
-const SCAN_DAYS: i64 = 90;
-/// Below this many completed blocks, a percentile is just noise — use the
-/// plain max instead.
-const MIN_BLOCKS_FOR_PERCENTILE: usize = 5;
+// The official 5-hour / 7-day rate-limit numbers, from the same endpoint
+// Claude Code's own `/usage` uses (`fetchUtilization: GET /api/oauth/usage`),
+// authenticated with the OAuth token Claude Code already stores locally.
+//
+// Claude Code also caches its last response in `~/.claude.json` under
+// `cachedUsageUtilization`, but only refreshes it when it actually renders
+// usage — measured going 30+ minutes stale during continuous API traffic
+// (14% cached vs. 26% live). So the cache is the *fallback* for offline or
+// expired-token, never the primary, and `fetched_at_ms` is passed through so
+// the UI can say "as of N ago" instead of presenting it as live.
+//
+// We only ever *read* the token: an expired one falls back to the cache
+// rather than running a refresh flow, which could disturb Claude Code's own
+// session.
 
-/// One rolling-window's usage: how much of it you've used, when it resets,
-/// and an estimated ceiling calibrated from your own history.
+const USAGE_URL: &str = "https://api.anthropic.com/api/oauth/usage";
+const OAUTH_BETA: &str = "oauth-2025-04-20";
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
+/// The usage endpoint has its own rate limit and answers 429 when leaned on
+/// — a couple of calls ten minutes apart was enough to trip it during
+/// development, which is why Claude Code caches it at all. So the backend
+/// enforces its own floor between live calls no matter how fast the UI polls;
+/// `usage_refresh_seconds` can only ever poll *slower* than this.
+const MIN_FETCH_INTERVAL: Duration = Duration::from_secs(300);
+
+/// One rate-limit window as Anthropic reports it.
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct UsageWindow {
-    /// Tokens used in the current block; 0 when idle (no active block).
-    pub tokens_used: u64,
-    /// RFC3339 UTC start of the current block, if one is active.
-    pub block_start_iso: Option<String>,
-    /// RFC3339 UTC time the current block resets, if one is active.
-    pub block_end_iso: Option<String>,
-    /// The biggest completed block on record — an estimate of your typical
-    /// ceiling, not an official Anthropic limit. None until at least one
-    /// block has fully closed.
-    pub estimated_limit_tokens: Option<u64>,
-    /// How many completed blocks the estimate is based on, so the UI can
-    /// show "still calibrating" on a fresh install.
-    pub blocks_seen: usize,
+    /// Percent of the window consumed, 0-100.
+    pub percent: u8,
+    /// RFC3339 time the window resets.
+    pub resets_at_iso: String,
 }
 
-impl UsageWindow {
-    fn empty() -> Self {
-        Self { tokens_used: 0, block_start_iso: None, block_end_iso: None, estimated_limit_tokens: None, blocks_seen: 0 }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionUsageStats {
-    /// False only when there's no transcript history at all to estimate from.
+    /// False when neither the API nor the cache had anything to report.
     pub available: bool,
-    /// The 5-hour rolling session window.
-    pub session: UsageWindow,
-    /// The 7-day rolling week window.
-    pub week: UsageWindow,
-    /// Fresh tokens by model, scoped to the current week's active block (not
-    /// all-time) — empty if the week window is idle.
-    pub by_model: HashMap<String, u64>,
-    /// Cache-read tokens for the current week's active block.
-    pub cache_read_tokens: u64,
+    /// The 5-hour session window.
+    pub session: Option<UsageWindow>,
+    /// The 7-day weekly window.
+    pub week: Option<UsageWindow>,
+    /// Unix ms these numbers were fetched — now for a live read, the cache's
+    /// own timestamp for a fallback read.
+    pub fetched_at_ms: Option<u64>,
+    /// True when this came from Claude Code's cache rather than the API.
+    pub from_cache: bool,
 }
 
-fn u64_field(usage: &Value, key: &str) -> u64 {
-    usage.get(key).and_then(Value::as_u64).unwrap_or(0)
+pub fn credentials_path() -> Option<PathBuf> {
+    dirs::home_dir().map(|h| h.join(".claude").join(".credentials.json"))
 }
 
-/// One assistant turn, reduced to what the windows above need.
-struct Turn {
-    ts: DateTime<Utc>,
-    fresh_tokens: u64,
-    cache_read_tokens: u64,
-    model: String,
+pub fn config_path() -> Option<PathBuf> {
+    dirs::home_dir().map(|h| h.join(".claude.json"))
 }
 
-fn parse_line(line: &str, seen: &mut HashSet<String>) -> Option<Turn> {
-    let entry: Value = serde_json::from_str(line).ok()?;
-    if entry.get("type").and_then(Value::as_str) != Some("assistant") {
+fn now_ms() -> u64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64)
+}
+
+/// Both sources carry the same window shape — the cache is literally the API
+/// response with a timestamp wrapped around it — so one parser serves both.
+/// `utilization` arrives as a float (`26.0`), not an integer.
+fn window(utilization: &Value, key: &str) -> Option<UsageWindow> {
+    let w = utilization.get(key)?;
+    Some(UsageWindow {
+        percent: w.get("utilization")?.as_f64()?.round().clamp(0.0, 100.0) as u8,
+        resets_at_iso: w.get("resets_at")?.as_str()?.to_string(),
+    })
+}
+
+fn stats_from(utilization: &Value, fetched_at_ms: Option<u64>, from_cache: bool) -> SessionUsageStats {
+    let session = window(utilization, "five_hour");
+    let week = window(utilization, "seven_day");
+    SessionUsageStats { available: session.is_some() || week.is_some(), session, week, fetched_at_ms, from_cache }
+}
+
+// --- Live read ---
+
+/// macOS keeps the credentials in the login keychain instead of a file; the
+/// secret's body is the same JSON either way.
+#[cfg(target_os = "macos")]
+fn credentials_json(path: &Path) -> Option<String> {
+    if let Ok(body) = fs::read_to_string(path) {
+        return Some(body);
+    }
+    let out = std::process::Command::new("security")
+        .args(["find-generic-password", "-s", "Claude Code-credentials", "-w"])
+        .output()
+        .ok()?;
+    out.status.success().then(|| String::from_utf8_lossy(&out.stdout).trim().to_string())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn credentials_json(path: &Path) -> Option<String> {
+    fs::read_to_string(path).ok()
+}
+
+/// The stored access token, or None if it's missing or already expired — an
+/// expired token is a fall-back-to-cache case, not a refresh case.
+fn access_token(path: &Path) -> Option<String> {
+    let json: Value = serde_json::from_str(&credentials_json(path)?).ok()?;
+    let oauth = json.get("claudeAiOauth")?;
+    if oauth.get("expiresAt").and_then(Value::as_u64).is_some_and(|exp| exp <= now_ms()) {
         return None;
     }
-    let message = entry.get("message")?;
-    let usage = message.get("usage")?;
-    let timestamp = entry.get("timestamp").and_then(Value::as_str)?;
-    let ts = DateTime::parse_from_rfc3339(timestamp).ok()?.with_timezone(&Utc);
+    Some(oauth.get("accessToken")?.as_str()?.to_string())
+}
 
-    let dedupe_key = message
-        .get("id")
-        .and_then(Value::as_str)
-        .or_else(|| entry.get("requestId").and_then(Value::as_str));
-    if let Some(key) = dedupe_key {
-        if !seen.insert(key.to_string()) {
-            return None;
+async fn live_stats(credentials: &Path) -> Option<SessionUsageStats> {
+    let token = access_token(credentials)?;
+    let body = reqwest::Client::builder()
+        .timeout(REQUEST_TIMEOUT)
+        .build()
+        .ok()?
+        .get(USAGE_URL)
+        .bearer_auth(token)
+        .header("anthropic-beta", OAUTH_BETA)
+        .header("accept", "application/json")
+        .send()
+        .await
+        .ok()?
+        .error_for_status()
+        .ok()?
+        .text()
+        .await
+        .ok()?;
+    let utilization: Value = serde_json::from_str(&body).ok()?;
+    let stats = stats_from(&utilization, Some(now_ms()), false);
+    stats.available.then_some(stats)
+}
+
+// --- Cached fallback ---
+
+fn cached_stats(config: &Path) -> SessionUsageStats {
+    let Ok(raw) = fs::read_to_string(config) else { return SessionUsageStats::default() };
+    let Ok(json) = serde_json::from_str::<Value>(&raw) else { return SessionUsageStats::default() };
+    let Some(cached) = json.get("cachedUsageUtilization") else { return SessionUsageStats::default() };
+    let Some(utilization) = cached.get("utilization") else { return SessionUsageStats::default() };
+    stats_from(utilization, cached.get("fetchedAtMs").and_then(Value::as_u64), true)
+}
+
+/// Last successful live read, kept so a 429 or a dropped connection falls
+/// back to *our* few-minutes-old number rather than all the way to Claude
+/// Code's cache, which can be hours behind.
+static LAST_LIVE: Mutex<Option<(Instant, SessionUsageStats)>> = Mutex::new(None);
+
+/// Live where possible, then our own last good read, then Claude Code's
+/// cache. Anything but a fresh live read is flagged `from_cache` so the UI
+/// ages it honestly.
+pub async fn session_usage_stats(credentials: &Path, config: &Path) -> SessionUsageStats {
+    let recent = LAST_LIVE.lock().ok().and_then(|last| {
+        last.as_ref().map(|(at, stats)| (at.elapsed() < MIN_FETCH_INTERVAL, stats.clone()))
+    });
+    // Inside the floor, reuse the last read as-is rather than spending a call.
+    if let Some((true, stats)) = &recent {
+        return stats.clone();
+    }
+
+    if let Some(stats) = live_stats(credentials).await {
+        if let Ok(mut last) = LAST_LIVE.lock() {
+            *last = Some((Instant::now(), stats.clone()));
         }
+        return stats;
     }
 
-    let fresh_tokens = u64_field(usage, "input_tokens")
-        + u64_field(usage, "output_tokens")
-        + u64_field(usage, "cache_creation_input_tokens");
-    let model = message.get("model").and_then(Value::as_str).unwrap_or("unknown").to_string();
-    Some(Turn { ts, fresh_tokens, cache_read_tokens: u64_field(usage, "cache_read_input_tokens"), model })
-}
-
-/// Walks every transcript modified within `SCAN_DAYS`, returning every
-/// assistant turn. A file untouched in that window can't contain anything
-/// newer than that, so it's skipped without opening it.
-fn collect_turns(root: &Path, cutoff: SystemTime) -> Vec<Turn> {
-    let mut turns = Vec::new();
-    let mut seen = HashSet::new();
-    let Ok(project_dirs) = fs::read_dir(root) else { return turns };
-
-    for dir_entry in project_dirs.filter_map(|e| e.ok()) {
-        if !dir_entry.file_type().is_ok_and(|t| t.is_dir()) {
-            continue;
-        }
-        let Ok(files) = fs::read_dir(dir_entry.path()) else { continue };
-        for file in files.filter_map(|e| e.ok()) {
-            let path = file.path();
-            if path.extension().is_none_or(|ext| ext != "jsonl") {
-                continue;
-            }
-            let recent = file
-                .metadata()
-                .ok()
-                .and_then(|m| m.modified().ok())
-                .is_some_and(|mtime| mtime >= cutoff);
-            if !recent {
-                continue;
-            }
-            let Ok(f) = fs::File::open(&path) else { continue };
-            for line in BufReader::new(f).lines() {
-                let Ok(line) = line else { break };
-                if line.is_empty() {
-                    continue;
-                }
-                if let Some(turn) = parse_line(&line, &mut seen) {
-                    turns.push(turn);
-                }
-            }
-        }
-    }
-    turns
-}
-
-struct Block {
-    start: DateTime<Utc>,
-    end: DateTime<Utc>,
-    tokens: u64,
-}
-
-/// Groups timestamped entries into rolling windows of `duration`: a block
-/// starts at its first entry and absorbs everything until `duration` passes,
-/// at which point the next entry starts a new block. This is the same
-/// reconstruction community usage-monitor tools use, since Anthropic doesn't
-/// publish the exact boundary algorithm.
-fn build_blocks(mut entries: Vec<(DateTime<Utc>, u64)>, duration: Duration) -> Vec<Block> {
-    entries.sort_by_key(|(ts, _)| *ts);
-    let mut blocks: Vec<Block> = Vec::new();
-    for (ts, tokens) in entries {
-        match blocks.last_mut() {
-            Some(b) if ts < b.end => b.tokens += tokens,
-            _ => blocks.push(Block { start: ts, end: ts + duration, tokens }),
-        }
-    }
-    blocks
-}
-
-/// The biggest completed block, or (with enough history) the 90th percentile
-/// of block sizes — robust to one freak session skewing the estimate.
-fn estimate_limit(completed: &[Block]) -> Option<u64> {
-    if completed.is_empty() {
-        return None;
-    }
-    let mut totals: Vec<u64> = completed.iter().map(|b| b.tokens).collect();
-    totals.sort_unstable();
-    if totals.len() < MIN_BLOCKS_FOR_PERCENTILE {
-        return totals.last().copied();
-    }
-    let idx = (((totals.len() as f64) * 0.9).ceil() as usize).clamp(1, totals.len()) - 1;
-    Some(totals[idx])
-}
-
-/// A computed window plus the active block's raw time range (if any), so the
-/// caller can scope other data (like the per-model breakdown) to it without
-/// round-tripping through the window's own ISO strings.
-struct WindowResult {
-    window: UsageWindow,
-    active_range: Option<(DateTime<Utc>, DateTime<Utc>)>,
-}
-
-fn compute_window(entries: Vec<(DateTime<Utc>, u64)>, now: DateTime<Utc>, duration: Duration) -> WindowResult {
-    let blocks = build_blocks(entries, duration);
-    let (completed, active): (&[Block], Option<&Block>) = match blocks.split_last() {
-        Some((last, rest)) if now < last.end => (rest, Some(last)),
-        _ => (blocks.as_slice(), None),
-    };
-    WindowResult {
-        window: UsageWindow {
-            tokens_used: active.map_or(0, |b| b.tokens),
-            block_start_iso: active.map(|b| b.start.to_rfc3339()),
-            block_end_iso: active.map(|b| b.end.to_rfc3339()),
-            estimated_limit_tokens: estimate_limit(completed),
-            blocks_seen: completed.len(),
-        },
-        active_range: active.map(|b| (b.start, b.end)),
-    }
-}
-
-pub fn session_usage_stats(root: &Path) -> SessionUsageStats {
-    let now = Utc::now();
-    let cutoff = SystemTime::now() - std::time::Duration::from_secs((SCAN_DAYS * 24 * 60 * 60) as u64);
-    let turns = collect_turns(root, cutoff);
-    if turns.is_empty() {
-        return SessionUsageStats {
-            available: false,
-            session: UsageWindow::empty(),
-            week: UsageWindow::empty(),
-            by_model: HashMap::new(),
-            cache_read_tokens: 0,
-        };
-    }
-
-    let entries: Vec<(DateTime<Utc>, u64)> = turns.iter().map(|t| (t.ts, t.fresh_tokens)).collect();
-    let session_result = compute_window(entries.clone(), now, SESSION_DURATION);
-    let week_result = compute_window(entries, now, WEEK_DURATION);
-
-    let mut by_model: HashMap<String, u64> = HashMap::new();
-    let mut cache_read_tokens = 0u64;
-    if let Some((start, end)) = week_result.active_range {
-        for turn in &turns {
-            if turn.ts >= start && turn.ts < end {
-                *by_model.entry(turn.model.clone()).or_insert(0) += turn.fresh_tokens;
-                cache_read_tokens += turn.cache_read_tokens;
-            }
-        }
-    }
-
-    SessionUsageStats {
-        available: true,
-        session: session_result.window,
-        week: week_result.window,
-        by_model,
-        cache_read_tokens,
+    match recent {
+        Some((_, stats)) => SessionUsageStats { from_cache: true, ..stats },
+        None => cached_stats(config),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write;
 
-    fn write_transcript(root: &Path, project: &str, name: &str, lines: &[String]) {
-        let dir = root.join(project);
-        fs::create_dir_all(&dir).unwrap();
-        let mut f = fs::File::create(dir.join(format!("{name}.jsonl"))).unwrap();
-        for line in lines {
-            writeln!(f, "{line}").unwrap();
-        }
+    fn write(name: &str, body: &str) -> (tempfile::TempDir, PathBuf) {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join(name);
+        fs::write(&path, body).unwrap();
+        (tmp, path)
     }
 
-    fn assistant_line(id: &str, iso: &str, model: &str, input: u64, output: u64, cache_w: u64, cache_r: u64) -> String {
-        format!(
-            r#"{{"type":"assistant","timestamp":"{iso}","message":{{"id":"{id}","model":"{model}","usage":{{"input_tokens":{input},"output_tokens":{output},"cache_creation_input_tokens":{cache_w},"cache_read_input_tokens":{cache_r}}}}}}}"#
+    // --- window parsing, shared by both sources ---
+
+    #[test]
+    fn parses_the_float_percentages_the_api_actually_returns() {
+        // The live endpoint sends `26.0`, not `26` — reading these as
+        // integers silently yields nothing.
+        let v: Value = serde_json::from_str(
+            r#"{"five_hour":{"utilization":26.0,"resets_at":"2026-08-03T19:20:00Z"},
+                "seven_day":{"utilization":17.4,"resets_at":"2026-08-08T18:00:00Z"}}"#,
         )
-    }
-
-    // --- build_blocks / estimate_limit: pure, no filesystem ---
-
-    fn e(iso: &str, tokens: u64) -> (DateTime<Utc>, u64) {
-        (DateTime::parse_from_rfc3339(iso).unwrap().with_timezone(&Utc), tokens)
-    }
-
-    #[test]
-    fn accumulates_within_a_block_and_splits_after_the_duration() {
-        let blocks = build_blocks(
-            vec![
-                e("2026-01-01T10:00:00Z", 100),
-                e("2026-01-01T12:00:00Z", 50), // +2h, same block
-                e("2026-01-01T15:30:00Z", 25), // +5.5h from start, new block
-            ],
-            Duration::hours(5),
-        );
-        assert_eq!(blocks.len(), 2);
-        assert_eq!(blocks[0].tokens, 150);
-        assert_eq!(blocks[1].tokens, 25);
+        .unwrap();
+        let stats = stats_from(&v, None, false);
+        assert_eq!(stats.session.unwrap().percent, 26);
+        assert_eq!(stats.week.unwrap().percent, 17);
     }
 
     #[test]
-    fn a_block_boundary_at_exactly_the_duration_starts_a_new_block() {
-        let blocks = build_blocks(
-            vec![e("2026-01-01T10:00:00Z", 100), e("2026-01-01T15:00:00Z", 100)], // exactly +5h
-            Duration::hours(5),
-        );
-        assert_eq!(blocks.len(), 2);
-    }
-
-    #[test]
-    fn a_seven_day_block_absorbs_activity_across_the_whole_week() {
-        let blocks = build_blocks(
-            vec![e("2026-01-01T00:00:00Z", 100), e("2026-01-06T00:00:00Z", 50)], // +5 days, same week block
-            Duration::days(7),
-        );
-        assert_eq!(blocks.len(), 1);
-        assert_eq!(blocks[0].tokens, 150);
-    }
-
-    #[test]
-    fn estimate_uses_max_under_five_blocks() {
-        let blocks = build_blocks(
-            vec![e("2026-01-01T00:00:00Z", 10), e("2026-01-02T00:00:00Z", 50), e("2026-01-03T00:00:00Z", 30)],
-            Duration::hours(5),
-        );
-        assert_eq!(estimate_limit(&blocks), Some(50));
-    }
-
-    #[test]
-    fn estimate_uses_p90_with_enough_blocks() {
-        let entries: Vec<_> = (1..=10).map(|i| e(&format!("2026-01-{:02}T00:00:00Z", i), i * 10)).collect();
-        let blocks = build_blocks(entries, Duration::hours(5));
-        assert_eq!(blocks.len(), 10);
-        // 90th percentile of [10,20,...,100] (ceil(10*0.9)=9th, 1-indexed) = 90.
-        assert_eq!(estimate_limit(&blocks), Some(90));
-    }
-
-    // --- session_usage_stats: full read path via tempfile ---
-
-    #[test]
-    fn reports_an_active_session_and_week_with_time_remaining() {
-        let tmp = tempfile::tempdir().unwrap();
-        let now = Utc::now();
-        let started = (now - Duration::hours(1)).to_rfc3339();
-        write_transcript(tmp.path(), "p1", "s1", &[assistant_line("m1", &started, "claude-sonnet-5", 100, 50, 0, 0)]);
-
-        let stats = session_usage_stats(tmp.path());
+    fn a_null_window_is_skipped_not_faked() {
+        let v: Value =
+            serde_json::from_str(r#"{"five_hour":{"utilization":3.0,"resets_at":"x"},"seven_day":null,"seven_day_opus":null}"#).unwrap();
+        let stats = stats_from(&v, None, false);
         assert!(stats.available);
-        assert_eq!(stats.session.tokens_used, 150);
-        assert!(stats.session.block_end_iso.is_some());
-        assert_eq!(stats.week.tokens_used, 150);
-        assert!(stats.week.block_end_iso.is_some());
-        assert_eq!(stats.by_model["claude-sonnet-5"], 150);
+        assert!(stats.week.is_none());
+    }
+
+    // --- token handling ---
+
+    #[test]
+    fn reads_an_unexpired_token() {
+        let future = now_ms() + 60_000;
+        let (_t, path) = write(".credentials.json", &format!(r#"{{"claudeAiOauth":{{"accessToken":"tok","expiresAt":{future}}}}}"#));
+        assert_eq!(access_token(&path).as_deref(), Some("tok"));
     }
 
     #[test]
-    fn session_idles_out_after_five_hours_but_the_week_keeps_going() {
-        let tmp = tempfile::tempdir().unwrap();
-        let now = Utc::now();
-        let ts = (now - Duration::hours(8)).to_rfc3339(); // past session window, well within the week
-        write_transcript(tmp.path(), "p1", "s1", &[assistant_line("m1", &ts, "claude-sonnet-5", 100, 0, 0, 0)]);
-
-        let stats = session_usage_stats(tmp.path());
-        assert_eq!(stats.session.tokens_used, 0);
-        assert!(stats.session.block_end_iso.is_none());
-        // That expired session block is the only one on record, so it becomes the estimate.
-        assert_eq!(stats.session.estimated_limit_tokens, Some(100));
-        assert_eq!(stats.week.tokens_used, 100);
-        assert!(stats.week.block_end_iso.is_some());
+    fn an_expired_token_falls_back_instead_of_refreshing() {
+        let past = now_ms() - 60_000;
+        let (_t, path) = write(".credentials.json", &format!(r#"{{"claudeAiOauth":{{"accessToken":"tok","expiresAt":{past}}}}}"#));
+        assert_eq!(access_token(&path), None);
     }
 
     #[test]
-    fn breakdown_is_scoped_to_the_active_week_block_only() {
+    fn missing_or_corrupt_credentials_yield_no_token() {
         let tmp = tempfile::tempdir().unwrap();
-        let now = Utc::now();
-        let old = (now - Duration::days(30)).to_rfc3339(); // a past, closed week block
-        let recent = (now - Duration::hours(1)).to_rfc3339(); // the active week block
-        write_transcript(
-            tmp.path(),
-            "p1",
-            "s1",
-            &[
-                assistant_line("old", &old, "claude-haiku-4-5", 999, 0, 0, 0),
-                assistant_line("new", &recent, "claude-sonnet-5", 100, 0, 0, 500),
-            ],
+        assert_eq!(access_token(&tmp.path().join("nope.json")), None);
+        let (_t, path) = write(".credentials.json", "{not json");
+        assert_eq!(access_token(&path), None);
+    }
+
+    // --- cached fallback ---
+
+    #[test]
+    fn falls_back_to_the_cache_and_flags_it_as_cached() {
+        let (_t, path) = write(
+            ".claude.json",
+            r#"{"cachedUsageUtilization":{"fetchedAtMs":1785767449619,"utilization":{
+                "five_hour":{"utilization":14.0,"resets_at":"2026-08-03T19:20:00Z"},
+                "seven_day":{"utilization":16.0,"resets_at":"2026-08-08T18:00:00Z"}}}}"#,
         );
-
-        let stats = session_usage_stats(tmp.path());
-        assert_eq!(stats.by_model.len(), 1);
-        assert_eq!(stats.by_model["claude-sonnet-5"], 100);
-        assert_eq!(stats.cache_read_tokens, 500);
+        let stats = cached_stats(&path);
+        assert!(stats.available && stats.from_cache);
+        assert_eq!(stats.session.unwrap().percent, 14);
+        assert_eq!(stats.fetched_at_ms, Some(1785767449619));
     }
 
     #[test]
-    fn dedupes_repeated_message_ids() {
+    fn no_cache_and_no_token_reports_unavailable() {
+        let (_t, path) = write(".claude.json", r#"{"projects":{}}"#);
+        assert!(!cached_stats(&path).available);
         let tmp = tempfile::tempdir().unwrap();
-        let now = Utc::now();
-        let ts = (now - Duration::minutes(1)).to_rfc3339();
-        let line = assistant_line("dup", &ts, "claude-sonnet-5", 100, 0, 0, 0);
-        write_transcript(tmp.path(), "p1", "s1", &[line.clone(), line]);
-
-        let stats = session_usage_stats(tmp.path());
-        assert_eq!(stats.session.tokens_used, 100);
+        assert!(!cached_stats(&tmp.path().join("nope.json")).available);
     }
 
-    #[test]
-    fn missing_root_reports_unavailable() {
-        let tmp = tempfile::tempdir().unwrap();
-        let stats = session_usage_stats(&tmp.path().join("nope"));
-        assert!(!stats.available);
-        assert_eq!(stats.session.blocks_seen, 0);
-        assert_eq!(stats.week.blocks_seen, 0);
-        assert!(stats.by_model.is_empty());
+    /// Hits the real endpoint with your real token. Ignored by default —
+    /// it needs network and a logged-in Claude Code — but it's the only
+    /// thing that proves the URL, headers and response shape still hold:
+    /// `cargo test -- --ignored live_fetch`.
+    #[tokio::test]
+    #[ignore]
+    async fn live_fetch_hits_the_real_endpoint() {
+        let creds = credentials_path().unwrap();
+        assert!(access_token(&creds).is_some(), "no usable token at {creds:?}");
+
+        let status = reqwest::Client::builder()
+            .timeout(REQUEST_TIMEOUT)
+            .build()
+            .unwrap()
+            .get(USAGE_URL)
+            .bearer_auth(access_token(&creds).unwrap())
+            .header("anthropic-beta", OAUTH_BETA)
+            .header("accept", "application/json")
+            .send()
+            .await
+            .expect("request failed")
+            .status();
+
+        // 429 means the endpoint's own rate limit, not a broken integration —
+        // exactly the case the cache fallback exists for.
+        if status == 429 {
+            eprintln!("usage endpoint rate-limited; auth and URL are fine, try again later");
+            return;
+        }
+        assert_eq!(status, 200);
+
+        let stats = live_stats(&creds).await.expect("live fetch failed");
+        assert!(!stats.from_cache);
+        assert!(stats.session.is_some(), "no five_hour window in the response");
+    }
+
+    #[tokio::test]
+    async fn no_credentials_at_all_still_serves_the_cache() {
+        let (_t, config) = write(
+            ".claude.json",
+            r#"{"cachedUsageUtilization":{"utilization":{"five_hour":{"utilization":9.0,"resets_at":"x"}}}}"#,
+        );
+        let stats = session_usage_stats(Path::new("/nonexistent/.credentials.json"), &config).await;
+        assert!(stats.from_cache);
+        assert_eq!(stats.session.unwrap().percent, 9);
     }
 }

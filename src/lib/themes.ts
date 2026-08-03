@@ -1,7 +1,7 @@
 /**
  * Theme system: built-in presets + user-defined custom themes.
  *
- * A theme is 12 editable core colors; every other UI token (muted/accent/
+ * A theme is 13 editable core colors; every other UI token (muted/accent/
  * secondary surfaces, on-color foregrounds, xterm brights) is derived so
  * custom themes stay coherent. `applyTheme` restyles the shell via CSS
  * variables on <html> and mutates every cached xterm instance — no React
@@ -23,6 +23,9 @@ export interface ThemeColors {
   primary: string;
   /** Secondary text, ansi brightBlack. */
   mutedForeground: string;
+  /** Usage meter bar below the warning threshold. App chrome only — it has
+   *  no ansi counterpart, which is why it isn't just reused from `primary`. */
+  usage: string;
   /** ansi red. */
   destructive: string;
   /** ansi green. */
@@ -51,6 +54,7 @@ export const THEME_COLOR_KEYS: (keyof ThemeColors)[] = [
   'border',
   'primary',
   'mutedForeground',
+  'usage',
   'destructive',
   'success',
   'warning',
@@ -67,6 +71,7 @@ export const THEME_COLOR_LABELS: Record<keyof ThemeColors, string> = {
   border: 'Border',
   primary: 'Accent',
   mutedForeground: 'Muted text',
+  usage: 'Usage bar',
   destructive: 'Red',
   success: 'Green',
   warning: 'Yellow',
@@ -95,7 +100,7 @@ export function mix(a: string, b: string, t: number): string {
   return out;
 }
 
-/** Full set of CSS custom properties derived from the 12 core colors. */
+/** Full set of CSS custom properties derived from the 13 core colors. */
 export function cssVars(c: ThemeColors): Record<string, string> {
   return {
     '--background': c.background,
@@ -123,6 +128,7 @@ export function cssVars(c: ThemeColors): Record<string, string> {
     '--warning': c.warning,
     '--warning-foreground': c.background,
     '--attention': mix(c.warning, c.destructive, 0.5),
+    '--usage': c.usage,
   };
 }
 
@@ -163,6 +169,7 @@ export const DEFAULT_THEME: Theme = {
     border: '#23252d',
     primary: '#7c9eff',
     mutedForeground: '#666b78',
+    usage: '#7c9eff',
     destructive: '#ff6b6b',
     success: '#8bd17c',
     warning: '#f0b357',
@@ -185,6 +192,7 @@ export const PRESETS: Theme[] = [
       border: '#2b2820',
       primary: '#e8b45a',
       mutedForeground: '#7a7362',
+      usage: '#e8b45a',
       destructive: '#ff6b6b',
       success: '#a8c97a',
       warning: '#f0b357',
@@ -204,6 +212,7 @@ export const PRESETS: Theme[] = [
       border: '#262334',
       primary: '#b48eff',
       mutedForeground: '#6f6a84',
+      usage: '#b48eff',
       destructive: '#ff6b8a',
       success: '#8bd17c',
       warning: '#e0a458',
@@ -223,6 +232,7 @@ export const PRESETS: Theme[] = [
       border: '#1f2b27',
       primary: '#5fd4a0',
       mutedForeground: '#62766e',
+      usage: '#5fd4a0',
       destructive: '#ff7a70',
       success: '#7cd190',
       warning: '#d8c268',

@@ -50,36 +50,28 @@ export function projectHue(index: number): number {
   return PROJECT_COLORS[index % PROJECT_COLORS.length].hue;
 }
 
-// --- Session usage (an estimate of the current 5-hour / 7-day rate-limit
-// windows, scanned from ~/.claude/projects/**/*.jsonl) ---
+// --- Session usage (the official 5-hour / 7-day rate-limit windows, fetched
+// live from the same endpoint Claude Code's own /usage uses) ---
 
 export interface UsageWindow {
-  /** Tokens used in the current block; 0 when idle (no active block). */
-  tokensUsed: number;
-  /** ISO start of the current block, if one is active. */
-  blockStartIso: string | null;
-  /** ISO time the current block resets, if one is active. */
-  blockEndIso: string | null;
-  /** The biggest completed block on record — an estimate of your typical
-   *  ceiling, not an official Anthropic limit. Null until at least one block
-   *  has fully closed. */
-  estimatedLimitTokens: number | null;
-  /** How many completed blocks the estimate is based on. */
-  blocksSeen: number;
+  /** Percent of the window consumed, 0-100. */
+  percent: number;
+  /** ISO time the window resets. */
+  resetsAtIso: string;
 }
 
 export interface SessionUsageStats {
-  /** False only when there's no transcript history at all to estimate from. */
+  /** False when neither the API nor the cache had anything to report. */
   available: boolean;
-  /** The 5-hour rolling session window. */
-  session: UsageWindow;
-  /** The 7-day rolling week window. */
-  week: UsageWindow;
-  /** Fresh tokens by model, scoped to the current week's active block (not
-   *  all-time) — empty if the week window is idle. */
-  byModel: Record<string, number>;
-  /** Cache-read tokens for the current week's active block. */
-  cacheReadTokens: number;
+  /** The 5-hour session window. */
+  session: UsageWindow | null;
+  /** The 7-day weekly window. */
+  week: UsageWindow | null;
+  /** Unix ms these numbers were fetched. */
+  fetchedAtMs: number | null;
+  /** True when the live fetch failed and this fell back to Claude Code's
+   *  cache — which can be badly stale, so the UI says so. */
+  fromCache: boolean;
 }
 
 // --- Session history (past Claude Code sessions for the current project) ---

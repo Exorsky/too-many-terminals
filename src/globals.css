@@ -29,6 +29,7 @@
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
   --color-attention: var(--attention);
+  --color-usage: var(--usage);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -62,6 +63,7 @@
   --warning: #f0b357;
   --warning-foreground: #0c0d10;
   --attention: #ff9f5a;
+  --usage: #7c9eff;
 
   /* Project tint (set from React based on active project) */
   --project-hue: 0;

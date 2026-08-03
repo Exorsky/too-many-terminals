@@ -116,8 +116,8 @@ export function readTranscript(projectDir: string, sessionId: string): Promise<T
   return invoke('read_transcript', { projectDir, sessionId });
 }
 
-/** An estimate of the current 5-hour session and 7-day week rate-limit
- *  windows, reconstructed from local transcript timestamps — see
+/** The official 5-hour session and 7-day week rate-limit windows, read from
+ *  the usage data Claude Code caches in ~/.claude.json — see
  *  docs/features/usage-meter.md. */
 export function getSessionUsageStats(): Promise<SessionUsageStats> {
   return invoke('get_session_usage_stats');

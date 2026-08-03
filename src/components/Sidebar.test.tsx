@@ -63,11 +63,9 @@ function renderSidebar(overrides: Partial<React.ComponentProps<typeof Sidebar>> 
   return { ...props, container };
 }
 
-const EMPTY_WINDOW = { tokensUsed: 0, blockStartIso: null, blockEndIso: null, estimatedLimitTokens: null, blocksSeen: 0 };
-
 beforeEach(() => {
   vi.mocked(ipc.getSessionUsageStats).mockResolvedValue({
-    available: false, session: EMPTY_WINDOW, week: EMPTY_WINDOW, byModel: {}, cacheReadTokens: 0,
+    available: false, session: null, week: null, fetchedAtMs: null, fromCache: false,
   });
 });
 afterEach(cleanup);

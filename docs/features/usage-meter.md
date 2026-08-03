@@ -1,93 +1,86 @@
 # Usage meter
 
-The sidebar footer shows two rolling rate-limit windows, both reconstructed
-entirely from Claude Code's own local transcripts
-(`~/.claude/projects/**/*.jsonl`) — no network calls, no credentials, works
-identically on Windows/macOS/Linux:
+The sidebar footer shows the two rate-limit windows Anthropic actually
+enforces, with the **official** percentages — the same numbers `/usage` prints
+inside Claude Code:
 
-1. **Session** — the current 5-hour block: tokens used, a percentage and
-   progress bar against an estimated ceiling, a live countdown to reset.
-2. **This week** — the same, but for the current 7-day block. Expands into a
-   per-model breakdown (+ cache reads) scoped to that week's active block.
+1. **Session** — the 5-hour window: percent used, a progress bar, a live
+   countdown to reset.
+2. **This week** — the same, for the 7-day window.
 
-Either row shows "no active window" when idle; the whole meter disappears on
-a fresh install with no transcript history yet. There's no calendar-day
-metric anymore — both windows are rolling, matching how Claude's actual rate
-limits work, rather than resetting arbitrarily at UTC midnight.
+The meter disappears entirely when there's nothing to report. A window the API
+doesn't return (e.g. no weekly limit on your plan) is omitted rather than
+faked.
 
-## Why "estimate" and not a real limit
+## Where the numbers come from
 
-There is no public Anthropic API for a Claude Code user's current rate-limit
-usage or their plan's exact token ceiling — confirmed by checking (a) the
-`claude` CLI for a machine-readable equivalent of the interactive `/usage`
-command (none exists — see
-[anthropics/claude-code#40793](https://github.com/anthropics/claude-code/issues/40793)),
-and (b) whether Claude Code caches usage/rate-limit state locally in a
-readable file (it doesn't; only transcripts are on disk). The only other route
-— reading the OAuth token Claude Code stores locally and calling Anthropic's
-API directly to read rate-limit response headers — is undocumented,
-credential-handling, and platform-inconsistent (a plain JSON file on Windows;
-OS keychains on macOS/Linux), so it was deliberately not built. Everything
-below is reconstructed from your own transcript timestamps instead, the same
-technique community "Claude usage monitor" tools use.
+`GET https://api.anthropic.com/api/oauth/usage` — the same endpoint Claude
+Code's own `/usage` calls (its binary logs it as `fetchUtilization: GET
+/api/oauth/usage`). Authenticated with the OAuth token Claude Code already
+stores locally, sent as `Authorization: Bearer <token>` plus
+`anthropic-beta: oauth-2025-04-20`.
 
-## How each window is computed
+The response body is the window set directly; `utilization` is a **float**:
 
-`src-tauri/src/session_usage.rs`:
+```json
+{"five_hour": {"utilization": 26.0, "resets_at": "2026-08-03T19:20:00Z"},
+ "seven_day": {"utilization": 17.0, "resets_at": "2026-08-08T18:00:00Z"}}
+```
 
-- Scans transcripts modified in the last 90 days (bounds the read; also gives
-  the 7-day window enough history to calibrate from — five 7-day blocks alone
-  need 35 days).
-- Extracts one `Turn` per assistant entry (timestamp, fresh tokens, cache-read
-  tokens, model), deduped by `message.id` (fallback `requestId`). **Fresh
-  tokens** = input + output + cache-write; cache reads are tracked separately
-  (near-free re-reads that would dwarf everything else).
-- **Blocks**: sorts every turn chronologically and groups them into rolling
-  windows of a given duration (5 hours for the session, 7 days for the week)
-  — a block starts at its first turn and absorbs everything until the
-  duration passes; the next turn after that starts a new block. Both windows
-  run this over the *same* scanned turns, just with a different duration —
-  this mirrors Claude's own rolling-window rate limiting, reconstructed
-  rather than queried since the exact boundary algorithm isn't published.
-- **Active block**: the most recent block for that duration, if "now" still
-  falls before its end. If it's already expired, the window is idle —
-  `tokensUsed: 0`, no countdown, next block starts on your next message. (The
-  session can idle out on its own 5-hour clock while the week block it's
-  nested inside is still very much active.)
-- **Estimated limit**: the biggest *completed* block on record for that
-  duration (fewer than 5 of them) or their 90th percentile (5+) — a personal
-  "your usual ceiling" reference, explicitly not an official number. `null`
-  until at least one block of that duration has fully closed, shown as
-  "still calibrating".
-- **Model breakdown**: fresh tokens and cache reads, summed only over turns
-  falling inside the *current week's* active block — not all-time, not the
-  session block.
+**Token handling.** Read-only, never refreshed: `~/.claude/.credentials.json`
+→ `claudeAiOauth.accessToken`, skipped if `expiresAt` has passed. Running the
+refresh flow ourselves could disturb Claude Code's own session, so an expired
+token is a fall-back case, not a re-auth case. macOS keeps the same JSON in
+the login keychain instead of a file, read via
+`security find-generic-password -s "Claude Code-credentials" -w`.
 
-## Display
+## Fallback chain
 
-`UsageMeter.tsx` — one `WindowRow` per window (`Session` and `This week`,
-sharing the same component):
+The usage endpoint **has its own rate limit** and answers `429` when leaned on
+— two calls ten minutes apart tripped it during development. (This is why
+Claude Code caches it at all, and why its changelog has "`/usage` now shows
+your last-known usage bars with an 'as of' note when the usage endpoint is
+rate-limited".) So:
 
-- `NN% · resets in Hh Mm` (or `Nd Hh` past a day) plus `Xk / ~Yk tokens`, with
-  a bar colored success (<70%) / warning (70–90%) / destructive (≥90%)
-  against the estimate. The countdown ticks locally every second (no extra
-  IPC calls); the token count and estimate refresh on the poll interval. No
-  estimate yet → a calibrating notice instead of the bar.
-- **Breakdown by model**, shown only when the week has data — click to expand
-  the per-model list plus a cache-reads line, both scoped to the current
-  week's block.
-- Polled on **Settings → General → Usage → Refresh interval**
-  (`usageRefreshSeconds`, default 5 minutes; see [settings.md](settings.md)).
+1. **Live fetch** — but never more than once per `MIN_FETCH_INTERVAL`
+   (5 minutes), enforced in the backend regardless of how fast the UI polls.
+2. **Our own last good read**, held in memory — covers a 429 or a dropped
+   connection without falling all the way back to disk.
+3. **Claude Code's cache**, `~/.claude.json` → `cachedUsageUtilization` —
+   only when we've never had a live read (cold start while offline). Measured
+   going 30+ minutes stale during continuous API traffic (14% cached vs. 26%
+   live), and a plain `claude -p` run doesn't refresh it, so it is strictly a
+   last resort.
+
+Anything past step 1 is flagged `fromCache`, and the UI appends
+"cached — as of Nh Nm ago" past 5 minutes rather than presenting a stale
+percentage as live.
+
+> **Previously** this module estimated usage by scanning every transcript in
+> `~/.claude/projects/**/*.jsonl`, summing tokens into rolling blocks and
+> calibrating a "ceiling" from your own biggest past block. That was
+> inherently wrong: a ceiling derived from your own p90 usage puts a typical
+> user near 40% by construction, so it read 43% while the real figure was 15%.
+> The block chain, the percentile estimator and the per-model token breakdown
+> were all deleted.
 
 ## Files
 
-- `src-tauri/src/session_usage.rs` (+ unit tests: block splitting/boundary at
-  both durations, P90 vs. max estimate, session-idle-but-week-active,
-  breakdown scoping, dedupe, missing root).
-- `src-tauri/src/commands.rs` — `get_session_usage_stats`.
+- `src-tauri/src/session_usage.rs` — `session_usage_stats()` and the fallback
+  chain. Unit tests cover the float parsing, a null window, token expiry,
+  corrupt credentials, and the cache fallback. One **network** test,
+  `#[ignore]`d so CI never depends on it, proves the URL/headers/response
+  shape still hold: `cargo test -- --ignored live_fetch` (it treats a 429 as a
+  pass with a note, since that's the endpoint's limit, not a broken build).
+- `src-tauri/src/commands.rs` — `get_session_usage_stats` (async).
+- `src-tauri/Cargo.toml` — `reqwest` with **rustls** rather than the default
+  native-tls, so the one network call needs no system OpenSSL on Linux.
 - `src-tauri/src/settings.rs` — `usage_refresh_seconds` (default 300).
-- `src/components/UsageMeter.tsx` (+ `UsageMeter.test.tsx`) — `WindowRow` +
-  the breakdown section.
-- `src/components/SettingsView.tsx` — the refresh-interval dropdown.
-- `src/types.ts` — `UsageWindow`, `SessionUsageStats`,
-  `AppSettings.usageRefreshSeconds`.
+- `src/components/UsageMeter.tsx` (+ `UsageMeter.test.tsx`) — `WindowRow`; the
+  reset countdown ticks locally every second so it doesn't stall between
+  polls. The bar uses the themeable `usage` color below 70%, then escalates to
+  `warning` and `destructive` — that escalation is deliberately not themeable,
+  it's a signal rather than decoration. See [themes.md](themes.md).
+- `src/components/SettingsView.tsx` — the refresh-interval dropdown (5m/15m/
+  30m; nothing faster, see above).
+- `src/types.ts` — `UsageWindow`, `SessionUsageStats`.

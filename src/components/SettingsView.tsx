@@ -21,11 +21,13 @@ const AUTO_SLEEP_OPTIONS = [
   { label: '60 minutes', value: 60 },
 ];
 
+// Anthropic's usage endpoint rate-limits, so the backend won't call it more
+// than once every 5 minutes regardless — offering anything faster here would
+// just re-serve the same numbers.
 const USAGE_REFRESH_OPTIONS = [
-  { label: '15 seconds', value: 15 },
-  { label: '30 seconds', value: 30 },
-  { label: '1 minute', value: 60 },
   { label: '5 minutes', value: 300 },
+  { label: '15 minutes', value: 900 },
+  { label: '30 minutes', value: 1800 },
 ];
 
 function Switch({ checked, disabled, onChange, label }: {
@@ -192,7 +194,7 @@ function GeneralTab() {
       </div>
       <ChoiceRow
         title="Refresh interval"
-        description="How often the sidebar re-reads token usage from disk — the session countdown ticks live in between."
+        description="How often the sidebar re-fetches your usage percentages — the reset countdowns tick live in between."
         value={settings.usageRefreshSeconds}
         options={USAGE_REFRESH_OPTIONS}
         onChange={(v) => patchSettings({ usageRefreshSeconds: v })}

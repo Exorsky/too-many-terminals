@@ -6,11 +6,13 @@ properties) and every terminal (xterm `ITheme`), live and across restarts.
 
 ## Data model
 
-A theme is 12 editable core colors (`ThemeColors` in `src/lib/themes.ts`):
-background, foreground, card, border, primary (accent), mutedForeground, and
-the terminal palette (destructive/red, success/green, warning/yellow, magenta,
-cyan, selection). Everything else is **derived** so custom themes stay
-coherent:
+A theme is 13 editable core colors (`ThemeColors` in `src/lib/themes.ts`):
+background, foreground, card, border, primary (accent), mutedForeground,
+`usage` (the usage meter's bar — app chrome with no ansi counterpart, which
+is why it isn't just reused from primary; defaults to each preset's own accent
+so it's coherent out of the box), and the terminal palette (destructive/red,
+success/green, warning/yellow, magenta, cyan, selection). Everything else is
+**derived** so custom themes stay coherent:
 
 - Surfaces: `--muted` / `--accent` / `--secondary` are lerps from background
   toward foreground (`mix()`, ratios chosen to reproduce the original
@@ -51,7 +53,7 @@ frontend owns the shape and validates on load with `sanitizeCustomThemes`
   badge or edit/delete buttons, duplicate button on every card. Clicking a
   card applies and persists immediately.
 - "New theme" duplicates the currently selected theme into an editable copy.
-- The editor (inline, custom themes only): name field + 12 color inputs with
+- The editor (inline, custom themes only): name field + 13 color inputs with
   live preview on every change; **Save** persists, **Delete** removes the
   theme and falls selection back to Default. Built-ins are read-only.
 
