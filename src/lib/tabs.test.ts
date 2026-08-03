@@ -123,6 +123,16 @@ describe('tabsReducer', () => {
     expect(state.tabs[0].dirty).toBe(false);
   });
 
+  it('pin updates only the named tab, leaving others untouched', () => {
+    let state = stateWith('a', 'b');
+    state = tabsReducer(state, { type: 'pin', tabId: 'a', pinned: true });
+    expect(state.tabs[0].pinned).toBe(true);
+    expect(state.tabs[1].pinned).toBeUndefined();
+
+    state = tabsReducer(state, { type: 'pin', tabId: 'a', pinned: false });
+    expect(state.tabs[0].pinned).toBe(false);
+  });
+
   it('reorderTab drops before or after the target within its folder', () => {
     let state = stateWith('a', 'b', 'c');
     // "after c" lands a at the end — a plain insert-before couldn't reach it.

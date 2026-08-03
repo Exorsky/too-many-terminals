@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, type MutableRefObject } from 'react';
 import {
   CheckCircle2, ChevronRight, Circle, File, FileText, Folder, FolderOpen, FolderPlus, FolderTree, History, Loader2,
-  MessageCircle, Moon, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Settings, Sparkles, TerminalSquare, X,
+  MessageCircle, Moon, PanelLeftClose, PanelLeftOpen, Pencil, Pin, PinOff, Plus, Search, Settings, Sparkles,
+  TerminalSquare, X,
 } from 'lucide-react';
 import { cn, folderName } from '@/lib/utils';
 import { projectHue, type ShellOption, type Tab, type TabStatus } from '@/types';
-import UsageMeter from './UsageMeter';
+import SidebarFooter from './SidebarFooter';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -40,6 +41,8 @@ interface SidebarProps {
   onNewClaudeTab: (dir: string) => void;
   onNewShellTab: (dir: string, shellId: string) => void;
   onRenameTab: (tabId: string, name: string) => void;
+  onTogglePin: (tabId: string) => void;
+  onOpenSearch: () => void;
   onToggleHistory: () => void;
   onToggleSettings: () => void;
   onToggleFiles: () => void;
@@ -130,7 +133,7 @@ function AttentionStrip({ tabs, projects, activeTabId, showHistory, onSelectTab 
 
   return (
     <div
-      className="mx-2 mt-2 mb-1 rounded-md border overflow-hidden shrink-0"
+      className="mx-2 mt-1 mb-1 rounded-md border overflow-hidden shrink-0"
       style={{ borderColor: 'rgba(255,159,90,0.28)', backgroundColor: 'rgba(255,159,90,0.05)' }}
     >
       <div className="flex items-center gap-1.5 px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-attention">
@@ -172,6 +175,70 @@ function AttentionStrip({ tabs, projects, activeTabId, showHistory, onSelectTab 
   );
 }
 
+/** The user-pinned sessions, gathered across every folder so a session you
+ *  check often doesn't need a scroll through unrelated folders to reach.
+ *  Same visual family as "Waiting on you" below it — primary blue for what
+ *  you asked for, attention orange for what's blocking you. Pin/unpin lives
+ *  in each session's own context menu (see TabRow), not a control here. */
+function PinnedStrip({
+  tabs, projects, activeTabId, showHistory, markdownEnabled,
+  onSelectTab, onCloseTab, onReadTab, onRenameTab, onOpenDirectory, onTogglePin,
+}: {
+  tabs: Tab[];
+  projects: string[];
+  activeTabId: string | null;
+  showHistory: boolean;
+  markdownEnabled: boolean;
+  onSelectTab: (tabId: string) => void;
+  onCloseTab: (tabId: string) => void;
+  onReadTab: (tab: Tab) => void;
+  onRenameTab: (tabId: string, name: string) => void;
+  onOpenDirectory: (dir: string) => void;
+  onTogglePin: (tabId: string) => void;
+}) {
+  // Not a drop target for reordering — pinned sessions span folders, so a
+  // shared ref (with no-op reorder below) just satisfies TabRow's contract.
+  const dragRef = useRef<DragItem | null>(null);
+  const pinned = tabs.filter((t) => t.pinned && !t.exited);
+  if (pinned.length === 0) return null;
+
+  return (
+    <div className="mx-2 mt-1 shrink-0">
+      <div className="flex items-center gap-1.5 px-1 py-1 text-[10px] font-semibold uppercase tracking-wider text-primary">
+        <Pin size={11} className="shrink-0" />
+        <span>Pinned</span>
+        <span className="ml-auto flex items-center justify-center min-w-4 h-4 px-1 rounded-full bg-primary/15 text-[10px] font-bold text-primary">
+          {pinned.length}
+        </span>
+      </div>
+      <div className="max-h-[30vh] overflow-y-auto scrollbar-thin">
+        {pinned.map((tab) => {
+          const idx = projects.indexOf(tab.cwd);
+          return (
+            <TabRow
+              key={tab.id}
+              tab={tab}
+              isActive={!showHistory && tab.id === activeTabId}
+              dragRef={dragRef}
+              markdownEnabled={markdownEnabled}
+              showFolder
+              hue={projectHue(idx < 0 ? 0 : idx)}
+              onSelectTab={onSelectTab}
+              onCloseTab={onCloseTab}
+              onReadTab={onReadTab}
+              onRenameTab={onRenameTab}
+              onOpenDirectory={onOpenDirectory}
+              onTogglePin={onTogglePin}
+              onReorderTab={() => {}}
+            />
+          );
+        })}
+      </div>
+      <hr className="border-border mt-1" />
+    </div>
+  );
+}
+
 function NewSessionMenu({ dir, shellOptions, onNewClaudeTab, onNewShellTab }: {
   dir: string;
   shellOptions: ShellOption[];
@@ -206,16 +273,25 @@ function NewSessionMenu({ dir, shellOptions, onNewClaudeTab, onNewShellTab }: {
   );
 }
 
-function TabRow({ tab, isActive, dragRef, markdownEnabled, onSelectTab, onCloseTab, onReadTab, onRenameTab, onOpenDirectory, onReorderTab }: {
+function TabRow({
+  tab, isActive, dragRef, markdownEnabled, showFolder, hue,
+  onSelectTab, onCloseTab, onReadTab, onRenameTab, onOpenDirectory, onTogglePin, onReorderTab,
+}: {
   tab: Tab;
   isActive: boolean;
   dragRef: DragRef;
   markdownEnabled: boolean;
+  /** Shows a trailing folder-name chip — for rows displayed outside their own
+   *  folder (the Pinned section spans every folder at once). */
+  showFolder?: boolean;
+  /** The owning folder's accent hue; only read when `showFolder` is set. */
+  hue?: number;
   onSelectTab: (tabId: string) => void;
   onCloseTab: (tabId: string) => void;
   onReadTab: (tab: Tab) => void;
   onRenameTab: (tabId: string, name: string) => void;
   onOpenDirectory: (dir: string) => void;
+  onTogglePin: (tabId: string) => void;
   onReorderTab: (tabId: string, targetId: string, position: DropPos) => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -315,6 +391,12 @@ function TabRow({ tab, isActive, dragRef, markdownEnabled, onSelectTab, onCloseT
           {isActive && <span className="absolute left-0 top-1 bottom-1 w-0.5 rounded-full bg-primary" />}
           {icon}
           <span className="truncate flex-1">{tab.name}{tab.exited ? ' (exited)' : ''}</span>
+          {showFolder && (
+            <span className="flex items-center gap-1 shrink-0 max-w-[40%] text-[10px] text-muted-foreground/70">
+              <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: `hsl(${hue ?? 0} 55% 50%)` }} />
+              <span className="truncate">{folderName(tab.cwd)}</span>
+            </span>
+          )}
           {tab.kind === 'file' && tab.dirty && (
             <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-warning" title="Unsaved changes" />
           )}
@@ -353,6 +435,10 @@ function TabRow({ tab, isActive, dragRef, markdownEnabled, onSelectTab, onCloseT
           <FolderOpen size={13} />
           <span>Open directory</span>
         </ContextMenuItem>
+        <ContextMenuItem onSelect={() => onTogglePin(tab.id)}>
+          {tab.pinned ? <PinOff size={13} /> : <Pin size={13} />}
+          <span>{tab.pinned ? 'Unpin' : 'Pin session'}</span>
+        </ContextMenuItem>
         <ContextMenuSeparator />
         <ContextMenuItem variant="destructive" onSelect={() => onCloseTab(tab.id)}>
           <X size={13} />
@@ -365,7 +451,7 @@ function TabRow({ tab, isActive, dragRef, markdownEnabled, onSelectTab, onCloseT
 
 function ProjectCard({
   dir, hue, tabs, activeTabId, showHistory, shellOptions, dragRef, markdownEnabled,
-  onSelectTab, onCloseTab, onReadTab, onRenameTab, onOpenDirectory, onNewClaudeTab, onNewShellTab, onRemoveProject,
+  onSelectTab, onCloseTab, onReadTab, onRenameTab, onOpenDirectory, onTogglePin, onNewClaudeTab, onNewShellTab, onRemoveProject,
   onReorderProject, onReorderTab,
 }: {
   dir: string;
@@ -381,6 +467,7 @@ function ProjectCard({
   onReadTab: (tab: Tab) => void;
   onRenameTab: (tabId: string, name: string) => void;
   onOpenDirectory: (dir: string) => void;
+  onTogglePin: (tabId: string) => void;
   onNewClaudeTab: (dir: string) => void;
   onNewShellTab: (dir: string, shellId: string) => void;
   onRemoveProject: (dir: string) => void;
@@ -398,8 +485,7 @@ function ProjectCard({
 
   return (
     <div
-      className="relative mx-2 mb-2 rounded-md border overflow-hidden transition-colors duration-100"
-      style={{ borderColor: `hsla(${hue}, 55%, 58%, 0.22)`, backgroundColor: `hsla(${hue}, 55%, 58%, 0.05)` }}
+      className="relative mx-1 mb-1"
       onDragOver={(e) => {
         if (!canAccept()) return;
         e.preventDefault();
@@ -416,7 +502,7 @@ function ProjectCard({
     >
       {dropPos && <DropLine pos={dropPos} flush />}
       <div
-        className="group/card relative flex items-center gap-2 w-full text-left px-2.5 py-2 text-[11px] font-semibold text-foreground/90 cursor-pointer"
+        className="group/card relative flex items-center gap-2 w-full text-left px-2 py-1.5 rounded-sm text-[11px] font-semibold text-foreground cursor-pointer hover:bg-white/4"
         draggable
         onDragStart={(e) => {
           dragRef.current = { kind: 'folder', dir };
@@ -429,6 +515,7 @@ function ProjectCard({
       >
         <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: `hsl(${hue} 55% 50%)` }} />
         <span className="truncate flex-1">{folderName(dir)}</span>
+        <span className="shrink-0 text-[10px] font-normal text-muted-foreground">{tabs.length}</span>
         <button
           className="flex items-center justify-center w-5 h-5 rounded-sm shrink-0 border-none cursor-pointer bg-transparent text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover/card:opacity-100"
           onClick={(e) => { e.stopPropagation(); onRemoveProject(dir); }}
@@ -453,6 +540,7 @@ function ProjectCard({
               onReadTab={onReadTab}
               onRenameTab={onRenameTab}
               onOpenDirectory={onOpenDirectory}
+              onTogglePin={onTogglePin}
               onReorderTab={onReorderTab}
             />
           ))}
@@ -465,7 +553,8 @@ function ProjectCard({
 
 export default function Sidebar({
   tabs, activeTabId, shellOptions, showHistory, showSettings, showHome, showFiles, projects, collapsed, markdownEnabled,
-  onSelectTab, onCloseTab, onReadTab, onOpenDirectory, onNewClaudeTab, onNewShellTab, onRenameTab, onToggleHistory, onToggleSettings, onToggleFiles, onGoHome,
+  onSelectTab, onCloseTab, onReadTab, onOpenDirectory, onNewClaudeTab, onNewShellTab, onRenameTab, onTogglePin, onOpenSearch,
+  onToggleHistory, onToggleSettings, onToggleFiles, onGoHome,
   onAddProject, onRemoveProject, onReorderProject, onReorderTab, onToggleCollapse,
 }: SidebarProps) {
   const dragRef = useRef<DragItem | null>(null);
@@ -596,6 +685,30 @@ export default function Sidebar({
             </button>
           </div>
 
+          <button
+            className="flex items-center gap-2 mx-2 mt-2 px-2.5 py-1.5 rounded-sm border border-border text-[11px] text-muted-foreground hover:text-foreground hover:border-border-hover bg-transparent cursor-pointer font-inherit shrink-0"
+            onClick={onOpenSearch}
+            title="Search sessions"
+          >
+            <Search size={12} className="shrink-0" />
+            <span className="flex-1 text-left">Search sessions</span>
+            <span className="shrink-0 text-[9px] text-muted-foreground/70 border border-border rounded-sm px-1">Ctrl Shift P</span>
+          </button>
+
+          <PinnedStrip
+            tabs={tabs}
+            projects={projects}
+            activeTabId={activeTabId}
+            showHistory={showHistory}
+            markdownEnabled={markdownEnabled}
+            onSelectTab={onSelectTab}
+            onCloseTab={onCloseTab}
+            onReadTab={onReadTab}
+            onRenameTab={onRenameTab}
+            onOpenDirectory={onOpenDirectory}
+            onTogglePin={onTogglePin}
+          />
+
           <AttentionStrip
             tabs={tabs}
             projects={projects}
@@ -628,6 +741,7 @@ export default function Sidebar({
                 onReadTab={onReadTab}
                 onRenameTab={onRenameTab}
                 onOpenDirectory={onOpenDirectory}
+                onTogglePin={onTogglePin}
                 onNewClaudeTab={onNewClaudeTab}
                 onNewShellTab={onNewShellTab}
                 onRemoveProject={onRemoveProject}
@@ -645,51 +759,14 @@ export default function Sidebar({
             </button>
           </div>
 
-          <UsageMeter />
-
-          {/* Footer: history + settings, bottom-anchored */}
-          <div className="flex border-t border-border shrink-0">
-            <button
-              data-active={showHistory}
-              className={cn(
-                'relative flex items-center gap-2 h-9 px-3 flex-1 text-[12px] cursor-pointer',
-                'bg-transparent border-none font-inherit transition-colors duration-100',
-                showHistory ? 'text-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-white/4',
-              )}
-              onClick={onToggleHistory}
-              title="Browse past sessions"
-            >
-              {showHistory && <span className="absolute left-0 top-1.5 bottom-1.5 w-0.5 bg-primary" />}
-              <History size={14} />
-              <span>History</span>
-            </button>
-            <button
-              data-active={showFiles}
-              className={cn(
-                'relative flex items-center justify-center w-9 h-9 text-[12px] cursor-pointer shrink-0',
-                'bg-transparent border-none border-l border-l-border font-inherit transition-colors duration-100',
-                showFiles ? 'text-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-white/4',
-              )}
-              onClick={onToggleFiles}
-              title="File explorer"
-            >
-              {showFiles && <span className="absolute left-0 top-1.5 bottom-1.5 w-0.5 bg-primary" />}
-              <FolderTree size={14} />
-            </button>
-            <button
-              data-active={showSettings}
-              className={cn(
-                'relative flex items-center justify-center w-9 h-9 text-[12px] cursor-pointer shrink-0',
-                'bg-transparent border-none border-l border-l-border font-inherit transition-colors duration-100',
-                showSettings ? 'text-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-white/4',
-              )}
-              onClick={onToggleSettings}
-              title="Settings"
-            >
-              {showSettings && <span className="absolute left-0 top-1.5 bottom-1.5 w-0.5 bg-primary" />}
-              <Settings size={14} />
-            </button>
-          </div>
+          <SidebarFooter
+            showHistory={showHistory}
+            showFiles={showFiles}
+            showSettings={showSettings}
+            onToggleHistory={onToggleHistory}
+            onToggleFiles={onToggleFiles}
+            onToggleSettings={onToggleSettings}
+          />
         </>
       )}
     </div>

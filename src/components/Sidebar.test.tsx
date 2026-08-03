@@ -48,6 +48,8 @@ function renderSidebar(overrides: Partial<React.ComponentProps<typeof Sidebar>> 
     onNewClaudeTab: vi.fn(),
     onNewShellTab: vi.fn(),
     onRenameTab: vi.fn(),
+    onTogglePin: vi.fn(),
+    onOpenSearch: vi.fn(),
     onToggleHistory: vi.fn(),
     onToggleSettings: vi.fn(),
     onToggleFiles: vi.fn(),
@@ -115,6 +117,22 @@ describe('Sidebar', () => {
     expect(screen.getByDisplayValue('claude-1')).toBeInTheDocument();
   });
 
+  it('right-click menu pins and unpins a session', async () => {
+    const props = renderSidebar();
+
+    fireEvent.contextMenu(screen.getByText('claude-1'));
+    await userEvent.click(await screen.findByText('Pin session'));
+    expect(props.onTogglePin).toHaveBeenCalledWith('claude-1');
+  });
+
+  it('right-click menu offers Unpin once a session is pinned', async () => {
+    renderSidebar({ tabs: [makeTab('claude-1', { pinned: true })] });
+    // Pinned, so it renders twice — once in the Pinned strip, once in its folder.
+    fireEvent.contextMenu(screen.getAllByText('claude-1')[0]);
+    expect(await screen.findByText('Unpin')).toBeInTheDocument();
+    expect(screen.queryByText('Pin session')).not.toBeInTheDocument();
+  });
+
   it('reads a live claude session once its id is known, not before', async () => {
     const props = renderSidebar({
       tabs: [
@@ -131,6 +149,51 @@ describe('Sidebar', () => {
     await userEvent.click(readButtons[0]);
     expect(props.onReadTab).toHaveBeenCalledWith(expect.objectContaining({ id: 'resolved' }));
     expect(props.onSelectTab).not.toHaveBeenCalled(); // read must not also select
+  });
+
+  it('opens the command palette from the search row', async () => {
+    const props = renderSidebar();
+    await userEvent.click(screen.getByText('Search sessions'));
+    expect(props.onOpenSearch).toHaveBeenCalled();
+  });
+
+  describe('Pinned strip', () => {
+    it('is absent when nothing is pinned', () => {
+      renderSidebar({ tabs: [makeTab('a'), makeTab('b')] });
+      expect(screen.queryByText('Pinned')).not.toBeInTheDocument();
+    });
+
+    it('lists every pinned session, with a count, across folders', () => {
+      const OTHER = 'C:\\Users\\x\\other';
+      renderSidebar({
+        projects: [PROJECT, OTHER],
+        tabs: [
+          makeTab('pinned-here', { pinned: true }),
+          makeTab('pinned-there', { pinned: true, cwd: OTHER }),
+          makeTab('not-pinned'),
+        ],
+      });
+      const strip = screen.getByText('Pinned').parentElement!.parentElement!;
+      expect(within(strip).getByText('pinned-here')).toBeInTheDocument();
+      expect(within(strip).getByText('pinned-there')).toBeInTheDocument();
+      expect(within(strip).queryByText('not-pinned')).not.toBeInTheDocument();
+      expect(within(strip).getByText('2')).toBeInTheDocument();
+    });
+
+    it('excludes an exited pinned session', () => {
+      renderSidebar({ tabs: [makeTab('pinned', { pinned: true }), makeTab('gone', { pinned: true, exited: true })] });
+      const strip = screen.getByText('Pinned').parentElement!.parentElement!;
+      expect(within(strip).getByText('pinned')).toBeInTheDocument();
+      expect(within(strip).queryByText('gone')).not.toBeInTheDocument();
+    });
+
+    it('unpins from the strip via its own context menu', async () => {
+      const props = renderSidebar({ tabs: [makeTab('pinned', { pinned: true })] });
+      const strip = screen.getByText('Pinned').parentElement!.parentElement!;
+      fireEvent.contextMenu(within(strip).getByText('pinned'));
+      await userEvent.click(await screen.findByText('Unpin'));
+      expect(props.onTogglePin).toHaveBeenCalledWith('pinned');
+    });
   });
 
   describe('“Waiting on you” strip', () => {
@@ -191,15 +254,17 @@ describe('Sidebar', () => {
     expect(props.onNewShellTab).toHaveBeenCalledWith(PROJECT, 'cmd');
   });
 
-  it('toggles the history panel from the footer', async () => {
+  it('toggles the history panel from the footer menu', async () => {
     const props = renderSidebar();
-    await userEvent.click(screen.getByText('History'));
+    await userEvent.click(screen.getByRole('button', { name: 'History, files, settings' }));
+    await userEvent.click(await screen.findByText('History'));
     expect(props.onToggleHistory).toHaveBeenCalled();
   });
 
-  it('toggles settings from the footer', async () => {
+  it('toggles settings from the footer menu', async () => {
     const props = renderSidebar();
-    await userEvent.click(screen.getByTitle('Settings'));
+    await userEvent.click(screen.getByRole('button', { name: 'History, files, settings' }));
+    await userEvent.click(await screen.findByText('Settings'));
     expect(props.onToggleSettings).toHaveBeenCalled();
   });
 

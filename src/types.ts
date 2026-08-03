@@ -25,6 +25,8 @@ export interface Tab {
   path?: string;
   /** True when a file tab has unsaved editor changes. */
   dirty?: boolean;
+  /** User-pinned to the sidebar's Pinned section, independent of folder or status. */
+  pinned?: boolean;
 }
 
 /** A shell available on the current OS, provided by the Rust backend. */
@@ -107,6 +109,8 @@ export interface SavedTab {
   resumeSessionId: string | null;
   /** Which open project this tab belongs to. */
   cwd: string;
+  /** User-pinned to the sidebar's Pinned section. */
+  pinned?: boolean;
 }
 
 export interface WorkspaceState {

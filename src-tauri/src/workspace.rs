@@ -16,6 +16,10 @@ pub struct SavedTab {
     /// Which open project this tab belongs to (multiple folders can be open
     /// at once, each with its own tabs).
     pub cwd: String,
+    /// User-pinned to the sidebar's Pinned section. Defaulted so workspace
+    /// files saved before this field existed still load.
+    #[serde(default)]
+    pub pinned: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
@@ -86,6 +90,18 @@ mod tests {
     }
 
     #[test]
+    fn tab_saved_before_pinned_existed_loads_as_unpinned() {
+        let tmp = tempfile::tempdir().unwrap();
+        fs::create_dir_all(tmp.path()).unwrap();
+        let json = r#"{"projects":["/home/x/project"],"collapsed":false,"tabs":[
+            {"kind":"claude","name":"Claude","shellId":null,"resumeSessionId":null,"cwd":"/home/x/project"}
+        ]}"#;
+        fs::write(workspace_path(tmp.path()), json).unwrap();
+        let state = load_workspace(tmp.path());
+        assert_eq!(state.tabs[0].pinned, false);
+    }
+
+    #[test]
     fn corrupt_file_loads_default() {
         let tmp = tempfile::tempdir().unwrap();
         fs::create_dir_all(tmp.path()).unwrap();
@@ -107,6 +123,7 @@ mod tests {
                     shell_id: None,
                     resume_session_id: Some("sess-1".to_string()),
                     cwd: "/home/x/project".to_string(),
+                    pinned: true,
                 },
                 SavedTab {
                     kind: "powershell".to_string(),
@@ -114,6 +131,7 @@ mod tests {
                     shell_id: Some("powershell".to_string()),
                     resume_session_id: None,
                     cwd: "/home/x/other".to_string(),
+                    pinned: false,
                 },
             ],
         };

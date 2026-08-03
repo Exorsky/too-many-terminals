@@ -258,6 +258,7 @@ export default function App() {
             exited: false,
             status: 'new',
             dormant: true,
+            pinned: saved.pinned,
           },
         });
       }
@@ -277,7 +278,7 @@ export default function App() {
       const tabs: SavedTab[] = state.tabs
         // File tabs aren't restored across restarts yet (no path in SavedTab).
         .filter((t) => !t.exited && t.kind !== 'file')
-        .map((t) => ({ kind: t.kind, name: t.name, shellId: t.shellId, resumeSessionId: t.resumeSessionId, cwd: t.cwd }));
+        .map((t) => ({ kind: t.kind, name: t.name, shellId: t.shellId, resumeSessionId: t.resumeSessionId, cwd: t.cwd, pinned: t.pinned }));
       ipc.saveWorkspace({ projects, collapsed, tabs }).catch(() => {});
     }, SAVE_DEBOUNCE_MS);
     return () => clearTimeout(timer);
@@ -369,6 +370,11 @@ export default function App() {
   const handleRenameTab = useCallback((tabId: string, name: string) => {
     dispatch({ type: 'rename', tabId, name });
   }, []);
+
+  const handleTogglePin = useCallback((tabId: string) => {
+    const tab = state.tabs.find((t) => t.id === tabId);
+    if (tab) dispatch({ type: 'pin', tabId, pinned: !tab.pinned });
+  }, [state.tabs]);
 
   const handleOpenDirectory = useCallback((dir: string) => {
     ipc.openDirectory(dir);
@@ -554,6 +560,8 @@ export default function App() {
         onNewClaudeTab={handleNewClaudeTab}
         onNewShellTab={handleNewShellTab}
         onRenameTab={handleRenameTab}
+        onTogglePin={handleTogglePin}
+        onOpenSearch={() => setPaletteOpen(true)}
         onToggleHistory={() => { setShowHistory((v) => !v); setShowSettings(false); setShowHome(false); }}
         onToggleSettings={() => { setShowSettings((v) => !v); setShowHistory(false); setShowHome(false); }}
         onToggleFiles={() => setShowFiles((v) => !v)}
