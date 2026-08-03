@@ -21,6 +21,13 @@ const AUTO_SLEEP_OPTIONS = [
   { label: '60 minutes', value: 60 },
 ];
 
+const USAGE_REFRESH_OPTIONS = [
+  { label: '15 seconds', value: 15 },
+  { label: '30 seconds', value: 30 },
+  { label: '1 minute', value: 60 },
+  { label: '5 minutes', value: 300 },
+];
+
 function Switch({ checked, disabled, onChange, label }: {
   checked: boolean;
   disabled?: boolean;
@@ -178,6 +185,17 @@ function GeneralTab() {
         value={settings.autoSleepMinutes}
         options={AUTO_SLEEP_OPTIONS}
         onChange={(v) => patchSettings({ autoSleepMinutes: v })}
+      />
+
+      <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground pt-4 pb-1">
+        Usage
+      </div>
+      <ChoiceRow
+        title="Refresh interval"
+        description="How often the sidebar re-reads token usage from disk — the session countdown ticks live in between."
+        value={settings.usageRefreshSeconds}
+        options={USAGE_REFRESH_OPTIONS}
+        onChange={(v) => patchSettings({ usageRefreshSeconds: v })}
       />
     </div>
   );

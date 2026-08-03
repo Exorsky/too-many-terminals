@@ -23,6 +23,8 @@ pub struct AppSettings {
     /// Minutes an idle, off-screen Claude session may stay running before it's
     /// auto-slept. 0 disables auto-sleep. Defaults to 15.
     pub auto_sleep_minutes: u32,
+    /// How often the sidebar re-reads token usage from disk. Defaults to 60.
+    pub usage_refresh_seconds: u32,
 }
 
 impl Default for AppSettings {
@@ -34,6 +36,7 @@ impl Default for AppSettings {
             show_markdown_toggle: true,
             notifications_enabled: true,
             auto_sleep_minutes: 15,
+            usage_refresh_seconds: 60,
         }
     }
 }
@@ -90,6 +93,7 @@ mod tests {
             show_markdown_toggle: true,
             notifications_enabled: false,
             auto_sleep_minutes: 30,
+            usage_refresh_seconds: 300,
         };
 
         save_settings(tmp.path(), &settings).unwrap();
@@ -106,6 +110,7 @@ mod tests {
         assert!(settings.show_markdown_toggle);
         assert!(settings.notifications_enabled);
         assert_eq!(settings.auto_sleep_minutes, 15);
+        assert_eq!(settings.usage_refresh_seconds, 60);
     }
 
     #[test]

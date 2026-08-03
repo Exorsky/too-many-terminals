@@ -6,6 +6,7 @@ mod hooks;
 mod namer;
 mod pty;
 mod session_history;
+mod session_usage;
 mod settings;
 mod shell;
 mod usage;
@@ -56,6 +57,7 @@ pub fn run() {
             commands::delete_session,
             commands::read_transcript,
             commands::get_usage_stats,
+            commands::get_session_usage_stats,
             commands::load_workspace,
             commands::save_workspace,
             commands::load_settings,

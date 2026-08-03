@@ -29,6 +29,11 @@ Claude session may run before its process is freed. **Off** (0) disables it.
 See the auto-sleep section of
 [workspace-persistence.md](workspace-persistence.md).
 
+A **Usage** section adds a dropdown — **Refresh interval**
+(`usageRefreshSeconds`, default `60`, options 15s/30s/1m/5m) — how often the
+sidebar's usage meter re-reads token usage from disk. See
+[usage-meter.md](usage-meter.md).
+
 ## Settings store
 
 All settings reads/writes go through `src/lib/settings-store.ts` — a small
@@ -45,4 +50,5 @@ in-memory mirror of `AppSettings` with `loadSettings` (once), `patchSettings`
 - Wiring: `App.tsx` (`showSettings` state, mutual exclusion with `showHistory`;
   reads `showSessionBar`/`showMarkdownToggle`/`autoSleepMinutes` via `useSettings`),
   `Sidebar.tsx` (`showSettings`/`onToggleSettings` props, footer + collapsed-rail buttons)
-- `src-tauri/src/settings.rs` — persisted `AppSettings` (incl. `auto_sleep_minutes`)
+- `src-tauri/src/settings.rs` — persisted `AppSettings` (incl. `auto_sleep_minutes`,
+  `usage_refresh_seconds`)

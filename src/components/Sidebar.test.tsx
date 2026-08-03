@@ -67,6 +67,9 @@ beforeEach(() => {
   vi.mocked(ipc.getUsageStats).mockResolvedValue({
     available: false, date: '', totalTokens: 0, byModel: {}, cacheReadTokens: 0,
   });
+  vi.mocked(ipc.getSessionUsageStats).mockResolvedValue({
+    available: false, tokensUsed: 0, blockStartIso: null, blockEndIso: null, estimatedLimitTokens: null, blocksSeen: 0,
+  });
 });
 afterEach(cleanup);
 

@@ -67,6 +67,25 @@ export interface UsageStats {
   cacheReadTokens: number;
 }
 
+// --- Session usage (an estimate of the current 5-hour rate-limit window) ---
+
+export interface SessionUsageStats {
+  /** False only when there's no transcript history at all to estimate from. */
+  available: boolean;
+  /** Tokens used in the current 5-hour block; 0 when idle (no active block). */
+  tokensUsed: number;
+  /** ISO start of the current block, if one is active. */
+  blockStartIso: string | null;
+  /** ISO time the current block resets, if one is active. */
+  blockEndIso: string | null;
+  /** The biggest completed block on record — an estimate of your typical
+   *  ceiling, not an official Anthropic limit. Null until at least one block
+   *  has fully closed. */
+  estimatedLimitTokens: number | null;
+  /** How many completed blocks the estimate is based on. */
+  blocksSeen: number;
+}
+
 // --- Session history (past Claude Code sessions for the current project) ---
 
 export interface SessionHistoryEntry {
@@ -126,4 +145,6 @@ export interface AppSettings {
    *  auto-slept (its process killed, respawned via --resume on next view).
    *  0 disables auto-sleep entirely. */
   autoSleepMinutes: number;
+  /** How often the sidebar re-reads token usage from disk, in seconds. */
+  usageRefreshSeconds: number;
 }
