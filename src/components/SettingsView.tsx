@@ -1,14 +1,16 @@
 import { useState } from 'react';
-import { Settings as SettingsIcon, Sparkles, SlidersHorizontal } from 'lucide-react';
+import { Bell, Settings as SettingsIcon, Sparkles, SlidersHorizontal, Moon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { patchSettings, useSettings } from '@/lib/settings-store';
 import * as ipc from '@/lib/ipc';
 import CustomizeTab from './CustomizeTab';
 
-type SettingsTab = 'general' | 'customize';
+type SettingsCategory = 'interface' | 'notifications' | 'sessions' | 'customize';
 
-const TABS: { id: SettingsTab; label: string; icon: typeof SlidersHorizontal }[] = [
-  { id: 'general', label: 'General', icon: SlidersHorizontal },
+const CATEGORIES: { id: SettingsCategory; label: string; icon: typeof SlidersHorizontal }[] = [
+  { id: 'interface', label: 'Interface', icon: SlidersHorizontal },
+  { id: 'notifications', label: 'Notifications', icon: Bell },
+  { id: 'sessions', label: 'Sessions', icon: Moon },
   { id: 'customize', label: 'Customize', icon: Sparkles },
 ];
 
@@ -146,12 +148,12 @@ function TestNotificationButton() {
   );
 }
 
-function GeneralTab() {
+function InterfaceCategory() {
   const settings = useSettings();
   return (
-    <div className="flex flex-col px-5 py-3">
-      <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground pb-1">
-        Session bar
+    <div className="flex flex-col px-5 py-4 max-w-xl">
+      <div className="text-[11px] text-muted-foreground leading-relaxed pb-2">
+        What shows around the terminal itself.
       </div>
       <SettingRow
         title="Show the session bar"
@@ -166,9 +168,16 @@ function GeneralTab() {
         disabled={!settings.showSessionBar}
         onChange={(v) => patchSettings({ showMarkdownToggle: v })}
       />
+    </div>
+  );
+}
 
-      <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground pt-4 pb-1">
-        Notifications
+function NotificationsCategory() {
+  const settings = useSettings();
+  return (
+    <div className="flex flex-col px-5 py-4 max-w-xl">
+      <div className="text-[11px] text-muted-foreground leading-relaxed pb-2">
+        Desktop alerts when a session needs you.
       </div>
       <SettingRow
         title="Notify when a session needs you"
@@ -177,9 +186,16 @@ function GeneralTab() {
         onChange={(v) => patchSettings({ notificationsEnabled: v })}
       />
       <TestNotificationButton />
+    </div>
+  );
+}
 
-      <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground pt-4 pb-1">
-        Sessions
+function SessionsCategory() {
+  const settings = useSettings();
+  return (
+    <div className="flex flex-col px-5 py-4 max-w-xl">
+      <div className="text-[11px] text-muted-foreground leading-relaxed pb-2">
+        Background behavior while a session sits idle.
       </div>
       <ChoiceRow
         title="Auto-sleep idle sessions"
@@ -188,12 +204,8 @@ function GeneralTab() {
         options={AUTO_SLEEP_OPTIONS}
         onChange={(v) => patchSettings({ autoSleepMinutes: v })}
       />
-
-      <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground pt-4 pb-1">
-        Usage
-      </div>
       <ChoiceRow
-        title="Refresh interval"
+        title="Usage refresh interval"
         description="How often the sidebar re-fetches your usage percentages — the reset countdowns tick live in between."
         value={settings.usageRefreshSeconds}
         options={USAGE_REFRESH_OPTIONS}
@@ -204,7 +216,7 @@ function GeneralTab() {
 }
 
 export default function SettingsView() {
-  const [activeTab, setActiveTab] = useState<SettingsTab>('general');
+  const [category, setCategory] = useState<SettingsCategory>('interface');
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -215,31 +227,34 @@ export default function SettingsView() {
         </span>
       </div>
 
-      <div className="flex items-center gap-1 px-3 pt-2.5 border-b border-border shrink-0">
-        {TABS.map((tab) => {
-          const Icon = tab.icon;
-          const isActive = tab.id === activeTab;
-          return (
-            <button
-              key={tab.id}
-              className={cn(
-                'relative flex items-center gap-1.5 px-3 py-1.5 rounded-t-sm text-[11.5px] cursor-pointer',
-                'bg-transparent border-none font-inherit transition-colors duration-100',
-                isActive ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
-              )}
-              onClick={() => setActiveTab(tab.id)}
-            >
-              <Icon size={12} className="shrink-0" />
-              <span>{tab.label}</span>
-              {isActive && <span className="absolute left-0 right-0 -bottom-px h-0.5 rounded-full bg-primary" />}
-            </button>
-          );
-        })}
-      </div>
+      <div className="flex flex-1 min-h-0">
+        <div className="w-36 shrink-0 border-r border-border py-2 overflow-y-auto scrollbar-thin">
+          {CATEGORIES.map(({ id, label, icon: Icon }) => {
+            const isActive = id === category;
+            return (
+              <button
+                key={id}
+                className={cn(
+                  'relative flex items-center gap-2 w-[calc(100%-12px)] mx-1.5 mb-0.5 px-2.5 py-1.5 rounded-sm text-[11.5px] cursor-pointer',
+                  'bg-transparent border-none font-inherit transition-colors duration-100',
+                  isActive ? 'text-foreground bg-white/6' : 'text-muted-foreground hover:text-foreground hover:bg-white/4',
+                )}
+                onClick={() => setCategory(id)}
+              >
+                {isActive && <span className="absolute left-0 top-1 bottom-1 w-0.5 rounded-full bg-primary" />}
+                <Icon size={13} className="shrink-0" />
+                <span>{label}</span>
+              </button>
+            );
+          })}
+        </div>
 
-      <div className="flex-1 overflow-y-auto scrollbar-thin">
-        {activeTab === 'general' && <GeneralTab />}
-        {activeTab === 'customize' && <CustomizeTab />}
+        <div className="flex-1 min-w-0 overflow-y-auto scrollbar-thin">
+          {category === 'interface' && <InterfaceCategory />}
+          {category === 'notifications' && <NotificationsCategory />}
+          {category === 'sessions' && <SessionsCategory />}
+          {category === 'customize' && <CustomizeTab />}
+        </div>
       </div>
     </div>
   );

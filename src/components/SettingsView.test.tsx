@@ -21,7 +21,7 @@ afterEach(() => {
 });
 
 describe('SettingsView', () => {
-  it('shows the General tab with the session-bar preferences by default', () => {
+  it('shows the Interface category with the session-bar preferences by default', () => {
     render(<SettingsView />);
     expect(screen.getByText('Show the session bar')).toBeInTheDocument();
     expect(screen.getByText('Show the Markdown toggle')).toBeInTheDocument();
@@ -39,8 +39,9 @@ describe('SettingsView', () => {
     expect(screen.getByRole('switch', { name: 'Show the Markdown toggle' })).toBeDisabled();
   });
 
-  it('toggles the notification preference', async () => {
+  it('toggles the notification preference from the Notifications category', async () => {
     render(<SettingsView />);
+    await userEvent.click(screen.getByText('Notifications'));
     await userEvent.click(screen.getByRole('switch', { name: 'Notify when a session needs you' }));
     expect(ipc.saveSettings).toHaveBeenCalledWith(expect.objectContaining({ notificationsEnabled: false }));
   });
@@ -48,23 +49,26 @@ describe('SettingsView', () => {
   it('links to the OS notification settings when the platform has a settings pane', async () => {
     vi.mocked(ipc.canOpenSystemNotificationSettings).mockReturnValue(true);
     render(<SettingsView />);
+    await userEvent.click(screen.getByText('Notifications'));
     await userEvent.click(screen.getByRole('button', { name: 'system notification settings' }));
     expect(ipc.openSystemNotificationSettings).toHaveBeenCalled();
   });
 
-  it('omits the settings link on platforms without a notification settings pane', () => {
+  it('omits the settings link on platforms without a notification settings pane', async () => {
     vi.mocked(ipc.canOpenSystemNotificationSettings).mockReturnValue(false);
     render(<SettingsView />);
+    await userEvent.click(screen.getByText('Notifications'));
     expect(screen.queryByRole('button', { name: 'system notification settings' })).not.toBeInTheDocument();
   });
 
-  it('changing the auto-sleep threshold persists it', async () => {
+  it('changing the auto-sleep threshold persists it from the Sessions category', async () => {
     render(<SettingsView />);
+    await userEvent.click(screen.getByText('Sessions'));
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Auto-sleep idle sessions' }), '30');
     expect(ipc.saveSettings).toHaveBeenCalledWith(expect.objectContaining({ autoSleepMinutes: 30 }));
   });
 
-  it('switches to the Customize tab on click', async () => {
+  it('switches to the Customize category on click', async () => {
     render(<SettingsView />);
     await userEvent.click(screen.getByText('Customize'));
     expect(await screen.findByText('Theme')).toBeInTheDocument();
