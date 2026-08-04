@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type MutableRefObject } from 'react';
 import {
-  CheckCircle2, ChevronRight, Circle, File, FileText, Folder, FolderOpen, FolderPlus, FolderTree, History, KeyRound,
+  CheckCircle2, ChevronRight, Circle, File, Folder, FolderOpen, FolderPlus, FolderTree, History, KeyRound,
   Loader2, MessageCircle, Moon, PanelLeftClose, PanelLeftOpen, Pencil, Pin, PinOff, Plus, Search, Settings, Sparkles,
   TerminalSquare, X,
 } from 'lucide-react';
@@ -37,10 +37,7 @@ interface SidebarProps {
   collapsed: boolean;
   onSelectTab: (tabId: string) => void;
   onCloseTab: (tabId: string) => void;
-  onReadTab: (tab: Tab) => void;
   onOpenDirectory: (dir: string) => void;
-  /** Whether the markdown reader is available (both prefs on) — gates the row's read icon. */
-  markdownEnabled: boolean;
   onNewClaudeTab: (dir: string) => void;
   onNewShellTab: (dir: string, shellId: string) => void;
   onRenameTab: (tabId: string, name: string) => void;
@@ -184,17 +181,15 @@ function AttentionStrip({ tabs, projects, activeTabId, showHistory, onSelectTab 
  *  you asked for, attention orange for what's blocking you. Pin/unpin lives
  *  in each session's own context menu (see TabRow), not a control here. */
 function PinnedStrip({
-  tabs, projects, activeTabId, showHistory, markdownEnabled,
-  onSelectTab, onCloseTab, onReadTab, onRenameTab, onOpenDirectory, onTogglePin,
+  tabs, projects, activeTabId, showHistory,
+  onSelectTab, onCloseTab, onRenameTab, onOpenDirectory, onTogglePin,
 }: {
   tabs: Tab[];
   projects: string[];
   activeTabId: string | null;
   showHistory: boolean;
-  markdownEnabled: boolean;
   onSelectTab: (tabId: string) => void;
   onCloseTab: (tabId: string) => void;
-  onReadTab: (tab: Tab) => void;
   onRenameTab: (tabId: string, name: string) => void;
   onOpenDirectory: (dir: string) => void;
   onTogglePin: (tabId: string) => void;
@@ -223,12 +218,10 @@ function PinnedStrip({
               tab={tab}
               isActive={!showHistory && tab.id === activeTabId}
               dragRef={dragRef}
-              markdownEnabled={markdownEnabled}
               showFolder
               hue={projectHue(idx < 0 ? 0 : idx)}
               onSelectTab={onSelectTab}
               onCloseTab={onCloseTab}
-              onReadTab={onReadTab}
               onRenameTab={onRenameTab}
               onOpenDirectory={onOpenDirectory}
               onTogglePin={onTogglePin}
@@ -277,13 +270,12 @@ function NewSessionMenu({ dir, shellOptions, onNewClaudeTab, onNewShellTab }: {
 }
 
 function TabRow({
-  tab, isActive, dragRef, markdownEnabled, showFolder, hue,
-  onSelectTab, onCloseTab, onReadTab, onRenameTab, onOpenDirectory, onTogglePin, onReorderTab,
+  tab, isActive, dragRef, showFolder, hue,
+  onSelectTab, onCloseTab, onRenameTab, onOpenDirectory, onTogglePin, onReorderTab,
 }: {
   tab: Tab;
   isActive: boolean;
   dragRef: DragRef;
-  markdownEnabled: boolean;
   /** Shows a trailing folder-name chip — for rows displayed outside their own
    *  folder (the Pinned section spans every folder at once). */
   showFolder?: boolean;
@@ -291,7 +283,6 @@ function TabRow({
   hue?: number;
   onSelectTab: (tabId: string) => void;
   onCloseTab: (tabId: string) => void;
-  onReadTab: (tab: Tab) => void;
   onRenameTab: (tabId: string, name: string) => void;
   onOpenDirectory: (dir: string) => void;
   onTogglePin: (tabId: string) => void;
@@ -403,19 +394,6 @@ function TabRow({
           {tab.kind === 'file' && tab.dirty && (
             <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-warning" title="Unsaved changes" />
           )}
-          {markdownEnabled && tab.kind === 'claude' && tab.resumeSessionId && (
-            <button
-              className={cn(
-                'flex items-center justify-center w-4 h-4 rounded-sm shrink-0 border-none cursor-pointer',
-                'bg-transparent text-muted-foreground/60 hover:text-[#6fd4c9] hover:bg-white/10',
-                'opacity-0 group-hover:opacity-100',
-              )}
-              onClick={(e) => { e.stopPropagation(); onReadTab(tab); }}
-              title="Read this session as Markdown"
-            >
-              <FileText size={11} />
-            </button>
-          )}
           <button
             className={cn(
               'flex items-center justify-center w-4 h-4 rounded-sm shrink-0 border-none cursor-pointer',
@@ -479,8 +457,8 @@ export function envTooltip(dir: string, report: EnvReport): string {
 }
 
 function ProjectCard({
-  dir, hue, tabs, activeTabId, showHistory, shellOptions, dragRef, markdownEnabled,
-  onSelectTab, onCloseTab, onReadTab, onRenameTab, onOpenDirectory, onTogglePin, onNewClaudeTab, onNewShellTab, onRemoveProject,
+  dir, hue, tabs, activeTabId, showHistory, shellOptions, dragRef,
+  onSelectTab, onCloseTab, onRenameTab, onOpenDirectory, onTogglePin, onNewClaudeTab, onNewShellTab, onRemoveProject,
   onReorderProject, onReorderTab,
 }: {
   dir: string;
@@ -490,10 +468,8 @@ function ProjectCard({
   showHistory: boolean;
   shellOptions: ShellOption[];
   dragRef: DragRef;
-  markdownEnabled: boolean;
   onSelectTab: (tabId: string) => void;
   onCloseTab: (tabId: string) => void;
-  onReadTab: (tab: Tab) => void;
   onRenameTab: (tabId: string, name: string) => void;
   onOpenDirectory: (dir: string) => void;
   onTogglePin: (tabId: string) => void;
@@ -584,10 +560,8 @@ function ProjectCard({
               tab={tab}
               isActive={!showHistory && tab.id === activeTabId}
               dragRef={dragRef}
-              markdownEnabled={markdownEnabled}
               onSelectTab={onSelectTab}
               onCloseTab={onCloseTab}
-              onReadTab={onReadTab}
               onRenameTab={onRenameTab}
               onOpenDirectory={onOpenDirectory}
               onTogglePin={onTogglePin}
@@ -602,8 +576,8 @@ function ProjectCard({
 }
 
 export default function Sidebar({
-  tabs, activeTabId, shellOptions, showHistory, showSettings, showHome, showFiles, projects, collapsed, markdownEnabled,
-  onSelectTab, onCloseTab, onReadTab, onOpenDirectory, onNewClaudeTab, onNewShellTab, onRenameTab, onTogglePin, onOpenSearch,
+  tabs, activeTabId, shellOptions, showHistory, showSettings, showHome, showFiles, projects, collapsed,
+  onSelectTab, onCloseTab, onOpenDirectory, onNewClaudeTab, onNewShellTab, onRenameTab, onTogglePin, onOpenSearch,
   onToggleHistory, onToggleSettings, onToggleFiles, onGoHome,
   onAddProject, onRemoveProject, onReorderProject, onReorderTab, onToggleCollapse,
 }: SidebarProps) {
@@ -750,10 +724,8 @@ export default function Sidebar({
             projects={projects}
             activeTabId={activeTabId}
             showHistory={showHistory}
-            markdownEnabled={markdownEnabled}
             onSelectTab={onSelectTab}
             onCloseTab={onCloseTab}
-            onReadTab={onReadTab}
             onRenameTab={onRenameTab}
             onOpenDirectory={onOpenDirectory}
             onTogglePin={onTogglePin}
@@ -785,10 +757,8 @@ export default function Sidebar({
                 showHistory={showHistory}
                 shellOptions={shellOptions}
                 dragRef={dragRef}
-                markdownEnabled={markdownEnabled}
                 onSelectTab={onSelectTab}
                 onCloseTab={onCloseTab}
-                onReadTab={onReadTab}
                 onRenameTab={onRenameTab}
                 onOpenDirectory={onOpenDirectory}
                 onTogglePin={onTogglePin}

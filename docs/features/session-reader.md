@@ -15,7 +15,7 @@ terminal. Two surfaces, one shared body (`TranscriptDocument`):
    Rendered/Raw, Copy all, and Refresh live in the bar. Available for a Claude tab
    once its session id is known (`tab.resumeSessionId`, set for resumed tabs and
    learned via `claude-session-resolved` for fresh ones), and gated by the General
-   settings switches. The sidebar tab-row `▤` icon jumps straight into Markdown.
+   settings switches.
 
    The markdown pane (`MarkdownPane`) **opens scrolled to the bottom** and
    **live-follows** the session: while it's on screen it re-reads the transcript
@@ -52,8 +52,9 @@ terminal).
 - **Turns** in order down a left thread gutter (round node = Claude, square =
   you), with the role header shown only when the speaker changes.
 - **Claude replies** rendered as Markdown — headings, fenced code (monospace,
-  language-labelled), lists, bold, inline code, links — in a proportional
-  reading face, deliberately unlike the monospace terminal.
+  language-labelled), nested/checkbox lists, bold, italic, inline code, links
+  (incl. bare URLs), pipe tables, horizontal rules — in a proportional reading
+  face, deliberately unlike the monospace terminal.
 - **Your messages** kept as quiet monospace blocks (they were typed input).
 - **Tool calls** render as a labelled chip: tool name + its key argument (the
   file read, command run, pattern searched). A multi-line command keeps its line
@@ -101,10 +102,9 @@ filesystem, and turns are capped at `TRANSCRIPT_MAX_TURNS` as a guard.
 - `src/components/CopyButton.tsx` — copy-with-feedback button.
 - `src/components/SessionBar.tsx` (+ tests) — the in-place bar (`▤` toggle).
 - `src/components/SessionReader.tsx` (+ tests) — the History overlay reader.
-- Triggers in `SessionHistoryPanel.tsx` (history rows) and `Sidebar.tsx`
-  (live tab rows, `onReadTab`, gated by `markdownEnabled`). Wired in `App.tsx`:
-  `mdTabs`/`mdView`/`mdReload` state, `setTabMode`, `handleReadTab` (in-place),
-  `handleReadSession` (overlay).
+- Triggers in `SessionHistoryPanel.tsx` (history rows) and the session bar's
+  own `Terminal | Split | Markdown` toggle. Wired in `App.tsx`:
+  `mdTabs`/`mdView`/`mdReload` state, `setTabMode`, `handleReadSession` (overlay).
 
 ## Follow-ups
 

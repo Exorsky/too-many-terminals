@@ -394,17 +394,6 @@ export default function App() {
     [],
   );
 
-  /** Jump a live (or resumed) Claude tab straight into its in-place markdown
-   *  reader from the sidebar — selects the tab and flips it to markdown. */
-  const handleReadTab = useCallback((tab: Tab) => {
-    if (tab.kind !== 'claude' || !tab.resumeSessionId) return;
-    setShowHistory(false);
-    setShowSettings(false);
-    setReaderTarget(null);
-    dispatch({ type: 'select', tabId: tab.id });
-    setMdTabs((prev) => new Map(prev).set(tab.id, 'markdown'));
-  }, []);
-
   const activeTab = state.tabs.find((t) => t.id === state.activeTabId) ?? null;
   const activeReadable = !!activeTab && activeTab.kind === 'claude' && !!activeTab.resumeSessionId;
   const overlaysUp = showHistory || showSettings || readerTarget !== null;
@@ -554,9 +543,7 @@ export default function App() {
         collapsed={collapsed}
         onSelectTab={handleSelectTab}
         onCloseTab={handleCloseTab}
-        onReadTab={handleReadTab}
         onOpenDirectory={handleOpenDirectory}
-        markdownEnabled={settings.showSessionBar && settings.showMarkdownToggle}
         onNewClaudeTab={handleNewClaudeTab}
         onNewShellTab={handleNewShellTab}
         onRenameTab={handleRenameTab}

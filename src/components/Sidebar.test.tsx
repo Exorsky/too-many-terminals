@@ -40,10 +40,8 @@ function renderSidebar(overrides: Partial<React.ComponentProps<typeof Sidebar>> 
     showFiles: false,
     projects: [PROJECT],
     collapsed: false,
-    markdownEnabled: true,
     onSelectTab: vi.fn(),
     onCloseTab: vi.fn(),
-    onReadTab: vi.fn(),
     onOpenDirectory: vi.fn(),
     onNewClaudeTab: vi.fn(),
     onNewShellTab: vi.fn(),
@@ -135,24 +133,6 @@ describe('Sidebar', () => {
     fireEvent.contextMenu(screen.getAllByText('claude-1')[0]);
     expect(await screen.findByText('Unpin')).toBeInTheDocument();
     expect(screen.queryByText('Pin session')).not.toBeInTheDocument();
-  });
-
-  it('reads a live claude session once its id is known, not before', async () => {
-    const props = renderSidebar({
-      tabs: [
-        makeTab('resolved', { resumeSessionId: 'sess-abc' }),
-        makeTab('fresh', { resumeSessionId: null }),
-        makeTab('shell-1', { kind: 'shell', name: 'PowerShell' }),
-      ],
-    });
-    // One read affordance: the claude tab that has a session id. The fresh
-    // claude tab and the shell tab don't offer it.
-    const readButtons = screen.getAllByTitle('Read this session as Markdown');
-    expect(readButtons).toHaveLength(1);
-
-    await userEvent.click(readButtons[0]);
-    expect(props.onReadTab).toHaveBeenCalledWith(expect.objectContaining({ id: 'resolved' }));
-    expect(props.onSelectTab).not.toHaveBeenCalled(); // read must not also select
   });
 
   it('opens the command palette from the search row', async () => {

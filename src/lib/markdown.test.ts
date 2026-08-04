@@ -16,6 +16,22 @@ describe('parseInline', () => {
   it('leaves an unterminated marker as literal text', () => {
     expect(parseInline('a `b c')).toEqual([{ t: 'text', v: 'a `b c' }]);
   });
+
+  it('parses single-star italics without eating snake_case words', () => {
+    expect(parseInline('a *quick* look at max_retries_count')).toEqual([
+      { t: 'text', v: 'a ' },
+      { t: 'em', v: 'quick' },
+      { t: 'text', v: ' look at max_retries_count' },
+    ]);
+  });
+
+  it('autolinks a bare URL and trims trailing punctuation', () => {
+    expect(parseInline('see https://example.com/x, then stop.')).toEqual([
+      { t: 'text', v: 'see ' },
+      { t: 'link', v: 'https://example.com/x', href: 'https://example.com/x' },
+      { t: 'text', v: ', then stop.' },
+    ]);
+  });
 });
 
 describe('parseMarkdown', () => {
@@ -41,7 +57,7 @@ describe('parseMarkdown', () => {
     expect(blocks[0]).toEqual({
       t: 'list',
       ordered: false,
-      items: [[{ t: 'text', v: 'one' }], [{ t: 'text', v: 'two' }]],
+      items: [{ inlines: [{ t: 'text', v: 'one' }] }, { inlines: [{ t: 'text', v: 'two' }] }],
     });
     expect(blocks[1]).toEqual({ t: 'paragraph', inlines: [{ t: 'text', v: 'plain' }] });
   });
@@ -51,7 +67,65 @@ describe('parseMarkdown', () => {
     expect(blocks[0]).toEqual({
       t: 'list',
       ordered: true,
-      items: [[{ t: 'text', v: 'first' }], [{ t: 'text', v: 'second' }]],
+      items: [{ inlines: [{ t: 'text', v: 'first' }] }, { inlines: [{ t: 'text', v: 'second' }] }],
     });
+  });
+
+  it('nests an indented sub-list under its parent item', () => {
+    const blocks = parseMarkdown('- one\n  - nested a\n  - nested b\n- two');
+    expect(blocks[0]).toEqual({
+      t: 'list',
+      ordered: false,
+      items: [
+        {
+          inlines: [{ t: 'text', v: 'one' }],
+          sublist: {
+            ordered: false,
+            items: [{ inlines: [{ t: 'text', v: 'nested a' }] }, { inlines: [{ t: 'text', v: 'nested b' }] }],
+          },
+        },
+        { inlines: [{ t: 'text', v: 'two' }] },
+      ],
+    });
+  });
+
+  it('reads checkbox items and strips the marker from the text', () => {
+    const blocks = parseMarkdown('- [ ] todo\n- [x] done');
+    expect(blocks[0]).toEqual({
+      t: 'list',
+      ordered: false,
+      items: [
+        { inlines: [{ t: 'text', v: 'todo' }], checked: false },
+        { inlines: [{ t: 'text', v: 'done' }], checked: true },
+      ],
+    });
+  });
+
+  it('reads a horizontal rule on its own line', () => {
+    const blocks = parseMarkdown('before\n\n---\n\nafter');
+    expect(blocks).toEqual([
+      { t: 'paragraph', inlines: [{ t: 'text', v: 'before' }] },
+      { t: 'hr' },
+      { t: 'paragraph', inlines: [{ t: 'text', v: 'after' }] },
+    ]);
+  });
+
+  it('parses a pipe table with alignment and stops at a blank line', () => {
+    const blocks = parseMarkdown('| Name | Price |\n| --- | ---: |\n| Foo | $1 |\n| Bar | $2 |\n\nafter');
+    expect(blocks[0]).toEqual({
+      t: 'table',
+      header: [[{ t: 'text', v: 'Name' }], [{ t: 'text', v: 'Price' }]],
+      align: ['left', 'right'],
+      rows: [
+        [[{ t: 'text', v: 'Foo' }], [{ t: 'text', v: '$1' }]],
+        [[{ t: 'text', v: 'Bar' }], [{ t: 'text', v: '$2' }]],
+      ],
+    });
+    expect(blocks[1]).toEqual({ t: 'paragraph', inlines: [{ t: 'text', v: 'after' }] });
+  });
+
+  it('does not treat a plain line with a stray pipe as a table', () => {
+    const blocks = parseMarkdown('a | b\nnot a separator');
+    expect(blocks[0]).toEqual({ t: 'paragraph', inlines: [{ t: 'text', v: 'a | b not a separator' }] });
   });
 });
