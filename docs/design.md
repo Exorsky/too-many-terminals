@@ -143,6 +143,13 @@ These four colors are **reserved** for this vocabulary. Nothing else in the
 UI reuses `success`/`warning`/`attention`/`destructive` for decoration —
 if a color looks like a status color, it must mean a status.
 
+The worked example is the folder row's `.env` key glyph
+([env-loading.md](features/env-loading.md)): "this folder hands credentials to
+its sessions" is a tempting thing to paint orange, but it's *metadata about a
+folder*, not a live state of a session, so it's drawn in `muted-foreground`
+like the session count beside it. When a new signal wants a status color, the
+question to ask first is whether it changes on its own — the four above all do.
+
 ## Interaction patterns: which shape for which content
 
 The redesign work this round kept running into the same question — *tabs,

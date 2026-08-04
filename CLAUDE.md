@@ -22,6 +22,7 @@ Feature and architecture docs live in `docs/` — **keep them updated when featu
 - [docs/features/usage-meter.md](docs/features/usage-meter.md) — official 5h/7d rate-limit percentages
 - [docs/features/workspace-persistence.md](docs/features/workspace-persistence.md) — restoring folder/tabs across restarts
 - [docs/features/tab-status-and-naming.md](docs/features/tab-status-and-naming.md) — Claude Code hooks: live status + auto-naming
+- [docs/features/env-loading.md](docs/features/env-loading.md) — a folder's `.env` handed to the session at spawn
 - [docs/features/settings.md](docs/features/settings.md) — Settings view (left-rail categories: Interface/Notifications/Sessions/Customize)
 - [docs/features/themes.md](docs/features/themes.md) — theme presets + custom theme editor
 - [docs/development.md](docs/development.md) — dev/test/build commands, release process

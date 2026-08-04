@@ -1,5 +1,7 @@
 mod claude;
 mod commands;
+mod dotenv;
+mod env_sources;
 mod files;
 mod hook_server;
 mod hooks;
@@ -51,6 +53,7 @@ pub fn run() {
             commands::pty_resize,
             commands::pty_kill,
             commands::list_shells,
+            commands::env_names,
             commands::home_dir,
             commands::list_sessions,
             commands::delete_session,

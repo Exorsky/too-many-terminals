@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ShellOption, Tab } from '@/types';
@@ -68,6 +68,10 @@ function renderSidebar(overrides: Partial<React.ComponentProps<typeof Sidebar>> 
 beforeEach(() => {
   vi.mocked(ipc.getSessionUsageStats).mockResolvedValue({
     available: false, session: null, week: null, fetchedAtMs: null, fromCache: false,
+  });
+  // Most folders contribute no credentials; the tests that care override this.
+  vi.mocked(ipc.envNames).mockResolvedValue({
+    vars: [], refused: [], unreadable: false, folderScoped: false,
   });
 });
 afterEach(cleanup);
@@ -421,5 +425,97 @@ describe('Sidebar', () => {
     const railed = renderSidebar({ collapsed: true });
     await userEvent.click(screen.getByRole('button', { name: 'Home' }));
     expect(railed.onGoHome).toHaveBeenCalled();
+  });
+});
+
+describe('folder credentials glyph', () => {
+  /** The glyph itself carries no text — it's a bare icon — so its presence is
+   *  the tooltip trigger mounting. The tooltip body only exists in the DOM
+   *  once open (it's portalled and conditionally rendered), so tests that
+   *  need its text must open it first via focus, which Radix opens
+   *  synchronously (no hover-delay to wait out in jsdom). */
+  const trigger = () => document.querySelector('[data-slot="tooltip-trigger"]');
+
+  const openTooltip = async () => {
+    await waitFor(() => expect(trigger()).not.toBeNull());
+    fireEvent.focus(trigger()!);
+    return (await screen.findByRole('tooltip')).textContent!;
+  };
+
+  const report = (over: Partial<ipc.EnvReport> = {}): ipc.EnvReport => ({
+    vars: [], refused: [], unreadable: false, folderScoped: true, ...over,
+  });
+
+  it('groups variables by the file each one comes from', async () => {
+    vi.mocked(ipc.envNames).mockResolvedValue(report({
+      vars: [
+        { name: 'API_KEY', source: 'dotenv' },
+        { name: 'SHARED_TOKEN', source: 'global' },
+        { name: 'PROJECT_KEY', source: 'project' },
+        { name: 'LOCAL_KEY', source: 'local' },
+      ],
+      refused: ['PATH'],
+    }));
+    renderSidebar();
+
+    const title = await openTooltip();
+    expect(title).toContain('.claude/settings.local.json — 1');
+    expect(title).toContain('LOCAL_KEY');
+    expect(title).toContain('.claude/settings.json — 1');
+    expect(title).toContain('~/.claude/settings.json — 1');
+    expect(title).toContain('.env — 1');
+    expect(title).toContain('Refused (reserved): PATH');
+    // "from where" — the folder itself, last line.
+    expect(title).toContain(PROJECT);
+  });
+
+  it('lists the strongest source first, so a clash reads top-down', async () => {
+    vi.mocked(ipc.envNames).mockResolvedValue(report({
+      vars: [
+        { name: 'FROM_DOTENV', source: 'dotenv' },
+        { name: 'FROM_LOCAL', source: 'local' },
+      ],
+    }));
+    renderSidebar();
+
+    const title = await openTooltip();
+    expect(title.indexOf('settings.local.json')).toBeLessThan(title.indexOf('.env — '));
+  });
+
+  it('stays dark for a folder with no credentials of its own', async () => {
+    renderSidebar();
+    await waitFor(() => expect(ipc.envNames).toHaveBeenCalledWith(PROJECT));
+    expect(trigger()).toBeNull();
+  });
+
+  it('stays dark when only the global settings file contributes', async () => {
+    // Otherwise every folder lights up and the glyph distinguishes nothing.
+    vi.mocked(ipc.envNames).mockResolvedValue(report({
+      vars: [{ name: 'SHARED_TOKEN', source: 'global' }],
+      folderScoped: false,
+    }));
+    renderSidebar();
+
+    await waitFor(() => expect(ipc.envNames).toHaveBeenCalledWith(PROJECT));
+    expect(trigger()).toBeNull();
+  });
+
+  it('says so when the .env is there but unreadable', async () => {
+    vi.mocked(ipc.envNames).mockResolvedValue(report({ unreadable: true }));
+    renderSidebar();
+
+    expect(await openTooltip()).toContain("couldn't be read");
+  });
+
+  it('never renders a value, only names', async () => {
+    vi.mocked(ipc.envNames).mockResolvedValue(report({
+      vars: [{ name: 'API_KEY', source: 'dotenv' }],
+    }));
+    renderSidebar();
+
+    const title = await openTooltip();
+    expect(title).toContain('API_KEY');
+    // The backend hands over names only; nothing in the tree can leak a secret.
+    expect(document.body.innerHTML).not.toContain('sk-');
   });
 });

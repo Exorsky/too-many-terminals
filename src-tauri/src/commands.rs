@@ -4,6 +4,8 @@ use tauri::ipc::{Channel, InvokeResponseBody};
 use tauri::{AppHandle, Emitter, State};
 
 use crate::claude::{claude_command, login_shell_path, resume_flags};
+use crate::dotenv;
+use crate::env_sources;
 use crate::files;
 use crate::hooks;
 use crate::pty::PtyManager;
@@ -68,6 +70,19 @@ pub fn pty_spawn(
     let mut cmd = CommandBuilder::new(program);
     cmd.args(args);
     cmd.cwd(cwd.clone());
+
+    // The folder's own `.env`, so a session starts already holding the
+    // project's credentials — see docs/features/env-loading.md. Applied
+    // *before* our own variables below on purpose: that ordering, plus the
+    // reserved-name filter in `dotenv`, means nothing in a `.env` can shadow
+    // PATH/TERM or hijack the hook pipe.
+    let dotenv = dotenv::load(std::path::Path::new(&cwd));
+    if let Some(loaded) = &dotenv {
+        for (key, value) in &loaded.pairs {
+            cmd.env(key, value);
+        }
+    }
+
     cmd.env("TERM", "xterm-256color");
     if let Some(path) = login_shell_path() {
         cmd.env("PATH", path);
@@ -89,6 +104,19 @@ pub fn pty_spawn(
         }
     }
 
+    // The receipt, written into the terminal ahead of the process's own output
+    // so the hand-off is visible at the moment it happens. Covers every source
+    // a session here draws on, not just the `.env` we applied ourselves — the
+    // `settings.json` blocks are gated on `kind == "claude"` because that's the
+    // only kind they actually reach. Key names only; values stay in this
+    // process. Sent before `on_data` moves into the closure below;
+    // `Channel::send` only needs `&self`.
+    let receipt = env_sources::collect(std::path::Path::new(&cwd), dotenv.as_ref())
+        .receipt(kind == "claude");
+    if !receipt.is_empty() {
+        let _ = on_data.send(InvokeResponseBody::Raw(receipt.into_bytes()));
+    }
+
     let exit_tab_id = tab_id.clone();
     let app_for_watch = app.clone();
     ptys.spawn(
@@ -108,6 +136,49 @@ pub fn pty_spawn(
         spawn_session_id_watcher(app_for_watch, root, cwd, tab_id, existing);
     }
     Ok(())
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct EnvVar {
+    name: String,
+    /// Which file this name wins from: `dotenv` | `global` | `project` | `local`.
+    source: &'static str,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct EnvReport {
+    vars: Vec<EnvVar>,
+    refused: Vec<String>,
+    unreadable: bool,
+    /// Whether this folder contributes credentials of its own — what the
+    /// sidebar glyph keys on. False when everything came from the global
+    /// settings file, which applies to every folder equally.
+    folder_scoped: bool,
+}
+
+/// Every credential a session opened in `dir` will hold, and which file each
+/// one comes from — so a folder carrying credentials is readable at rest,
+/// without opening a tab in it. See docs/features/env-loading.md.
+///
+/// Values are dropped here and never cross the IPC boundary; the frontend only
+/// ever learns which names exist.
+#[tauri::command(async)]
+pub fn env_names(dir: String) -> EnvReport {
+    let path = std::path::Path::new(&dir);
+    let loaded = dotenv::load(path);
+    let collected = env_sources::collect(path, loaded.as_ref());
+    EnvReport {
+        vars: collected
+            .vars
+            .iter()
+            .map(|(name, source)| EnvVar { name: name.clone(), source: source.key() })
+            .collect(),
+        refused: collected.refused.clone(),
+        unreadable: collected.dotenv_unreadable,
+        folder_scoped: collected.has_folder_scoped(),
+    }
 }
 
 /// Polls for the transcript file a freshly spawned Claude tab was assigned,

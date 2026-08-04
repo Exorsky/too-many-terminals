@@ -211,6 +211,33 @@ export function writeFile(path: string, root: string, contents: string): Promise
   return invoke('write_file', { path, root, contents });
 }
 
+/** Which file a variable wins from. `dotenv` is applied by this app and reaches
+ *  every tab; the rest are applied by Claude Code and reach Claude tabs only. */
+export type EnvSource = 'dotenv' | 'global' | 'project' | 'local';
+
+export interface EnvVar {
+  name: string;
+  source: EnvSource;
+}
+
+export interface EnvReport {
+  /** Every variable a session opened here will hold, alphabetical. */
+  vars: EnvVar[];
+  /** Names the `.env` set that the app reserves for itself (PATH, TERM, …). */
+  refused: string[];
+  /** The folder has a `.env` that couldn't be read. */
+  unreadable: boolean;
+  /** This folder contributes credentials of its own — i.e. from something
+   *  other than the global settings file, which applies to every folder. */
+  folderScoped: boolean;
+}
+
+/** Every credential a session opened in `dir` will hold, and where each comes
+ *  from. Values never cross this boundary; see docs/features/env-loading.md. */
+export function envNames(dir: string): Promise<EnvReport> {
+  return invoke('env_names', { dir });
+}
+
 /** Removes just this app's hook entries from a project's
  *  `.claude/settings.local.json` (leaves any user-authored hooks alone). */
 export function uninstallHooks(cwd: string): Promise<void> {

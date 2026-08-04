@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, type MutableRefObject } from 'react';
 import {
-  CheckCircle2, ChevronRight, Circle, File, FileText, Folder, FolderOpen, FolderPlus, FolderTree, History, Loader2,
-  MessageCircle, Moon, PanelLeftClose, PanelLeftOpen, Pencil, Pin, PinOff, Plus, Search, Settings, Sparkles,
+  CheckCircle2, ChevronRight, Circle, File, FileText, Folder, FolderOpen, FolderPlus, FolderTree, History, KeyRound,
+  Loader2, MessageCircle, Moon, PanelLeftClose, PanelLeftOpen, Pencil, Pin, PinOff, Plus, Search, Settings, Sparkles,
   TerminalSquare, X,
 } from 'lucide-react';
+import * as ipc from '@/lib/ipc';
+import type { EnvReport, EnvSource } from '@/lib/ipc';
 import { cn, folderName } from '@/lib/utils';
 import { projectHue, type ShellOption, type Tab, type TabStatus } from '@/types';
 import SidebarFooter from './SidebarFooter';
@@ -21,6 +23,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface SidebarProps {
   tabs: Tab[];
@@ -449,6 +452,32 @@ function TabRow({
   );
 }
 
+/** How each source is named in the tooltip, strongest first — the order Claude
+ *  Code resolves them in, so the top line is the one that wins a clash. */
+const ENV_SOURCE_LABELS: [EnvSource, string][] = [
+  ['local', '.claude/settings.local.json'],
+  ['project', '.claude/settings.json'],
+  ['global', '~/.claude/settings.json'],
+  ['dotenv', '.env'],
+];
+
+/** The folder glyph's tooltip: what a session opened here will be handed,
+ *  grouped by the file it comes from, plus anything the app refused. Names
+ *  only — values never leave the backend (see docs/features/env-loading.md). */
+export function envTooltip(dir: string, report: EnvReport): string {
+  const lines: string[] = [];
+  for (const [source, label] of ENV_SOURCE_LABELS) {
+    const names = report.vars.filter((v) => v.source === source).map((v) => v.name);
+    if (names.length === 0) continue;
+    lines.push(`${label} — ${names.length}`);
+    lines.push(`  ${names.join(' ')}`);
+  }
+  if (report.refused.length > 0) lines.push(`Refused (reserved): ${report.refused.join(' ')}`);
+  if (report.unreadable) lines.push(".env is there but couldn't be read");
+  lines.push(dir);
+  return lines.join('\n');
+}
+
 function ProjectCard({
   dir, hue, tabs, activeTabId, showHistory, shellOptions, dragRef, markdownEnabled,
   onSelectTab, onCloseTab, onReadTab, onRenameTab, onOpenDirectory, onTogglePin, onNewClaudeTab, onNewShellTab, onRemoveProject,
@@ -476,6 +505,17 @@ function ProjectCard({
 }) {
   const [expanded, setExpanded] = useState(true);
   const [dropPos, setDropPos] = useState<DropPos | null>(null);
+
+  // Which credentials this folder hands to sessions opened in it. Read here
+  // rather than reported back from a spawn, so a folder you haven't opened a
+  // tab in yet still shows the glyph. Re-read when the tab count changes —
+  // the cheapest hook for "you were just working in here".
+  const [envReport, setEnvReport] = useState<EnvReport | null>(null);
+  useEffect(() => {
+    let alive = true;
+    ipc.envNames(dir).then((report) => { if (alive) setEnvReport(report); }).catch(() => {});
+    return () => { alive = false; };
+  }, [dir, tabs.length]);
 
   /** A folder drag only targets another folder. */
   const canAccept = () => {
@@ -515,6 +555,16 @@ function ProjectCard({
       >
         <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: `hsl(${hue} 55% 50%)` }} />
         <span className="truncate flex-1">{folderName(dir)}</span>
+        {envReport?.folderScoped && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className={cn('flex items-center shrink-0 text-muted-foreground', envReport.unreadable && 'opacity-50')}>
+                <KeyRound size={11} />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="right">{envTooltip(dir, envReport)}</TooltipContent>
+          </Tooltip>
+        )}
         <span className="shrink-0 text-[10px] font-normal text-muted-foreground">{tabs.length}</span>
         <button
           className="flex items-center justify-center w-5 h-5 rounded-sm shrink-0 border-none cursor-pointer bg-transparent text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover/card:opacity-100"

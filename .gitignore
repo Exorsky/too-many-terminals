@@ -12,6 +12,11 @@ dist
 dist-ssr
 *.local
 
+# Credentials. The app hands these to any session opened in the folder
+# (docs/features/env-loading.md), so they must never reach a commit.
+.env
+.env.*
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
