@@ -33,7 +33,16 @@ function Node({ entry, depth, defaultOpen, activePath, onOpen }: NodeProps) {
           entry.path === activePath && 'text-foreground bg-white/8',
         )}
         style={{ paddingLeft: 6 + depth * 12 }}
-        onClick={() => (entry.isDir ? setOpen((v) => !v) : onOpen(entry.path))}
+        onClick={() => {
+          if (!entry.isDir) { onOpen(entry.path); return; }
+          setOpen((v) => {
+            // Drop the cached listing on collapse, so re-expanding re-fetches
+            // instead of showing a stale snapshot from before files were
+            // added/removed on disk.
+            if (v) setChildren(null);
+            return !v;
+          });
+        }}
         title={entry.name}
       >
         {entry.isDir ? (

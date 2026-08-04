@@ -52,6 +52,31 @@ describe('FileTree', () => {
     expect(await screen.findByText('App.tsx')).toBeInTheDocument();
   });
 
+  it('re-fetches a folder after it is collapsed and re-expanded, picking up new files', async () => {
+    let calls = 0;
+    vi.mocked(ipc.listDir).mockImplementation(async () => {
+      calls += 1;
+      return calls === 1
+        ? [{ name: 'README.md', path: '/proj/README.md', isDir: false }]
+        : [
+            { name: 'README.md', path: '/proj/README.md', isDir: false },
+            { name: 'new.txt', path: '/proj/new.txt', isDir: false },
+          ];
+    });
+
+    render(<FileTree root={ROOT} activePath={null} onOpen={vi.fn()} />);
+    fireEvent.click(screen.getByText('project')); // expand
+    await screen.findByText('README.md');
+    expect(screen.queryByText('new.txt')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('project')); // collapse
+    expect(screen.queryByText('README.md')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('project')); // re-expand
+    expect(await screen.findByText('new.txt')).toBeInTheDocument();
+    expect(calls).toBe(2); // one fetch per expand; collapsing must not itself fetch
+  });
+
   it('calls onOpen with the file path when a file row is clicked', async () => {
     vi.mocked(ipc.listDir).mockResolvedValue([{ name: 'App.tsx', path: '/proj/App.tsx', isDir: false }]);
     const onOpen = vi.fn();

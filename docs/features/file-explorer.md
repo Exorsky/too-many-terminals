@@ -22,10 +22,13 @@ per-project session list and from the command palette (both stay scoped to
 ## Behavior
 
 - **Tree.** One lazily-loaded tree per open project folder. A directory fetches
-  its own children (`list_dir`) only the first time it's expanded — opening a
-  project with a large `node_modules` never walks it up front. Everything
-  starts collapsed, including the project root row itself — nothing
-  auto-expands.
+  its own children (`list_dir`) the first time it's expanded — opening a
+  project with a large `node_modules` never walks it up front. Collapsing a
+  directory drops its cached listing, so the next expand re-fetches instead of
+  showing a stale snapshot — the way to pick up a file that appeared on disk
+  (e.g. written by a running Claude session) without reopening the whole panel.
+  Everything starts collapsed, including the project root row itself —
+  nothing auto-expands.
 - **Find files.** Typing in the search box switches the panel to a flat,
   breadth-first filename search across every open project (`src/lib/file-search.ts`),
   skipping the usual noisy directories (`node_modules`, `.git`, `dist`, …) and
