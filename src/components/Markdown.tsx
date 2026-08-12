@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { parseMarkdown, type MdInline, type MdListItem } from '@/lib/markdown';
+import * as ipc from '@/lib/ipc';
 
 function Inlines({ parts }: { parts: MdInline[] }): React.ReactNode {
   return parts.map((p, i) => {
@@ -16,7 +17,15 @@ function Inlines({ parts }: { parts: MdInline[] }): React.ReactNode {
         return <em key={i} className="italic">{p.v}</em>;
       case 'link':
         return (
-          <a key={i} href={p.href} className="text-primary underline decoration-primary/30 underline-offset-2 cursor-pointer">
+          <a
+            key={i}
+            href={p.href}
+            className="text-primary underline decoration-primary/30 underline-offset-2 cursor-pointer"
+            onClick={(e) => {
+              e.preventDefault();
+              ipc.openExternal(p.href);
+            }}
+          >
             {p.v}
           </a>
         );
