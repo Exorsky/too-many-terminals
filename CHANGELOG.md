@@ -11,6 +11,11 @@ listed here; see `git log` for the full history.
 
 ## [Unreleased]
 
+### Added
+- A live session's tab context menu now has **Open in VS Code**, handing it
+  off to the native Claude Code VS Code extension — both tools read the same
+  transcript file, so there's nothing to migrate.
+
 ## [0.17.0] - 2026-08-12
 
 ### Added
