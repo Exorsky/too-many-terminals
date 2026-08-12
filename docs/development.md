@@ -34,16 +34,36 @@ per OS with `pnpm tauri dev`:
 6. Quit the app with tabs open — no orphan shells remain.
 7. History → resume a session — Claude opens with prior context.
 
+## Changelog
+
+`CHANGELOG.md` (repo root, [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
+format) is kept current as work lands, not reconstructed at release time:
+
+- Every user-facing `feat`/`fix` commit adds a line under `## [Unreleased]`
+  (`### Added` for a `feat`, `### Fixed` for a `fix`, `### Changed` for a
+  behavior change to something that already existed). Internal-only commits
+  (`chore`, `docs`, `test`, `build`, refactors with no user-visible effect)
+  don't get an entry.
+- If `[Unreleased]` was ever allowed to fall behind, rebuild it before
+  cutting a release from the commits since the last version tag:
+  `git log vX.Y.Z..HEAD --oneline --no-merges`, grouped the same way.
+
 ## Release process (SemVer)
 
 Version source of truth: `src-tauri/tauri.conf.json` → `version`.
 
-1. Bump the version in **three** files: `src-tauri/tauri.conf.json`, `package.json`,
+1. Retitle `CHANGELOG.md`'s `## [Unreleased]` heading to `## [X.Y.Z] - YYYY-MM-DD`
+   (today's date), then add a fresh empty `## [Unreleased]` section above it.
+   Add the compare-link reference at the bottom of the file
+   (`[X.Y.Z]: .../compare/vPREV...vX.Y.Z`).
+2. Bump the version in **three** files: `src-tauri/tauri.conf.json`, `package.json`,
    `src-tauri/Cargo.toml` (keep them identical).
-2. Commit: `chore(release): vX.Y.Z`
-3. Tag and push: `git tag vX.Y.Z && git push origin vX.Y.Z` — this triggers
-   `.github/workflows/release.yml` (see below), or build locally with
-   `pnpm tauri build` (bundles land in `src-tauri/target/release/bundle/`).
+3. Commit: `chore(release): vX.Y.Z`
+4. Tag and push: `git tag vX.Y.Z && git push origin vX.Y.Z` — this triggers
+   `.github/workflows/release.yml` (see below), which pulls step 1's
+   `CHANGELOG.md` section into the draft release body automatically. Or build
+   locally with `pnpm tauri build` (bundles land in
+   `src-tauri/target/release/bundle/`), which has no changelog step of its own.
 
 Bump rules: breaking behavior/config changes → major; new features → minor;
 fixes/docs/internal → patch.
@@ -63,6 +83,14 @@ fixes/docs/internal → patch.
     published, so without the up-front tag, publishing the draft would fire `push:tags`
     and trigger a **second, duplicate** release. (Pushing the tag with the built-in
     `GITHUB_TOKEN` does not re-trigger the workflow, so the manual run isn't doubled.)
+  - The `changelog` job reads the version straight from `tauri.conf.json` and pulls the
+    matching `## [X.Y.Z]` section out of `CHANGELOG.md` (a plain `index()`-based `awk`
+    scan, stopping at the next `## [` heading or the reference-links block at the bottom
+    — no regex, so the brackets in `[X.Y.Z]` can't be misread as one), then feeds it to
+    `tauri-action` as `releaseBody`. Relies on step 1 of the release process above having
+    already retitled `[Unreleased]` to this version *before* the tag is pushed — an
+    unretitled `CHANGELOG.md` just produces an empty release body, same as before this
+    job existed.
 - Builds are **unsigned**: macOS `.dmg` triggers Gatekeeper (right-click → Open on
   first launch), Windows `.exe`/`.msi` triggers SmartScreen ("More info" → "Run
   anyway"). No code-signing certificates are configured since this is a personal app.

@@ -18,6 +18,7 @@ Feature and architecture docs live in `docs/` — **keep them updated when featu
 - [docs/features/command-palette.md](docs/features/command-palette.md) — Ctrl+Shift+P fuzzy jump to any open terminal
 - [docs/features/notifications.md](docs/features/notifications.md) — desktop notifications when an unfocused session needs you
 - [docs/features/session-history.md](docs/features/session-history.md) — past-session browsing/resume
+- [docs/features/vscode-handoff.md](docs/features/vscode-handoff.md) — hand a live session off to the VS Code Claude Code extension
 - [docs/features/session-reader.md](docs/features/session-reader.md) — reading a past session as rendered Markdown
 - [docs/features/usage-meter.md](docs/features/usage-meter.md) — official 5h/7d rate-limit percentages
 - [docs/features/workspace-persistence.md](docs/features/workspace-persistence.md) — restoring folder/tabs across restarts
@@ -38,6 +39,7 @@ Feature and architecture docs live in `docs/` — **keep them updated when featu
 
 - **Conventional commits** (`feat:`, `fix:`, `docs:`, `test:`, `chore:`, `build:`); scope by area (`pty`, `ui`, `tabs`, `history`, `usage`).
 - **SemVer** `Major.Minor.Patch`. The version source of truth is `src-tauri/tauri.conf.json`; keep `package.json` and `src-tauri/Cargo.toml` in sync when bumping (see docs/development.md).
+- **`CHANGELOG.md`** — every user-facing `feat`/`fix` gets a line under `## [Unreleased]` (Added/Changed/Fixed) when it's committed, not deferred to release time. Cutting a release retitles `[Unreleased]` to the new version + date and opens a fresh empty `[Unreleased]` above it — never skip this step when bumping the version.
 - All frontend↔backend calls go through `src/lib/ipc.ts` — never import `@tauri-apps/api` elsewhere. Tests mock this one module.
 - Rust modules keep Tauri types out of core logic (`pty.rs`, `session_history.rs`, `session_usage.rs`, `shell.rs` are plain Rust; `commands.rs` is the thin Tauri adapter) so they stay unit-testable.
 - New features need tests (vitest for frontend logic/components, cargo test for Rust) and a doc page under `docs/features/`.
