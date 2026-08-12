@@ -16,6 +16,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   selectedThemeId: 'default',
   customThemes: [],
   showMarkdownToggle: true,
+  showFolderPaths: true,
   notificationsEnabled: true,
   autoSleepMinutes: 15,
   usageRefreshSeconds: 300,

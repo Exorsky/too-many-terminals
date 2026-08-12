@@ -16,6 +16,10 @@ listed here; see `git log` for the full history.
   Preview toggle and a Split menu (right/down), instead of one three-way
   Terminal/Split/Markdown switch. Markdown's own controls (Rendered/Raw,
   copy, refresh) moved onto the markdown pane itself.
+- The sidebar shows up to two parent folders before each project's name
+  (e.g. `Desktop / prog / too-many-terminals`), so folders that share a name
+  stay easy to tell apart at a glance. Toggle with **Show folder paths** in
+  Settings → Interface (on by default).
 
 ### Fixed
 - Markdown links in the transcript reader now open in the default browser

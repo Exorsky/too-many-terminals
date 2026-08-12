@@ -14,10 +14,14 @@ theme system (see [themes.md](themes.md)).
 
 ## Interface
 
-One switch — **Show Markdown Preview** (`showMarkdownToggle`) — gates
-[`SessionControls`](session-reader.md#session-controls), the Preview/Split
-controls docked to the tab strip. Defaults to `true` (opt-out) and persists in
-`settings.json`.
+Two switches, both default `true` (opt-out) and persisted in `settings.json`:
+
+- **Show Markdown Preview** (`showMarkdownToggle`) — gates
+  [`SessionControls`](session-reader.md#session-controls), the Preview/Split
+  controls docked to the tab strip.
+- **Show folder paths** (`showFolderPaths`) — gates the up-to-two-ancestor
+  breadcrumb before each project's name in the sidebar (see
+  [terminals.md](terminals.md#folder-paths)).
 
 ## Notifications
 
@@ -56,7 +60,8 @@ in-memory mirror of `AppSettings` with `loadSettings` (once), `patchSettings`
 - `src/lib/settings-store.ts` (+ tests) — shared settings state
 - Wiring: `App.tsx` (`showSettings` state, mutual exclusion with `showHistory`;
   reads `showMarkdownToggle`/`autoSleepMinutes` via `useSettings`),
-  `Sidebar.tsx` (`showSettings`/`onToggleSettings` props, collapsed-rail button) and
+  `Sidebar.tsx` (`showSettings`/`onToggleSettings` props, collapsed-rail button; also
+  reads `showFolderPaths` directly via `useSettings` for the folder breadcrumb) and
   `SidebarFooter.tsx` (the expanded footer's menu item)
 - `src-tauri/src/settings.rs` — persisted `AppSettings` (incl. `auto_sleep_minutes`,
   `usage_refresh_seconds`)

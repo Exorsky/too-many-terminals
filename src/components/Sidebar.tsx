@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState, type MutableRefObject } from 'react';
 import {
-  CheckCircle2, ChevronRight, Circle, File, Folder, FolderOpen, FolderPlus, FolderTree, History, KeyRound,
+  CheckCircle2, ChevronRight, Circle, Code, File, Folder, FolderOpen, FolderPlus, FolderTree, History, KeyRound,
   Loader2, MessageCircle, Moon, PanelLeftClose, PanelLeftOpen, Pencil, Pin, PinOff, Plus, Search, Settings, Sparkles,
   TerminalSquare, X,
 } from 'lucide-react';
 import * as ipc from '@/lib/ipc';
 import type { EnvReport, EnvSource } from '@/lib/ipc';
-import { cn, folderName } from '@/lib/utils';
+import { cn, folderName, parentPath } from '@/lib/utils';
+import { useSettings } from '@/lib/settings-store';
 import { projectHue, type ShellOption, type Tab, type TabStatus } from '@/types';
 import SidebarFooter from './SidebarFooter';
 import {
@@ -38,6 +39,7 @@ interface SidebarProps {
   onSelectTab: (tabId: string) => void;
   onCloseTab: (tabId: string) => void;
   onOpenDirectory: (dir: string) => void;
+  onOpenInVscode: (tabId: string) => void;
   onNewClaudeTab: (dir: string) => void;
   onNewShellTab: (dir: string, shellId: string) => void;
   onRenameTab: (tabId: string, name: string) => void;
@@ -182,7 +184,7 @@ function AttentionStrip({ tabs, projects, activeTabId, showHistory, onSelectTab 
  *  in each session's own context menu (see TabRow), not a control here. */
 function PinnedStrip({
   tabs, projects, activeTabId, showHistory,
-  onSelectTab, onCloseTab, onRenameTab, onOpenDirectory, onTogglePin,
+  onSelectTab, onCloseTab, onRenameTab, onOpenDirectory, onOpenInVscode, onTogglePin,
 }: {
   tabs: Tab[];
   projects: string[];
@@ -192,6 +194,7 @@ function PinnedStrip({
   onCloseTab: (tabId: string) => void;
   onRenameTab: (tabId: string, name: string) => void;
   onOpenDirectory: (dir: string) => void;
+  onOpenInVscode: (tabId: string) => void;
   onTogglePin: (tabId: string) => void;
 }) {
   // Not a drop target for reordering — pinned sessions span folders, so a
@@ -224,6 +227,7 @@ function PinnedStrip({
               onCloseTab={onCloseTab}
               onRenameTab={onRenameTab}
               onOpenDirectory={onOpenDirectory}
+              onOpenInVscode={onOpenInVscode}
               onTogglePin={onTogglePin}
               onReorderTab={() => {}}
             />
@@ -271,7 +275,7 @@ function NewSessionMenu({ dir, shellOptions, onNewClaudeTab, onNewShellTab }: {
 
 function TabRow({
   tab, isActive, dragRef, showFolder, hue,
-  onSelectTab, onCloseTab, onRenameTab, onOpenDirectory, onTogglePin, onReorderTab,
+  onSelectTab, onCloseTab, onRenameTab, onOpenDirectory, onOpenInVscode, onTogglePin, onReorderTab,
 }: {
   tab: Tab;
   isActive: boolean;
@@ -285,6 +289,7 @@ function TabRow({
   onCloseTab: (tabId: string) => void;
   onRenameTab: (tabId: string, name: string) => void;
   onOpenDirectory: (dir: string) => void;
+  onOpenInVscode: (tabId: string) => void;
   onTogglePin: (tabId: string) => void;
   onReorderTab: (tabId: string, targetId: string, position: DropPos) => void;
 }) {
@@ -416,6 +421,12 @@ function TabRow({
           <FolderOpen size={13} />
           <span>Open directory</span>
         </ContextMenuItem>
+        {tab.kind === 'claude' && tab.resumeSessionId && (
+          <ContextMenuItem onSelect={() => onOpenInVscode(tab.id)}>
+            <Code size={13} />
+            <span>Open in VS Code</span>
+          </ContextMenuItem>
+        )}
         <ContextMenuItem onSelect={() => onTogglePin(tab.id)}>
           {tab.pinned ? <PinOff size={13} /> : <Pin size={13} />}
           <span>{tab.pinned ? 'Unpin' : 'Pin session'}</span>
@@ -458,8 +469,8 @@ export function envTooltip(dir: string, report: EnvReport): string {
 
 function ProjectCard({
   dir, hue, tabs, activeTabId, showHistory, shellOptions, dragRef,
-  onSelectTab, onCloseTab, onRenameTab, onOpenDirectory, onTogglePin, onNewClaudeTab, onNewShellTab, onRemoveProject,
-  onReorderProject, onReorderTab,
+  onSelectTab, onCloseTab, onRenameTab, onOpenDirectory, onOpenInVscode, onTogglePin, onNewClaudeTab, onNewShellTab,
+  onRemoveProject, onReorderProject, onReorderTab,
 }: {
   dir: string;
   hue: number;
@@ -472,6 +483,7 @@ function ProjectCard({
   onCloseTab: (tabId: string) => void;
   onRenameTab: (tabId: string, name: string) => void;
   onOpenDirectory: (dir: string) => void;
+  onOpenInVscode: (tabId: string) => void;
   onTogglePin: (tabId: string) => void;
   onNewClaudeTab: (dir: string) => void;
   onNewShellTab: (dir: string, shellId: string) => void;
@@ -481,6 +493,8 @@ function ProjectCard({
 }) {
   const [expanded, setExpanded] = useState(true);
   const [dropPos, setDropPos] = useState<DropPos | null>(null);
+  const settings = useSettings();
+  const breadcrumb = settings.showFolderPaths ? parentPath(dir) : '';
 
   // Which credentials this folder hands to sessions opened in it. Read here
   // rather than reported back from a spawn, so a folder you haven't opened a
@@ -530,7 +544,12 @@ function ProjectCard({
         title={dir}
       >
         <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: `hsl(${hue} 55% 50%)` }} />
-        <span className="truncate flex-1">{folderName(dir)}</span>
+        <span className="flex items-baseline min-w-0 flex-1">
+          {breadcrumb && (
+            <span className="shrink truncate text-[10px] font-normal text-muted-foreground">{breadcrumb} /&nbsp;</span>
+          )}
+          <span className="truncate">{folderName(dir)}</span>
+        </span>
         {envReport?.folderScoped && (
           <Tooltip>
             <TooltipTrigger asChild>
@@ -564,6 +583,7 @@ function ProjectCard({
               onCloseTab={onCloseTab}
               onRenameTab={onRenameTab}
               onOpenDirectory={onOpenDirectory}
+              onOpenInVscode={onOpenInVscode}
               onTogglePin={onTogglePin}
               onReorderTab={onReorderTab}
             />
@@ -577,8 +597,8 @@ function ProjectCard({
 
 export default function Sidebar({
   tabs, activeTabId, shellOptions, showHistory, showSettings, showHome, showFiles, projects, collapsed,
-  onSelectTab, onCloseTab, onOpenDirectory, onNewClaudeTab, onNewShellTab, onRenameTab, onTogglePin, onOpenSearch,
-  onToggleHistory, onToggleSettings, onToggleFiles, onGoHome,
+  onSelectTab, onCloseTab, onOpenDirectory, onOpenInVscode, onNewClaudeTab, onNewShellTab, onRenameTab, onTogglePin,
+  onOpenSearch, onToggleHistory, onToggleSettings, onToggleFiles, onGoHome,
   onAddProject, onRemoveProject, onReorderProject, onReorderTab, onToggleCollapse,
 }: SidebarProps) {
   const dragRef = useRef<DragItem | null>(null);
@@ -728,6 +748,7 @@ export default function Sidebar({
             onCloseTab={onCloseTab}
             onRenameTab={onRenameTab}
             onOpenDirectory={onOpenDirectory}
+            onOpenInVscode={onOpenInVscode}
             onTogglePin={onTogglePin}
           />
 
@@ -761,6 +782,7 @@ export default function Sidebar({
                 onCloseTab={onCloseTab}
                 onRenameTab={onRenameTab}
                 onOpenDirectory={onOpenDirectory}
+                onOpenInVscode={onOpenInVscode}
                 onTogglePin={onTogglePin}
                 onNewClaudeTab={onNewClaudeTab}
                 onNewShellTab={onNewShellTab}

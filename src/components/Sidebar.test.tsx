@@ -6,6 +6,7 @@ import type { ShellOption, Tab } from '@/types';
 vi.mock('@/lib/ipc');
 
 import * as ipc from '@/lib/ipc';
+import { patchSettings, resetSettingsForTest } from '@/lib/settings-store';
 import Sidebar from './Sidebar';
 
 const SHELLS: ShellOption[] = [
@@ -43,6 +44,7 @@ function renderSidebar(overrides: Partial<React.ComponentProps<typeof Sidebar>> 
     onSelectTab: vi.fn(),
     onCloseTab: vi.fn(),
     onOpenDirectory: vi.fn(),
+    onOpenInVscode: vi.fn(),
     onNewClaudeTab: vi.fn(),
     onNewShellTab: vi.fn(),
     onRenameTab: vi.fn(),
@@ -64,6 +66,7 @@ function renderSidebar(overrides: Partial<React.ComponentProps<typeof Sidebar>> 
 }
 
 beforeEach(() => {
+  resetSettingsForTest();
   vi.mocked(ipc.getSessionUsageStats).mockResolvedValue({
     available: false, session: null, week: null, fetchedAtMs: null, fromCache: false,
   });
@@ -117,6 +120,34 @@ describe('Sidebar', () => {
     await userEvent.click(await screen.findByText('Rename'));
     // Rename swaps the row for an editable input seeded with the current name.
     expect(screen.getByDisplayValue('claude-1')).toBeInTheDocument();
+  });
+
+  it('hides "Open in VS Code" until a claude tab has a resumable session id', async () => {
+    renderSidebar({
+      tabs: [
+        makeTab('claude-1'), // resumeSessionId: null — session id not learned yet
+        makeTab('shell-1', { kind: 'shell', name: 'PowerShell' }),
+      ],
+    });
+
+    fireEvent.contextMenu(screen.getByText('claude-1'));
+    await screen.findByText('Open directory'); // menu is open
+    expect(screen.queryByText('Open in VS Code')).not.toBeInTheDocument();
+    await userEvent.keyboard('{Escape}'); // close before opening the next menu
+
+    fireEvent.contextMenu(screen.getByText('PowerShell'));
+    await screen.findByText('Open directory');
+    expect(screen.queryByText('Open in VS Code')).not.toBeInTheDocument();
+  });
+
+  it('"Open in VS Code" hands off a resumable claude tab', async () => {
+    const props = renderSidebar({
+      tabs: [makeTab('claude-1', { resumeSessionId: 'sess-abc' })],
+    });
+
+    fireEvent.contextMenu(screen.getByText('claude-1'));
+    await userEvent.click(await screen.findByText('Open in VS Code'));
+    expect(props.onOpenInVscode).toHaveBeenCalledWith('claude-1');
   });
 
   it('right-click menu pins and unpins a session', async () => {
@@ -267,6 +298,21 @@ describe('Sidebar', () => {
 
     await userEvent.click(header);
     expect(screen.getByText('claude-1')).toBeInTheDocument();
+  });
+
+  it('shows the two nearest ancestor folders before the name by default', () => {
+    renderSidebar();
+    // PROJECT = 'C:\Users\x\project' — the two folders right above it.
+    expect(screen.getByText(/Users \/ x/)).toBeInTheDocument();
+    expect(screen.getByText('project')).toBeInTheDocument();
+  });
+
+  it('hides the breadcrumb when the folder-paths preference is off', () => {
+    vi.mocked(ipc.saveSettings).mockResolvedValue(undefined);
+    patchSettings({ showFolderPaths: false });
+    renderSidebar();
+    expect(screen.queryByText(/Users \/ x/)).not.toBeInTheDocument();
+    expect(screen.getByText('project')).toBeInTheDocument();
   });
 
   it('renames a tab via double-click, committing on Enter', async () => {

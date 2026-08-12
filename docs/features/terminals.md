@@ -15,6 +15,19 @@ and appends a new project; picking an already-open folder is a no-op. Each proje
 "New session" menu is scoped to that project — every tab spawns with its owning folder as
 `cwd`.
 
+### Folder paths
+
+When two open folders share a name (or you just can't remember which drive/client a
+project lives under), the name alone doesn't say where it is — the full path was always
+in the row's `title` tooltip, but that means hovering every row to check. `parentPath()`
+(`src/lib/utils.ts`) prefixes the name with up to two ancestor folders, muted and smaller,
+closest-to-the-project first: `… / Desktop / prog / too-many-terminals`. It's the two
+folders *nearest* the project, not a fixed root — a folder one level deeper shows two
+different ancestors, not the same prefix with more appended. An ellipsis marks that there's
+more above; nothing is added when a folder has fewer than two ancestors (e.g. one sitting
+right off a drive root). Gated by **Show folder paths** (`showFolderPaths`, default on —
+see [settings.md](settings.md)).
+
 ## Pinning a session
 
 Any session can be pinned from its right-click menu (**Pin session** / **Unpin**,
@@ -127,19 +140,22 @@ does nothing — the terminal's old copy-on-select/paste-on-right-click is gone.
 
 - `src/App.tsx`, `src/components/Sidebar.tsx`, `src/components/Terminal.tsx`,
   `src/components/terminalCache.ts`, `src/components/ui/context-menu.tsx` (tab right-click menu),
-  `src/lib/tabs.ts`, `src/main.tsx` (global contextmenu suppression)
+  `src/lib/tabs.ts`, `src/lib/utils.ts` (`folderName`, `parentPath`),
+  `src/main.tsx` (global contextmenu suppression)
 - `src-tauri/src/pty.rs`, `shell.rs`, `claude.rs`, `commands.rs`
 
 ## Tests
 
 - `src/lib/tabs.test.ts` — tab state transitions, including `rename`, `pin`, and
   `reorderTab` (same-folder move, no-op guards, cross-folder refusal)
+- `src/lib/utils.test.ts` — `parentPath` (nearest-two-ancestors, ellipsis, fewer-than-two,
+  root-level, forward-slash paths, custom level count)
 - `src/components/Sidebar.test.tsx` — tab rows, per-project shell menu, folder
   expand/collapse, add/remove folder, multiple simultaneous folders, empty state, sidebar
   collapse, double-click rename (commit/cancel/empty-name-discard), drag-to-reorder folders
   and sessions (and refusal to move a session across folders), the Pinned strip
-  (cross-folder listing, count, exited exclusion, pin/unpin via context menu), and the
-  search row
+  (cross-folder listing, count, exited exclusion, pin/unpin via context menu), the
+  search row, and the folder-paths breadcrumb (shown by default, hidden via settings)
 - `cargo test shell::` / `claude::` — per-platform shell lists and claude command shape
 - `cargo test workspace::` — includes the `pinned` field round-tripping and loading as
   unpinned from a workspace file saved before the field existed
