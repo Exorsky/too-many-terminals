@@ -16,7 +16,7 @@ const NODE_STYLES: Record<TranscriptTurn['role'], string> = {
 
 /** Renders parsed transcript turns as a reading column — the shared document
  *  body behind both the History overlay (`SessionReader`) and the in-place
- *  markdown view (`SessionBar`). Presentational: callers own loading, error,
+ *  markdown view (`MarkdownPane`). Presentational: callers own loading, error,
  *  empty, and the surrounding chrome. */
 export default function TranscriptDocument({ turns, view, fill = false }: {
   turns: TranscriptTurn[];

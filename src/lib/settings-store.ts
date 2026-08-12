@@ -15,7 +15,6 @@ import type { AppSettings } from '@/types';
 export const DEFAULT_SETTINGS: AppSettings = {
   selectedThemeId: 'default',
   customThemes: [],
-  showSessionBar: true,
   showMarkdownToggle: true,
   notificationsEnabled: true,
   autoSleepMinutes: 15,

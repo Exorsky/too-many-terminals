@@ -16,13 +16,12 @@ describe('settings-store', () => {
     vi.mocked(ipc.loadSettings).mockResolvedValue({ selectedThemeId: 'amber' } as never);
     const loaded = await loadSettings();
     expect(loaded.selectedThemeId).toBe('amber');
-    expect(loaded.showSessionBar).toBe(true);
     expect(loaded.showMarkdownToggle).toBe(true);
   });
 
   it('loads exactly once even if called concurrently', async () => {
     vi.mocked(ipc.loadSettings).mockResolvedValue({
-      selectedThemeId: 'default', customThemes: [], showSessionBar: true, showMarkdownToggle: true, notificationsEnabled: true, autoSleepMinutes: 15, usageRefreshSeconds: 60,
+      selectedThemeId: 'default', customThemes: [], showMarkdownToggle: true, notificationsEnabled: true, autoSleepMinutes: 15, usageRefreshSeconds: 60,
     });
     await Promise.all([loadSettings(), loadSettings(), loadSettings()]);
     expect(ipc.loadSettings).toHaveBeenCalledOnce();
@@ -30,14 +29,13 @@ describe('settings-store', () => {
 
   it('merges a patch over current settings without dropping other fields', () => {
     patchSettings({ selectedThemeId: 'violet' });
-    patchSettings({ showSessionBar: false });
+    patchSettings({ showMarkdownToggle: false });
     // The theme write and the pref write both survive.
     expect(getSettings().selectedThemeId).toBe('violet');
-    expect(getSettings().showSessionBar).toBe(false);
-    expect(getSettings().showMarkdownToggle).toBe(true);
+    expect(getSettings().showMarkdownToggle).toBe(false);
     // Persisted the full merged object each time.
     expect(ipc.saveSettings).toHaveBeenLastCalledWith(
-      expect.objectContaining({ selectedThemeId: 'violet', showSessionBar: false }),
+      expect.objectContaining({ selectedThemeId: 'violet', showMarkdownToggle: false }),
     );
   });
 });

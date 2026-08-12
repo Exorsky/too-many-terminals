@@ -1,7 +1,10 @@
-import { cleanup, fireEvent, render } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { TranscriptTurn } from '@/types';
 import MarkdownPane from './MarkdownPane';
+
+const noopProps = { onSetView: vi.fn(), onRefresh: vi.fn(), turnsCount: null, markdownText: '' };
 
 const TURNS: TranscriptTurn[] = [
   { role: 'user', timestamp: null, blocks: [{ kind: 'text', text: 'first' }] },
@@ -35,7 +38,7 @@ describe('MarkdownPane', () => {
   it('opens scrolled to the bottom once turns load', () => {
     const m = mockMetrics(900);
     try {
-      const { getByTestId } = render(<MarkdownPane turns={TURNS} error={null} view="rendered" />);
+      const { getByTestId } = render(<MarkdownPane turns={TURNS} error={null} view="rendered" {...noopProps} />);
       expect(getByTestId('transcript-scroll').scrollTop).toBe(900);
     } finally { m.restore(); }
   });
@@ -43,7 +46,7 @@ describe('MarkdownPane', () => {
   it('does not scroll while the transcript is still loading (turns null)', () => {
     const m = mockMetrics(900);
     try {
-      const { getByTestId } = render(<MarkdownPane turns={null} error={null} view="rendered" />);
+      const { getByTestId } = render(<MarkdownPane turns={null} error={null} view="rendered" {...noopProps} />);
       expect(getByTestId('transcript-scroll').scrollTop).toBe(0);
     } finally { m.restore(); }
   });
@@ -51,12 +54,12 @@ describe('MarkdownPane', () => {
   it('keeps tailing new turns while the reader is at the bottom', () => {
     const m = mockMetrics(900);
     try {
-      const { getByTestId, rerender } = render(<MarkdownPane turns={TURNS} error={null} view="rendered" />);
+      const { getByTestId, rerender } = render(<MarkdownPane turns={TURNS} error={null} view="rendered" {...noopProps} />);
       const el = getByTestId('transcript-scroll');
       el.scrollTop = 900;               // sitting at the end
       fireEvent.scroll(el);
       m.scrollHeight = 1300;            // a new turn grew the document
-      rerender(<MarkdownPane turns={MORE} error={null} view="rendered" />);
+      rerender(<MarkdownPane turns={MORE} error={null} view="rendered" {...noopProps} />);
       expect(el.scrollTop).toBe(1300);  // followed to the new bottom
     } finally { m.restore(); }
   });
@@ -64,20 +67,45 @@ describe('MarkdownPane', () => {
   it('stays put when the reader has scrolled up', () => {
     const m = mockMetrics(900);
     try {
-      const { getByTestId, rerender } = render(<MarkdownPane turns={TURNS} error={null} view="rendered" />);
+      const { getByTestId, rerender } = render(<MarkdownPane turns={TURNS} error={null} view="rendered" {...noopProps} />);
       const el = getByTestId('transcript-scroll');
       el.scrollTop = 0;                 // scrolled up to read history
       fireEvent.scroll(el);
       m.scrollHeight = 1300;
-      rerender(<MarkdownPane turns={MORE} error={null} view="rendered" />);
+      rerender(<MarkdownPane turns={MORE} error={null} view="rendered" {...noopProps} />);
       expect(el.scrollTop).toBe(0);     // not yanked to the bottom
     } finally { m.restore(); }
   });
 
   it('shows a pane label header only when one is given (Split mode)', () => {
-    const { queryByText, rerender } = render(<MarkdownPane turns={TURNS} error={null} view="rendered" />);
+    const { queryByText, rerender } = render(<MarkdownPane turns={TURNS} error={null} view="rendered" {...noopProps} />);
     expect(queryByText('Transcript')).toBeNull();
-    rerender(<MarkdownPane turns={TURNS} error={null} view="rendered" label="Transcript" />);
+    rerender(<MarkdownPane turns={TURNS} error={null} view="rendered" label="Transcript" {...noopProps} />);
     expect(queryByText('Transcript')).not.toBeNull();
+  });
+
+  it('shows the turn count, and Rendered/Raw, copy, and refresh fire their callbacks', async () => {
+    const onSetView = vi.fn();
+    const onRefresh = vi.fn();
+    render(
+      <MarkdownPane
+        turns={TURNS}
+        error={null}
+        view="rendered"
+        onSetView={onSetView}
+        onRefresh={onRefresh}
+        turnsCount={4}
+        markdownText="## You"
+      />,
+    );
+    expect(screen.getByText('4 turns')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByText('Raw'));
+    expect(onSetView).toHaveBeenCalledWith('raw');
+
+    await userEvent.click(screen.getByTitle('Re-read (a live session keeps growing)'));
+    expect(onRefresh).toHaveBeenCalled();
+
+    await userEvent.click(screen.getByText('Copy all'));
   });
 });

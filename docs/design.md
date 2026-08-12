@@ -43,9 +43,9 @@ automatically." That blue/orange split is the whole visual grammar behind the
 [Pinned/Waiting-on-you pairing](#the-strip-pattern) below.
 
 **Known inconsistency.** The "reading" accent — the cyan used for the
-Markdown/Split toggle, the transcript reader's icon, an assistant turn's
+Preview/Split controls, the transcript reader's icon, an assistant turn's
 label — is a literal `#6fd4c9` hardcoded in nine places (`TabBar.tsx`,
-`SessionBar.tsx`, `SessionReader.tsx`, `SessionHistoryPanel.tsx`,
+`SessionControls.tsx`, `SessionReader.tsx`, `SessionHistoryPanel.tsx`,
 `Sidebar.tsx`, `MarkdownPane.tsx`, `TranscriptDocument.tsx`), not a CSS custom
 property. `ThemeColors.cyan` exists and feeds the *terminal's* ansi cyan, but
 `cssVars()` never exposes it as `--cyan` for the app shell, so switching to
@@ -208,28 +208,33 @@ the "Search sessions" row at the top of the sidebar
 (see [command-palette.md](features/command-palette.md)) is the fix, and the
 same question is worth asking of any future shortcut-only feature.
 
-## Explored, not yet built
+## Shipped: the session bar → tab strip redesign
 
-The terminal's own top chrome (`TabBar.tsx` + `SessionBar.tsx`) went through
-the same critique this round but wasn't implemented — worth recording so a
-future pass doesn't re-litigate it from scratch:
+The terminal's own top chrome (`TabBar.tsx`, formerly `SessionBar.tsx`) went
+through a critique-and-mockup round and has since been rebuilt — worth
+recording the reasoning so a future pass doesn't re-litigate it from scratch:
 
-- **One identity, shown once.** Today the tab strip and the session bar both
-  render the active session's name/folder/status — the same information
-  twice, stacked in two rows. The validated direction: drop the second row;
-  the tab strip is enough.
-- **The Terminal/Split/Markdown toggle moves into that same row** as three
-  icon-only buttons (no labels, tooltip on hover) docked to the tab strip
-  that already scopes it, instead of a whole second bar just to hold a
-  3-way switch.
-- **Markdown's own controls (Rendered/Raw, copy, refresh) move into
-  `MarkdownPane`'s own header**, next to the label it already shows in Split
-  mode, instead of the global session bar — they only ever act on that pane,
-  so they belong on it.
+- **One identity, shown once.** The tab strip and the old session bar both
+  rendered the active session's name/folder/status — the same information
+  twice, stacked in two rows. The session bar is gone; the tab strip is enough.
+- **Terminal/Split/Markdown was one three-way switch; it's now two
+  independent controls.** `SessionControls` docks a **Preview** toggle
+  (terminal ⇄ markdown, on/off) to the tab strip's trailing edge, plus a
+  separate **Split** menu (**Split right** / **Split down**) that's its own
+  layout choice rather than a third state of Preview — Split runs alongside
+  whichever mode Preview is in, and disables Preview only because the pane
+  split already answers "what's showing." This is one step further than the
+  originally-mocked 3-icon toggle: that mockup still treated Split as a mode
+  of the same switch, which is what made "put the split anywhere" awkward to
+  express. Splitting it into two controls is what let a second axis (right vs.
+  down) get added without a fourth/fifth toggle state.
+- **Markdown's own controls (turn count, Rendered/Raw, copy, refresh) moved
+  into `MarkdownPane`'s own header**, next to the label it already shows in
+  Split mode, instead of the global session bar — they only ever act on that
+  pane, so they belong on it.
 
-This is a real, agreed direction (worked through as an interactive mockup),
-just not yet ported into `TabBar.tsx`/`SessionBar.tsx`/`MarkdownPane.tsx` —
-treat it as the next redesign pass on this codebase, not a rejected idea.
+See [session-reader.md](features/session-reader.md#session-controls) for the
+shipped shape.
 
 ## Files
 

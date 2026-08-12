@@ -4,7 +4,7 @@ import CommandPalette from '@/components/CommandPalette';
 import FileExplorerPanel from '@/components/FileExplorerPanel';
 import FileViewer from '@/components/FileViewer';
 import HomeScreen from '@/components/HomeScreen';
-import SessionBar, { type MarkdownView, type SessionMode } from '@/components/SessionBar';
+import SessionControls, { type MarkdownView, type SessionMode, type SplitDirection } from '@/components/SessionControls';
 import SessionHistoryPanel from '@/components/SessionHistoryPanel';
 import SessionReader from '@/components/SessionReader';
 import SettingsView from '@/components/SettingsView';
@@ -58,8 +58,11 @@ export default function App() {
   const [mdTabs, setMdTabs] = useState<Map<string, SessionMode>>(new Map());
   const [mdView, setMdView] = useState<MarkdownView>('rendered');
   const [mdReload, setMdReload] = useState(0);
-  // Split view: terminal-pane width as a fraction of the row, and whether the
-  // seam is being dragged. Clamped so neither pane can be squeezed away.
+  // Split view: which edge the second pane opens against, its size as a
+  // fraction of the row/column, and whether the seam is being dragged.
+  // Direction is a window-level layout choice (not per-tab), same as ratio
+  // always was — it's "how I like to look at things", not session state.
+  const [splitDirection, setSplitDirection] = useState<SplitDirection>('right');
   const [splitRatio, setSplitRatio] = useState(0.5);
   const [draggingSeam, setDraggingSeam] = useState(false);
   const splitRowRef = useRef<HTMLDivElement>(null);
@@ -380,6 +383,20 @@ export default function App() {
     ipc.openDirectory(dir);
   }, []);
 
+  /** Hands a live tab off to the VS Code Claude Code extension. Sleeps the
+   *  tab first (frees the pty) so only one `claude` process is ever
+   *  appending to the transcript — clicking the tab again later wakes it
+   *  with `--resume` and picks up whatever happened in VS Code. */
+  const handleOpenInVscode = useCallback(
+    (tabId: string) => {
+      const tab = state.tabs.find((t) => t.id === tabId);
+      if (!tab?.resumeSessionId) return;
+      sleepTab(tabId);
+      ipc.openInVscode(tab.cwd, tab.resumeSessionId);
+    },
+    [state.tabs, sleepTab],
+  );
+
   const handleResumeSession = useCallback(
     (dir: string, entry: SessionHistoryEntry) => {
       const name = entry.preview.slice(0, 30) || 'Claude';
@@ -407,11 +424,9 @@ export default function App() {
   // Home covers the terminal too, but unlike the overlays it *is* the resting
   // state when nothing is open, so it gets its own flag.
   const homeUp = showHome || state.tabs.length === 0;
-  // Every tab already has a row in TabBar — for a file tab that's enough on
-  // its own (no mode toggle applies), so the session bar stays claude/shell-only.
-  const barVisible = settings.showSessionBar && activeTab !== null && !overlaysUp && !fileUp;
-  // Markdown reading needs both prefs on (so there's always a bar toggle to leave it by).
-  const canRead = settings.showSessionBar && settings.showMarkdownToggle && activeReadable;
+  // SessionControls (Preview/Split) docks to the tab strip for a readable
+  // Claude tab — never for a file tab, which already shows its own name there.
+  const canRead = settings.showMarkdownToggle && activeReadable && !fileUp;
   // The active tab's view mode (terminal unless it can be read AND is toggled).
   const activeMode: SessionMode = (canRead && activeTab && mdTabs.get(activeTab.id)) || 'terminal';
   // Markdown pane is on screen (markdown or split); its transcript must load.
@@ -472,14 +487,17 @@ export default function App() {
 
   // Drag-to-resize the split seam. Tracks the pointer on window (not the seam)
   // so a fast drag doesn't outrun the 1px handle, and clamps the ratio so both
-  // panes keep a usable minimum.
+  // panes keep a usable minimum. Reads clientX/width for a right split,
+  // clientY/height for a down split.
   useEffect(() => {
     if (!draggingSeam) return;
     const onMove = (e: MouseEvent) => {
       const row = splitRowRef.current;
       if (!row) return;
       const r = row.getBoundingClientRect();
-      const ratio = (e.clientX - r.left) / r.width;
+      const ratio = splitDirection === 'right'
+        ? (e.clientX - r.left) / r.width
+        : (e.clientY - r.top) / r.height;
       setSplitRatio(Math.min(0.75, Math.max(0.25, ratio)));
     };
     const onUp = () => setDraggingSeam(false);
@@ -489,7 +507,7 @@ export default function App() {
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
     };
-  }, [draggingSeam]);
+  }, [draggingSeam, splitDirection]);
 
   // Drag-to-resize the file explorer panel, same pattern as the split seam
   // above but tracking width from the panel's own right edge (it's docked to
@@ -544,6 +562,7 @@ export default function App() {
         onSelectTab={handleSelectTab}
         onCloseTab={handleCloseTab}
         onOpenDirectory={handleOpenDirectory}
+        onOpenInVscode={handleOpenInVscode}
         onNewClaudeTab={handleNewClaudeTab}
         onNewShellTab={handleNewShellTab}
         onRenameTab={handleRenameTab}
@@ -570,28 +589,23 @@ export default function App() {
             activeTabId={state.activeTabId}
             onSelectTab={handleSelectTab}
             onCloseTab={handleCloseTab}
-          />
-        )}
-        {barVisible && activeTab && (
-          <SessionBar
-            tab={activeTab}
-            canRead={canRead}
-            mode={activeMode}
-            view={mdView}
-            turnsCount={turns ? turns.length : null}
-            markdownText={fullMarkdown}
-            onSetMode={(m) => setTabMode(activeTab.id, m)}
-            onSetView={setMdView}
-            onRefresh={() => setMdReload((k) => k + 1)}
+            trailing={canRead && activeTab ? (
+              <SessionControls
+                mode={activeMode}
+                splitDirection={splitDirection}
+                onSetMode={(m) => setTabMode(activeTab.id, m)}
+                onSetSplitDirection={setSplitDirection}
+              />
+            ) : undefined}
           />
         )}
         <div className="relative flex-1 min-h-0">
-          {/* Terminal (left) and markdown (right) share the pane: full-width
-              alone, or side by side in split mode, divided by a draggable seam. */}
-          <div ref={splitRowRef} className="absolute inset-0 flex">
+          {/* Terminal and markdown share the pane: full alone, or split
+              right/down (SessionControls), divided by a draggable seam. */}
+          <div ref={splitRowRef} className={cn('absolute inset-0 flex', splitActive && splitDirection === 'down' && 'flex-col')}>
             <div
               className={cn('relative flex flex-col min-w-0', mdFull ? 'hidden' : splitActive ? 'shrink-0' : 'flex-1')}
-              style={splitActive ? { width: `${splitRatio * 100}%` } : undefined}
+              style={splitActive ? (splitDirection === 'right' ? { width: `${splitRatio * 100}%` } : { height: `${splitRatio * 100}%` }) : undefined}
             >
               {splitActive && (
                 <div className="flex items-center gap-1.5 h-7 px-3 shrink-0 border-b border-border bg-card">
@@ -631,13 +645,19 @@ export default function App() {
             {splitActive && (
               <div
                 onMouseDown={() => setDraggingSeam(true)}
-                className="group relative w-px shrink-0 cursor-col-resize bg-border-hover shadow-[-14px_0_22px_-18px_rgba(0,0,0,0.9)]"
+                className={cn(
+                  'group relative shrink-0 bg-border-hover',
+                  splitDirection === 'right'
+                    ? 'w-px cursor-col-resize shadow-[-14px_0_22px_-18px_rgba(0,0,0,0.9)]'
+                    : 'h-px cursor-row-resize shadow-[0_-14px_22px_-18px_rgba(0,0,0,0.9)]',
+                )}
                 title="Drag to resize"
               >
                 {/* wider invisible hit-area over the 1px line */}
-                <span className="absolute inset-y-0 -left-1.5 -right-1.5" />
+                <span className={cn('absolute', splitDirection === 'right' ? 'inset-y-0 -left-1.5 -right-1.5' : 'inset-x-0 -top-1.5 -bottom-1.5')} />
                 <span className={cn(
-                  'absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-1 h-8 rounded-full bg-border-hover',
+                  'absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-border-hover',
+                  splitDirection === 'right' ? 'w-1 h-8' : 'w-8 h-1',
                   'transition-colors group-hover:bg-muted-foreground',
                   draggingSeam && 'bg-primary',
                 )} />
@@ -648,16 +668,22 @@ export default function App() {
                 turns={turns}
                 error={error}
                 view={mdView}
+                onSetView={setMdView}
+                onRefresh={() => setMdReload((k) => k + 1)}
+                turnsCount={turns ? turns.length : null}
+                markdownText={fullMarkdown}
                 label={splitActive ? 'Transcript' : undefined}
                 fill={splitActive}
                 className={splitActive ? 'flex-1 bg-card' : 'flex-1'}
               />
             )}
-            {draggingSeam && <div className="fixed inset-0 z-50 cursor-col-resize" />}
+            {draggingSeam && (
+              <div className={cn('fixed inset-0 z-50', splitDirection === 'right' ? 'cursor-col-resize' : 'cursor-row-resize')} />
+            )}
           </div>
           {showHistory && projects.length > 0 && (
             <div className="absolute inset-0 bg-background">
-              <SessionHistoryPanel projects={projects} onResume={handleResumeSession} onRead={handleReadSession} />
+              <SessionHistoryPanel projects={projects} tabs={state.tabs} onResume={handleResumeSession} onRead={handleReadSession} />
             </div>
           )}
           {readerTarget && (

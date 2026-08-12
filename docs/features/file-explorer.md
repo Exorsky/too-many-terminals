@@ -7,11 +7,12 @@ in place.
 
 Open files live on their own axis from Claude/shell sessions: a session is
 already always-open the moment it's created (spawned pty, listed in the
-sidebar, shown in `SessionBar` when active), so it doesn't get a permanent
-row of its own up top the way a file does — that would just be every session
-that exists, all the time. Instead, `TabBar.tsx` (docked above the content
-pane, above `SessionBar`) shows every open file tab plus a single slot for
-whichever session/terminal you were last on: pick a session from the sidebar,
+sidebar), so it doesn't get a permanent row of its own up top the way a file
+does — that would just be every session that exists, all the time. Instead,
+`TabBar.tsx` (docked above the content pane, its trailing edge hosting
+`SessionControls` — Preview/Split — for the active session) shows every open
+file tab plus a single slot for whichever session/terminal you were last on:
+pick a session from the sidebar,
 work in a file, and that one session tab stays there to click back to,
 without a sidebar detour. Picking a *different* session from the sidebar
 replaces that slot — it's a "come back here" pointer, not a history of every
@@ -91,10 +92,9 @@ per-project session list and from the command palette (both stay scoped to
   `handleOpenFile`, one `FileViewer` mounted per file tab (not just the active
   one — same pattern as the `Terminal` map), `lastSessionTabIdRef` (updated
   during render, not an effect — see its comment) feeding the single session
-  slot into `TabBar` alongside the file tabs, `TabBar` sitting above
-  `SessionBar` (which hides itself for a file tab, since the strip already
-  shows its name), and the `window.confirm` guards in `handleCloseTab` /
-  `handleRemoveProject`.
+  slot into `TabBar` alongside the file tabs, `SessionControls` hiding itself
+  for a file tab (since the strip already shows its name), and the
+  `window.confirm` guards in `handleCloseTab` / `handleRemoveProject`.
 
 ## Scope / follow-ups
 

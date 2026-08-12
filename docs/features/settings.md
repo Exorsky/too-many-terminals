@@ -14,13 +14,10 @@ theme system (see [themes.md](themes.md)).
 
 ## Interface
 
-Two switches gate the [session bar](session-reader.md):
-
-- **Show the session bar** (`showSessionBar`) — the strip above the terminal.
-- **Show the Markdown toggle** (`showMarkdownToggle`) — the Terminal/Markdown
-  switch in the bar; disabled while the bar itself is hidden.
-
-Both default to `true` (opt-out) and persist in `settings.json`.
+One switch — **Show Markdown Preview** (`showMarkdownToggle`) — gates
+[`SessionControls`](session-reader.md#session-controls), the Preview/Split
+controls docked to the tab strip. Defaults to `true` (opt-out) and persists in
+`settings.json`.
 
 ## Notifications
 
@@ -58,7 +55,7 @@ in-memory mirror of `AppSettings` with `loadSettings` (once), `patchSettings`
 - `src/components/CustomizeTab.tsx` — theme picker/editor (Customize category)
 - `src/lib/settings-store.ts` (+ tests) — shared settings state
 - Wiring: `App.tsx` (`showSettings` state, mutual exclusion with `showHistory`;
-  reads `showSessionBar`/`showMarkdownToggle`/`autoSleepMinutes` via `useSettings`),
+  reads `showMarkdownToggle`/`autoSleepMinutes` via `useSettings`),
   `Sidebar.tsx` (`showSettings`/`onToggleSettings` props, collapsed-rail button) and
   `SidebarFooter.tsx` (the expanded footer's menu item)
 - `src-tauri/src/settings.rs` — persisted `AppSettings` (incl. `auto_sleep_minutes`,

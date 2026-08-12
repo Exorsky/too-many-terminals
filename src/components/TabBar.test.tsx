@@ -64,4 +64,12 @@ describe('TabBar', () => {
     render(<TabBar tabs={[makeTab('a', { exited: true })]} activeTabId="a" onSelectTab={vi.fn()} onCloseTab={vi.fn()} />);
     expect(screen.getByText('a (exited)')).toBeInTheDocument();
   });
+
+  it('renders trailing controls docked to the row even with no open tabs', () => {
+    const { container } = render(
+      <TabBar tabs={[]} activeTabId={null} onSelectTab={vi.fn()} onCloseTab={vi.fn()} trailing={<button>Preview</button>} />,
+    );
+    expect(container).not.toBeEmptyDOMElement();
+    expect(screen.getByText('Preview')).toBeInTheDocument();
+  });
 });

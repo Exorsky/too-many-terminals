@@ -3,21 +3,27 @@
 Reads a Claude Code session as a rendered document instead of resuming it in a
 terminal. Two surfaces, one shared body (`TranscriptDocument`):
 
-1. **In-place, via the session bar** (primary). The [session bar](#session-bar)
-   above the active terminal carries a `Terminal | Split | Markdown` toggle.
-   **Markdown** replaces the terminal in the same pane with the rendered
-   conversation; **Split** puts the live terminal (left) and the markdown reader
-   (right) side by side, so you can watch the session run and read it at once.
-   In Split each half wears a mono label strip (`Terminal` / `Transcript`), the
-   transcript sits on a lifted `card` surface (so it stops blending into the
-   black terminal), and a **draggable seam** between them resizes the split
-   (`splitRatio` in `App`, clamped 25–75%); the reading controls stay in the bar.
-   Rendered/Raw, Copy all, and Refresh live in the bar. Available for a Claude tab
-   once its session id is known (`tab.resumeSessionId`, set for resumed tabs and
-   learned via `claude-session-resolved` for fresh ones), and gated by the General
-   settings switches.
+1. **In-place, via the tab strip** (primary). [`SessionControls`](#session-controls)
+   docks two independent controls to the trailing edge of the tab strip for a
+   readable Claude tab: **Preview** and **Split**. Preview toggles the active tab
+   between its live terminal and a full-pane rendered read of the same session —
+   it's an on/off switch, not a three-way mode. Split is its own layout choice
+   (a menu, not a toggle state): **Split right** or **Split down** puts the live
+   terminal and the markdown reader side by side or stacked, so you can watch the
+   session run and read it at once, and it runs independently of Preview — Preview
+   disables itself while Split is on, since the pane split already answers "what's
+   showing." A **draggable seam** between the two halves resizes the split
+   (`splitRatio` in `App`, clamped 25–75%; `splitDirection` picks which axis the
+   drag reads). Each half wears a mono label strip (`Terminal` / `Transcript`) and
+   the transcript sits on a lifted `card` surface so it stops blending into the
+   black terminal. Available for a Claude tab once its session id is known
+   (`tab.resumeSessionId`, set for resumed tabs and learned via
+   `claude-session-resolved` for fresh ones), and gated by the General settings
+   switch.
 
-   The markdown pane (`MarkdownPane`) **opens scrolled to the bottom** and
+   The markdown pane (`MarkdownPane`) owns its own header — turn count,
+   Rendered/Raw, Copy all, Refresh — since those controls only ever act on it;
+   there's no separate bar carrying them. It **opens scrolled to the bottom** and
    **live-follows** the session: while it's on screen it re-reads the transcript
    every `LIVE_FOLLOW_MS`, so new turns appear as Claude answers — including
    plain-text replies, which never flip the tab to `working`. A re-read that
@@ -26,7 +32,7 @@ terminal. Two surfaces, one shared body (`TranscriptDocument`):
    visible instead of blanking to a loading state. It only tails the bottom while
    you're already there — scroll up to read history and it stays put until you
    return to the end. In Split, the terminal half stays a real live process
-   (unlike full Markdown, which needs none): it keeps a dormant tab awake and
+   (unlike full Preview, which needs none): it keeps a dormant tab awake and
    still counts as "on screen" for notifications and auto-sleep.
 2. **Full-pane overlay, via Session History** (`SessionReader`). A
    [history](session-history.md) row's `▤` action, or `Space`, opens a past
@@ -36,16 +42,23 @@ Read-only and offline; both parse the same `~/.claude/projects/<enc>/<id>.jsonl`
 transcript the CLI writes. For a live session the read is a snapshot — **Refresh**
 re-reads the still-growing file.
 
-## Session bar
+## Session controls
 
-A slim strip above the terminal (`SessionBar`), shown for the active tab when
-`showSessionBar` is on. Left: session status dot + name + folder. Right, for a
-readable Claude tab: the markdown controls (shown in both Markdown and Split, since
-the pane is on screen) and the `Terminal | Split | Markdown` toggle. Both the bar
-and the toggle are user preferences (see [settings.md](settings.md)); reading modes
-require both on, so there is always a bar toggle to leave by. Per-tab mode is
-remembered in `App` (`mdTabs`, a `Map<tabId, 'markdown' | 'split'>`; absent =
-terminal).
+`SessionControls` sits in `TabBar`'s `trailing` slot (not a second row — the tab
+strip is the only place a tab's identity needs to show; see
+[docs/design.md](../design.md)), visible whenever `showMarkdownToggle` is on and
+the active tab is a readable Claude session:
+
+- **Preview** (`FileText` icon button) — toggles `terminal ⇄ markdown` for the
+  active tab. Disabled while Split is active.
+- **Split** (icon button + dropdown menu) — **Split right** / **Split down** set
+  the mode to `split` and pick `splitDirection`; **Unsplit** (shown only while
+  split) returns to `terminal`.
+
+Per-tab mode is remembered in `App` (`mdTabs`, a `Map<tabId, 'markdown' |
+'split'>`; absent = terminal). `splitDirection` is a single window-level
+preference, not per-tab — like `splitRatio` always was, it's "how I like to look
+at things" rather than session state.
 
 ## What it shows
 
@@ -70,8 +83,8 @@ terminal).
 - **Copy on hover** — each Claude reply shows a Copy button on hover that copies
   just that turn as Markdown. **Copy all** copies the whole document. **Refresh**
   re-reads the transcript (useful for a live session).
-- In-place, these controls live in the session bar; the overlay adds **Resume**
-  (opens a live Claude tab) and **Esc** / ✕ to close.
+- In-place, these controls live in `MarkdownPane`'s own header; the overlay adds
+  **Resume** (opens a live Claude tab) and **Esc** / ✕ to close.
 
 ## Parsing rules (`read_transcript`)
 
@@ -96,15 +109,17 @@ filesystem, and turns are capped at `TRANSCRIPT_MAX_TURNS` as a guard.
 - `src/lib/use-transcript.ts` — the fetch/reload hook, shared by both surfaces.
 - `src/components/TranscriptDocument.tsx` — the shared rendered/raw reading body.
 - `src/components/MarkdownPane.tsx` (+ tests) — the in-place scrolling pane
-  (Markdown/Split); owns the open-at-bottom behaviour.
+  (Preview/Split); owns the open-at-bottom behaviour and its own header
+  (turn count, Rendered/Raw, Copy all, Refresh).
 - `src/components/TranscriptStates.tsx` — shared loading/error/empty placeholders.
 - `src/components/Markdown.tsx` — Markdown → React elements.
 - `src/components/CopyButton.tsx` — copy-with-feedback button.
-- `src/components/SessionBar.tsx` (+ tests) — the in-place bar (`▤` toggle).
+- `src/components/SessionControls.tsx` (+ tests) — the Preview toggle and Split
+  menu docked to `TabBar`.
 - `src/components/SessionReader.tsx` (+ tests) — the History overlay reader.
-- Triggers in `SessionHistoryPanel.tsx` (history rows) and the session bar's
-  own `Terminal | Split | Markdown` toggle. Wired in `App.tsx`:
-  `mdTabs`/`mdView`/`mdReload` state, `setTabMode`, `handleReadSession` (overlay).
+- Triggers in `SessionHistoryPanel.tsx` (history rows) and `SessionControls`.
+  Wired in `App.tsx`: `mdTabs`/`mdView`/`mdReload`/`splitDirection` state,
+  `setTabMode`, `handleReadSession` (overlay).
 
 ## Follow-ups
 

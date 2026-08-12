@@ -23,7 +23,7 @@ function folderName(dir: string): string {
 
 /** Full-pane reader opened from Session History — its own toolbar (title, meta,
  *  toggle, copy, refresh, resume, close) over the shared transcript document.
- *  The in-place tab reader lives in `SessionBar` instead. */
+ *  The in-place tab reader lives in `MarkdownPane` instead. */
 export default function SessionReader({ projectDir, entry, onClose, onResume }: SessionReaderProps) {
   const [view, setView] = useState<View>('rendered');
   const [reloadKey, setReloadKey] = useState(0);

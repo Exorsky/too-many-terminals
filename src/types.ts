@@ -127,9 +127,7 @@ export interface AppSettings {
   selectedThemeId: string;
   /** Custom themes as raw JSON; validated by sanitizeCustomThemes on load. */
   customThemes: unknown[];
-  /** Show the per-session bar above the terminal. */
-  showSessionBar: boolean;
-  /** Show the Terminal/Markdown toggle within the session bar. */
+  /** Show the Markdown Preview / Split controls docked to the tab strip. */
   showMarkdownToggle: boolean;
   /** Fire a desktop notification when an unfocused session needs input or finishes. */
   notificationsEnabled: boolean;

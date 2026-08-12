@@ -156,16 +156,9 @@ function InterfaceCategory() {
         What shows around the terminal itself.
       </div>
       <SettingRow
-        title="Show the session bar"
-        description="A slim strip above the terminal with the session name and controls."
-        checked={settings.showSessionBar}
-        onChange={(v) => patchSettings({ showSessionBar: v })}
-      />
-      <SettingRow
-        title="Show the Markdown toggle"
-        description="The Terminal / Markdown switch in the bar. Off keeps the bar identity-only."
+        title="Show Markdown Preview"
+        description="The Preview/Split controls docked to the tab strip for a readable Claude session."
         checked={settings.showMarkdownToggle}
-        disabled={!settings.showSessionBar}
         onChange={(v) => patchSettings({ showMarkdownToggle: v })}
       />
     </div>

@@ -10,7 +10,7 @@ vi.mock('@/lib/ipc');
 beforeEach(() => {
   resetSettingsForTest();
   vi.mocked(ipc.loadSettings).mockResolvedValue({
-    selectedThemeId: 'default', customThemes: [], showSessionBar: true, showMarkdownToggle: true, notificationsEnabled: true, autoSleepMinutes: 15, usageRefreshSeconds: 60,
+    selectedThemeId: 'default', customThemes: [], showMarkdownToggle: true, notificationsEnabled: true, autoSleepMinutes: 15, usageRefreshSeconds: 60,
   });
   vi.mocked(ipc.saveSettings).mockResolvedValue(undefined);
 });
@@ -21,22 +21,15 @@ afterEach(() => {
 });
 
 describe('SettingsView', () => {
-  it('shows the Interface category with the session-bar preferences by default', () => {
+  it('shows the Interface category with the Markdown Preview preference by default', () => {
     render(<SettingsView />);
-    expect(screen.getByText('Show the session bar')).toBeInTheDocument();
-    expect(screen.getByText('Show the Markdown toggle')).toBeInTheDocument();
+    expect(screen.getByText('Show Markdown Preview')).toBeInTheDocument();
   });
 
-  it('toggling a preference persists it', async () => {
+  it('toggling the preference persists it', async () => {
     render(<SettingsView />);
-    await userEvent.click(screen.getByRole('switch', { name: 'Show the session bar' }));
-    expect(ipc.saveSettings).toHaveBeenCalledWith(expect.objectContaining({ showSessionBar: false }));
-  });
-
-  it('disables the Markdown toggle switch when the bar is hidden', async () => {
-    render(<SettingsView />);
-    await userEvent.click(screen.getByRole('switch', { name: 'Show the session bar' }));
-    expect(screen.getByRole('switch', { name: 'Show the Markdown toggle' })).toBeDisabled();
+    await userEvent.click(screen.getByRole('switch', { name: 'Show Markdown Preview' }));
+    expect(ipc.saveSettings).toHaveBeenCalledWith(expect.objectContaining({ showMarkdownToggle: false }));
   });
 
   it('toggles the notification preference from the Notifications category', async () => {

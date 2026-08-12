@@ -12,10 +12,9 @@ use serde::{Deserialize, Serialize};
 pub struct AppSettings {
     pub selected_theme_id: String,
     pub custom_themes: Vec<serde_json::Value>,
-    /// Show the per-session bar above the terminal. Missing in older settings
-    /// files → filled from `Default` (true), so the bar is opt-out, not opt-in.
-    pub show_session_bar: bool,
-    /// Show the Terminal/Markdown toggle within the session bar.
+    /// Show the Markdown Preview / Split controls docked to the tab strip.
+    /// Missing in older settings files → filled from `Default` (true), so
+    /// it's opt-out, not opt-in.
     pub show_markdown_toggle: bool,
     /// Fire a desktop notification when an unfocused Claude session needs input
     /// or finishes. Defaults to true (opt-out) so it works out of the box.
@@ -32,7 +31,6 @@ impl Default for AppSettings {
         Self {
             selected_theme_id: "default".to_string(),
             custom_themes: Vec::new(),
-            show_session_bar: true,
             show_markdown_toggle: true,
             notifications_enabled: true,
             auto_sleep_minutes: 15,
@@ -89,7 +87,6 @@ mod tests {
                 "name": "My Theme",
                 "colors": { "background": "#101010", "primary": "#ffcc00" }
             })],
-            show_session_bar: false,
             show_markdown_toggle: true,
             notifications_enabled: false,
             auto_sleep_minutes: 30,
@@ -106,7 +103,6 @@ mod tests {
         fs::write(settings_path(tmp.path()), r#"{"selectedThemeId":"amber"}"#).unwrap();
         let settings = load_settings(tmp.path());
         assert_eq!(settings.selected_theme_id, "amber");
-        assert!(settings.show_session_bar);
         assert!(settings.show_markdown_toggle);
         assert!(settings.notifications_enabled);
         assert_eq!(settings.auto_sleep_minutes, 15);
