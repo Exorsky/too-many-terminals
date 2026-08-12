@@ -11,6 +11,8 @@ listed here; see `git log` for the full history.
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-08-12
+
 ### Added
 - Session bar replaced by two controls docked to the tab strip: a Markdown
   Preview toggle and a Split menu (right/down), instead of one three-way
@@ -37,6 +39,7 @@ listed here; see `git log` for the full history.
 - The transcript reader now renders pipe tables, nested/checkbox lists,
   italics, autolinks, and horizontal rules.
 
-[Unreleased]: https://github.com/Exorsky/too-many-terminals/compare/v0.16.1...HEAD
+[Unreleased]: https://github.com/Exorsky/too-many-terminals/compare/v0.17.0...HEAD
+[0.17.0]: https://github.com/Exorsky/too-many-terminals/compare/v0.16.1...v0.17.0
 [0.16.1]: https://github.com/Exorsky/too-many-terminals/compare/v0.16.0...v0.16.1
 [0.16.0]: https://github.com/Exorsky/too-many-terminals/compare/v0.15.0...5054537
