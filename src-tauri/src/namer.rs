@@ -96,13 +96,13 @@ const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 /// Stops the spawned command from popping a console window on Windows. No-op
 /// elsewhere.
 #[cfg(windows)]
-fn no_window(command: &mut Command) {
+pub(crate) fn no_window(command: &mut Command) {
     use std::os::windows::process::CommandExt;
     command.creation_flags(CREATE_NO_WINDOW);
 }
 
 #[cfg(not(windows))]
-fn no_window(_command: &mut Command) {}
+pub(crate) fn no_window(_command: &mut Command) {}
 
 #[cfg(windows)]
 fn kill_pid(pid: u32) {

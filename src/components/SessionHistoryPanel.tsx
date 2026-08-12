@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowRight, FileText, History, Loader2, Search, Trash2, X } from 'lucide-react';
-import type { SessionHistoryEntry } from '@/types';
+import type { SessionHistoryEntry, Tab } from '@/types';
 import { relativeTime } from '@/lib/relative-time';
 import * as ipc from '@/lib/ipc';
 import { cn, folderName } from '@/lib/utils';
@@ -12,9 +12,16 @@ interface HistoryEntry extends SessionHistoryEntry {
 
 interface SessionHistoryPanelProps {
   projects: string[];
+  /** Live/dormant tabs — used only to look up a session's assigned name
+   *  (auto-named or renamed), since the transcript itself carries no name. */
+  tabs: Tab[];
   onResume: (projectDir: string, entry: SessionHistoryEntry) => void;
   onRead: (projectDir: string, entry: SessionHistoryEntry) => void;
 }
+
+/** Placeholder every fresh Claude tab starts with — see `spawnTabAt` callers
+ *  in App.tsx. Not a real name, so it shouldn't count as one here either. */
+const UNNAMED_TAB = 'Claude';
 
 type DayGroup = 'Today' | 'Yesterday' | 'Earlier';
 const DAY_GROUPS: DayGroup[] = ['Today', 'Yesterday', 'Earlier'];
@@ -62,8 +69,22 @@ function highlightMatch(text: string, query: string): React.ReactNode {
   );
 }
 
-export default function SessionHistoryPanel({ projects, onResume, onRead }: SessionHistoryPanelProps) {
+export default function SessionHistoryPanel({ projects, tabs, onResume, onRead }: SessionHistoryPanelProps) {
   const [entries, setEntries] = useState<HistoryEntry[] | null>(null);
+
+  /** A session's transcript carries no name of its own — this is the only
+   *  place one might exist, and only if some tab (open or previously saved)
+   *  was auto-named or renamed for it. Sessions never resumed as a TMT tab
+   *  (e.g. started in the VS Code extension) simply have none. */
+  const nameBySessionId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const tab of tabs) {
+      if (tab.kind === 'claude' && tab.resumeSessionId && tab.name !== UNNAMED_TAB) {
+        map.set(tab.resumeSessionId, tab.name);
+      }
+    }
+    return map;
+  }, [tabs]);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [projectFilter, setProjectFilter] = useState<string>('all');
@@ -94,9 +115,12 @@ export default function SessionHistoryPanel({ projects, onResume, onRead }: Sess
     return entries.filter((entry) => {
       if (projectFilter !== 'all' && entry.projectDir !== projectFilter) return false;
       if (!q) return true;
-      return entry.preview.toLowerCase().includes(q) || folderName(entry.projectDir).toLowerCase().includes(q);
+      const name = nameBySessionId.get(entry.sessionId);
+      return entry.preview.toLowerCase().includes(q)
+        || folderName(entry.projectDir).toLowerCase().includes(q)
+        || !!name?.toLowerCase().includes(q);
     });
-  }, [entries, query, projectFilter]);
+  }, [entries, query, projectFilter, nameBySessionId]);
 
   // Entries arrive pre-sorted most-recent-first, so a flat filtered list
   // already matches the Today/Yesterday/Earlier render order below.
@@ -313,6 +337,7 @@ export default function SessionHistoryPanel({ projects, onResume, onRead }: Sess
                 const confirming = pendingDeleteId === entry.sessionId;
                 const globalIndex = filteredEntries.indexOf(entry);
                 const isActive = globalIndex === activeIndex;
+                const name = nameBySessionId.get(entry.sessionId);
 
                 return (
                   <div
@@ -336,7 +361,15 @@ export default function SessionHistoryPanel({ projects, onResume, onRead }: Sess
                       )}
                     />
                     <div className="flex-1 min-w-0 flex flex-col gap-1 px-3 py-2.5">
-                      <div className="text-[12.5px] text-foreground leading-[1.4] line-clamp-2 break-words">
+                      {name && (
+                        <div className="text-[12.5px] font-medium text-foreground leading-[1.4] truncate">
+                          {highlightMatch(name, query)}
+                        </div>
+                      )}
+                      <div className={cn(
+                        'text-[12.5px] text-foreground leading-[1.4] line-clamp-2 break-words',
+                        name && 'text-[11px] text-muted-foreground',
+                      )}>
                         {highlightMatch(entry.preview, query)}
                       </div>
                       <div className="flex items-center gap-1.5 text-[10.5px] text-muted-foreground min-w-0">

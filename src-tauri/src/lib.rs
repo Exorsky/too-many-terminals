@@ -1,6 +1,7 @@
 mod claude;
 mod commands;
 mod dotenv;
+mod editor;
 mod env_sources;
 mod files;
 mod hook_server;
@@ -53,6 +54,7 @@ pub fn run() {
             commands::pty_resize,
             commands::pty_kill,
             commands::list_shells,
+            commands::open_in_vscode,
             commands::env_names,
             commands::home_dir,
             commands::list_sessions,

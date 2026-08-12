@@ -132,6 +132,14 @@ export function openDirectory(dir: string): void {
   void openPath(dir);
 }
 
+/** Hands a live session off to the VS Code Claude Code extension: opens/
+ *  focuses VS Code on `cwd`, then resumes `sessionId` there via the
+ *  extension's own deep link. Both tools share the same transcript file, so
+ *  there's nothing to transfer — see docs/features/vscode-handoff.md. */
+export function openInVscode(cwd: string, sessionId: string): Promise<void> {
+  return invoke('open_in_vscode', { cwd, sessionId });
+}
+
 /** Ensures the OS notification permission is granted, asking once if needed.
  *  Cached after the first resolution. Resolves false if denied or unavailable. */
 let notificationPermission: boolean | null = null;

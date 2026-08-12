@@ -2,6 +2,7 @@ use portable_pty::CommandBuilder;
 use serde::Serialize;
 use tauri::ipc::{Channel, InvokeResponseBody};
 use tauri::{AppHandle, Emitter, State};
+use tauri_plugin_opener::OpenerExt;
 
 use crate::claude::{claude_command, login_shell_path, resume_flags};
 use crate::dotenv;
@@ -209,12 +210,18 @@ fn spawn_session_id_watcher(
     });
 }
 
-#[tauri::command]
+// Both commands below are `async` so their blocking call runs off the main
+// thread: `write_all`/`resize` talk to the child process's own pipe, and a
+// wedged child (e.g. two `claude` processes fighting over the same session's
+// transcript file — see docs/features/vscode-handoff.md) can leave that pipe
+// buffer full. On the main thread that would freeze the whole window, not
+// just the one tab.
+#[tauri::command(async)]
 pub fn pty_write(ptys: State<'_, PtyManager>, tab_id: String, data: String) -> Result<(), String> {
     ptys.write(&tab_id, &data)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn pty_resize(
     ptys: State<'_, PtyManager>,
     tab_id: String,
@@ -232,6 +239,39 @@ pub fn pty_kill(ptys: State<'_, PtyManager>, tab_id: String) {
 #[tauri::command]
 pub fn list_shells() -> Vec<ShellOption> {
     all_shell_options(Platform::current())
+}
+
+/// Hands a live session off to the VS Code Claude Code extension: opens/
+/// focuses VS Code on `cwd`, then fires the extension's own `vscode://` deep
+/// link to resume `session_id` there. Both tools read the same transcript
+/// file (see `session_history::projects_root`), so there is nothing to copy —
+/// this is purely "point the other app at what's already on disk". The
+/// caller is expected to have already put the TMT tab to sleep so only one
+/// `claude` process is appending to the transcript at a time.
+#[tauri::command(async)]
+pub fn open_in_vscode(app: AppHandle, cwd: String, session_id: String) -> Result<(), String> {
+    use crate::editor::{code_command, session_uri};
+
+    let (program, args) = code_command(Platform::current(), &cwd);
+    let mut command = std::process::Command::new(&program);
+    command.args(&args);
+    if let Some(path) = login_shell_path() {
+        command.env("PATH", path);
+    }
+    crate::namer::no_window(&mut command);
+    command
+        .spawn()
+        .map_err(|_| "`code` not found on PATH — install the VS Code command line tool".to_string())?;
+
+    // VS Code needs a moment to focus the window and activate the extension
+    // before it can answer the deep link; firing immediately routes it to
+    // whichever window last had focus, not the one we just opened.
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(1500));
+        let _ = app.opener().open_url(session_uri(&session_id), None::<&str>);
+    });
+
+    Ok(())
 }
 
 #[tauri::command(async)]
