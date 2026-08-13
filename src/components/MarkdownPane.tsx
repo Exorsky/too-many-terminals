@@ -4,6 +4,7 @@ import type { MarkdownView } from './SessionControls';
 import type { TranscriptTurn } from '@/types';
 import { cn } from '@/lib/utils';
 import CopyButton from './CopyButton';
+import FindBar from './FindBar';
 import TranscriptDocument from './TranscriptDocument';
 import TranscriptStates from './TranscriptStates';
 
@@ -58,7 +59,8 @@ export default function MarkdownPane({
   }, [turns]);
 
   return (
-    <div className={cn('flex flex-col min-w-0', className)}>
+    <div className={cn('relative flex flex-col min-w-0 min-h-0', className)}>
+      <FindBar scrollRef={scrollRef} />
       <div className="flex items-center gap-2.5 h-7 px-2.5 shrink-0 border-b border-border">
         {label && (
           <span className="flex items-center gap-1.5">

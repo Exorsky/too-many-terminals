@@ -85,6 +85,13 @@ at things" rather than session state.
   re-reads the transcript (useful for a live session).
 - In-place, these controls live in `MarkdownPane`'s own header; the overlay adds
   **Resume** (opens a live Claude tab) and **Esc** / ✕ to close.
+- **Find** — `Ctrl`/`Cmd`+`F` opens a find bar (`FindBar`) scoped to the reader's
+  scroll pane. Every match is highlighted (CSS Custom Highlight API), the active
+  one accented, with an `n/total` count; Enter = next, Shift+Enter = previous,
+  Esc closes, and the current match scrolls into view. Matching is
+  case-insensitive and per-text-node — a phrase split across inline tags won't
+  hit (`ponytail:` in `FindBar.tsx`). Where the Highlight API is unavailable
+  (older WebKitGTK) the count and scroll-to still work; only the paint drops out.
 
 ## Parsing rules (`read_transcript`)
 
@@ -111,6 +118,8 @@ filesystem, and turns are capped at `TRANSCRIPT_MAX_TURNS` as a guard.
 - `src/components/MarkdownPane.tsx` (+ tests) — the in-place scrolling pane
   (Preview/Split); owns the open-at-bottom behaviour and its own header
   (turn count, Rendered/Raw, Copy all, Refresh).
+- `src/components/FindBar.tsx` (+ tests) — Ctrl/Cmd+F find bar mounted in both
+  readers.
 - `src/components/TranscriptStates.tsx` — shared loading/error/empty placeholders.
 - `src/components/Markdown.tsx` — Markdown → React elements.
 - `src/components/CopyButton.tsx` — copy-with-feedback button.

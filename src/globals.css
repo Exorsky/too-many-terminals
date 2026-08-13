@@ -106,6 +106,15 @@
   background: transparent;
 }
 
+/* Find-in-reader (FindBar): every match dimly lit, the active one accented. */
+::highlight(find-all) {
+  background-color: color-mix(in srgb, var(--warning) 30%, transparent);
+}
+::highlight(find-current) {
+  background-color: var(--warning);
+  color: #000;
+}
+
 /* --- Home screen: the session logbook (metrics dashboard) ----------------
    A quiet readout of your Claude Code history in the app's own dark/mono
    vocabulary. See docs/features/home-screen.md. Layout lives as Tailwind in

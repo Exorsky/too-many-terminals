@@ -11,6 +11,16 @@ listed here; see `git log` for the full history.
 
 ## [Unreleased]
 
+### Added
+- **Find in the transcript reader** — press Ctrl/Cmd+F in the Preview pane or the
+  Session History reader to search the rendered (or raw) transcript. Every match
+  is highlighted, the active one accented, with an `n/total` count; Enter jumps
+  to the next match, Shift+Enter the previous, Esc closes.
+
+### Fixed
+- **Scrolling in a down-split** — the transcript half of a top/bottom split
+  wouldn't scroll; it now scrolls like the side-by-side split does.
+
 ## [0.18.0] - 2026-08-13
 
 ### Changed

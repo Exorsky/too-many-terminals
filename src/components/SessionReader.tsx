@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlignLeft, ArrowRight, Braces, FileText, RefreshCw, X } from 'lucide-react';
 import type { SessionHistoryEntry } from '@/types';
 import { transcriptToMarkdown } from '@/lib/transcript';
 import { useTranscript } from '@/lib/use-transcript';
 import { cn } from '@/lib/utils';
 import CopyButton from './CopyButton';
+import FindBar from './FindBar';
 import TranscriptDocument from './TranscriptDocument';
 import TranscriptStates from './TranscriptStates';
 
@@ -27,6 +28,7 @@ function folderName(dir: string): string {
 export default function SessionReader({ projectDir, entry, onClose, onResume }: SessionReaderProps) {
   const [view, setView] = useState<View>('rendered');
   const [reloadKey, setReloadKey] = useState(0);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const { turns, error } = useTranscript(projectDir, entry.sessionId, reloadKey);
 
   useEffect(() => {
@@ -38,7 +40,8 @@ export default function SessionReader({ projectDir, entry, onClose, onResume }: 
   const fullMarkdown = useMemo(() => (turns ? transcriptToMarkdown(turns) : ''), [turns]);
 
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-background">
+    <div className="relative flex flex-col h-full overflow-hidden bg-background">
+      <FindBar scrollRef={scrollRef} />
       <div className="flex items-center gap-3 h-11 px-4 border-b border-border shrink-0 bg-gradient-to-b from-card to-background">
         <FileText size={14} className="text-[#6fd4c9] shrink-0" />
         <div className="min-w-0">
@@ -101,7 +104,7 @@ export default function SessionReader({ projectDir, entry, onClose, onResume }: 
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto scrollbar-thin">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto scrollbar-thin">
         <TranscriptStates turns={turns} error={error} />
         {turns && turns.length > 0 && <TranscriptDocument turns={turns} view={view} />}
       </div>
