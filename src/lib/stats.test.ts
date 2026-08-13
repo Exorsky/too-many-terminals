@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
-  cadence, depth, filterRange, formatCompact, formatDuration, hourHistogram,
-  modelFamily, modelShare, perProject, streaks, summarize, topCommands,
-  type ProjectStat, type Range,
+  calendarMonthCount, calendarMonths, dayKey, depth, filterRange, formatCompact,
+  formatDuration, hourHistogram, modelFamily, modelShare, perProject, streaks,
+  summarize, topCommands,
+  type CalendarMark, type ProjectStat, type Range,
 } from './stats';
 
 const NOW = Date.parse('2026-08-13T20:00:00Z');
@@ -45,13 +46,79 @@ describe('summarize', () => {
   });
 });
 
-describe('cadence', () => {
-  it('lays sessions onto day columns ending today', () => {
-    const days = cadence([stat({ lastUsedIso: daysAgo(0) }), stat({ lastUsedIso: daysAgo(0) }), stat({ lastUsedIso: daysAgo(2) })], 7, NOW);
-    expect(days).toHaveLength(7);
-    expect(days[days.length - 1].marks).toHaveLength(2); // today
-    expect(days[days.length - 3].marks).toHaveLength(1); // two days ago
-    expect(days[0].marks).toHaveLength(0);
+describe('calendarMonths', () => {
+  const mark = (over: Partial<CalendarMark> = {}): CalendarMark => ({
+    iso: daysAgo(0), hue: 210, projectName: 'a', ...over,
+  });
+  /** The month grid `now` falls in — the last one, since months run oldest-first. */
+  const thisMonth = (months: ReturnType<typeof calendarMonths>) => months[months.length - 1];
+  const dayOf = (months: ReturnType<typeof calendarMonths>, iso: string) =>
+    months.flatMap((m) => m.days).find((d) => d.key === dayKey(iso))!;
+
+  it('draws the months ending with the one now falls in', () => {
+    const months = calendarMonths([], NOW, 3);
+    expect(months.map((m) => m.label)).toEqual(['Jun 2026', 'Jul 2026', 'Aug 2026']);
+    expect(thisMonth(months).days).toHaveLength(31);
+    // Aug 1 2026 is a Saturday, so six blanks lead the grid.
+    expect(thisMonth(months).leading).toBe(6);
+  });
+
+  it('counts sessions onto their own local day', () => {
+    const months = calendarMonths(
+      [mark({ iso: daysAgo(0) }), mark({ iso: daysAgo(0) }), mark({ iso: daysAgo(2) })],
+      NOW,
+      1,
+    );
+    expect(dayOf(months, daysAgo(0)).count).toBe(2);
+    expect(dayOf(months, daysAgo(2)).count).toBe(1);
+    expect(dayOf(months, daysAgo(1)).count).toBe(0);
+    expect(thisMonth(months).total).toBe(3);
+  });
+
+  it('tints a day with the folder that ran the most sessions on it', () => {
+    const months = calendarMonths(
+      [mark({ hue: 140, projectName: 'b' }), mark({ hue: 210 }), mark({ hue: 210 })],
+      NOW,
+      1,
+    );
+    const day = dayOf(months, daysAgo(0));
+    expect(day.hue).toBe(210);
+    expect(day.folders).toEqual([
+      { name: 'a', hue: 210, count: 2 },
+      { name: 'b', hue: 140, count: 1 },
+    ]);
+  });
+
+  it('leaves an empty day with no hue and no folders', () => {
+    const day = dayOf(calendarMonths([], NOW, 1), daysAgo(0));
+    expect(day.hue).toBeNull();
+    expect(day.folders).toEqual([]);
+    expect(day.tokens).toBe(0);
+  });
+
+  it('sums the tokens a day burned, and reads zero when nobody counted any', () => {
+    const withTokens = calendarMonths([mark({ tokens: 1200 }), mark({ tokens: 800 })], NOW, 1);
+    expect(dayOf(withTokens, daysAgo(0)).tokens).toBe(2000);
+    // History lists transcripts without scanning them, so its marks carry none.
+    expect(dayOf(calendarMonths([mark()], NOW, 1), daysAgo(0)).tokens).toBe(0);
+  });
+
+  it('spans a month boundary without losing a session', () => {
+    const months = calendarMonths([mark({ iso: '2026-07-31T22:00:00' })], NOW, 3);
+    expect(months.find((m) => m.label === 'Jul 2026')!.total).toBe(1);
+    expect(thisMonth(months).total).toBe(0);
+  });
+
+  it('skips a session with an unparseable timestamp', () => {
+    expect(calendarMonths([mark({ iso: 'not a date' })], NOW, 1)[0].total).toBe(0);
+  });
+});
+
+describe('calendarMonthCount', () => {
+  it('grows the grid with the range', () => {
+    expect(calendarMonthCount(7)).toBe(1);
+    expect(calendarMonthCount(30)).toBe(2);
+    expect(calendarMonthCount('all')).toBe(3);
   });
 });
 

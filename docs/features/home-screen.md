@@ -25,7 +25,7 @@ it means "everything on record" rather than an unbounded scan.
 | Panel | Reads | From the transcript |
 | --- | --- | --- |
 | Headline | sessions · turns · tokens · cache-hit rate | counts + `message.usage` |
-| **Cadence** (hero) | one mark per session, per day, tinted by its folder | file mtime + folder |
+| **Cadence** (hero) | a month grid — one square per day, filled by how many sessions ran, tinted by folder | file mtime + folder |
 | Rate limit — live | the official 5h / 7d rate-limit percentages | the `/usage` endpoint, **not** the transcripts — see [usage-meter.md](usage-meter.md) |
 | Top commands | first word of every Bash/PowerShell call, ranked | `tool_use` inputs |
 | Where the time went | sessions per open folder | counts |
@@ -41,18 +41,23 @@ the only percentages here, and they come from Anthropic's endpoint, not a guess.
 
 ## The cadence
 
-The dashboard's hero, and the one thing that carries over from the old skyline's
-grammar: **a session is a small lit mark, tinted by the hue of the folder it ran
-in** ([`projectHue`](../../src/types.ts)). Where the skyline stacked those marks
-into towers-per-folder, the cadence stacks them into columns-per-day, so the
-same lights now plot *when* you worked instead of *where*. Point at a mark and a
-caption shows that session's opening prompt in a serif face — the same "your own
-words come back in a different face" cue Home has always used.
+The dashboard's hero: a **month grid** (`SessionCalendar`, shared with the
+[History panel](session-history.md)) where each day is a square, filled by how
+many sessions ran that day and tinted with the hue of the folder that ran most
+of them ([`projectHue`](../../src/types.ts)). Density is drawn as *alpha over
+that hue* rather than as its own colour ramp — a GitHub-style ramp would have to
+pick a colour, and every candidate green/orange is reserved for the status
+vocabulary (see [design.md](../design.md)). Four steps: 1, 2–3, 4–5, 6+.
 
-Marks here are a readout, not buttons: to reopen a past session, use the
-[History panel](session-history.md) or the sidebar. Keeping the cadence
-non-interactive is what lets it stay dense (dozens of days on screen) without
-turning every 9px mark into a focus target.
+The range switch sets how many months are drawn — 1 / 2 / 3 for 7 days / 30 days
+/ All (`calendarMonthCount`). Point at a day and the caption under the grid reads
+out **date · sessions · tokens · which folders**, so it answers what the square
+is made of rather than quoting one prompt out of context.
+
+Days here are a readout, not buttons: to reopen a past session, use the
+[History panel](session-history.md) or the sidebar. Home passes no
+`onSelectDay`, and that absent prop is the whole difference between the two
+surfaces — History's grid is the same component with days you can click.
 
 ## Data & cost
 
@@ -86,8 +91,9 @@ puts you into a session leaves Home automatically.
 ## Motion
 
 Quiet, matching the rest of the chrome (the skyline's ambient animation was the
-one sanctioned exception, and it's gone). Cadence marks rise as they appear
-(staggered per mark); bars and gauges grow from their leading edge once on mount.
+one sanctioned exception, and it's gone). Calendar squares rise as they appear
+(staggered per day, and only the ones that hold something); bars and gauges grow
+from their leading edge once on mount.
 Nothing loops. `prefers-reduced-motion` disables all of it — bars simply appear
 at their real width, since the width is the value and the animation only reveals
 it.
@@ -97,8 +103,10 @@ it.
 - `src/components/HomeScreen.tsx` — the dashboard component.
 - `src/components/HomeScreen.test.tsx` — headline rollup, command ranking,
   per-folder counts, live gauges, hover caption, range switch, empty state.
+- `src/components/SessionCalendar.tsx` (+ test) — the month grid, shared with
+  the History panel.
 - `src/lib/stats.ts` (+ `stats.test.ts`) — the pure aggregation (range filter,
-  summary, cadence bucketing, top commands, per-folder, rhythm, streaks, depth,
+  summary, calendar bucketing, top commands, per-folder, rhythm, streaks, depth,
   model share, formatters).
 - `src/lib/ipc.ts` — `getSessionStats`.
 - `src-tauri/src/session_stats.rs` (+ tests) — the per-session transcript scan.

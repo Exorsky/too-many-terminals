@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowRight, FileText, History, Loader2, Search, Trash2, X } from 'lucide-react';
-import type { SessionHistoryEntry } from '@/types';
+import { ArrowRight, CalendarDays, FileText, History, Loader2, Search, Trash2, X } from 'lucide-react';
+import { projectHue, type SessionHistoryEntry } from '@/types';
 import { relativeTime } from '@/lib/relative-time';
+import { calendarMonths, dayKey, type CalendarMark } from '@/lib/stats';
 import * as ipc from '@/lib/ipc';
 import { cn, folderName } from '@/lib/utils';
+import SessionCalendar from './SessionCalendar';
 
 interface HistoryEntry extends SessionHistoryEntry {
   /** Which open project this session belongs to. */
@@ -47,6 +49,12 @@ function absoluteLabel(iso: string, group: DayGroup): string {
   return `${d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}, ${clock}`;
 }
 
+/** "Aug 13" from a `dayKey()` string, for the picked-day chip. */
+function dayFilterLabel(key: string): string {
+  const [y, m, d] = key.split('-').map(Number);
+  return new Date(y, m, d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
 function fullTimestamp(iso: string): string {
   return new Date(iso).toLocaleString(undefined, {
     month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit',
@@ -71,6 +79,8 @@ export default function SessionHistoryPanel({ projects, sessionNames, onResume, 
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [projectFilter, setProjectFilter] = useState<string>('all');
+  const [dayFilter, setDayFilter] = useState<string | null>(null);
+  const [showCalendar, setShowCalendar] = useState(true);
   const [activeIndex, setActiveIndex] = useState(-1);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -92,7 +102,9 @@ export default function SessionHistoryPanel({ projects, sessionNames, onResume, 
     return () => { cancelled = true; };
   }, [projects]);
 
-  const filteredEntries = useMemo(() => {
+  // Split in two: the calendar draws `searched`, so picking a day never empties
+  // the grid you picked it from, while the list draws that minus the day.
+  const searched = useMemo(() => {
     if (!entries) return [];
     const q = query.trim().toLowerCase();
     return entries.filter((entry) => {
@@ -104,6 +116,20 @@ export default function SessionHistoryPanel({ projects, sessionNames, onResume, 
         || !!name?.toLowerCase().includes(q);
     });
   }, [entries, query, projectFilter, sessionNames]);
+
+  const filteredEntries = useMemo(
+    () => (dayFilter ? searched.filter((e) => dayKey(e.lastUsedIso) === dayFilter) : searched),
+    [searched, dayFilter],
+  );
+
+  const months = useMemo(() => calendarMonths(
+    searched.map((e): CalendarMark => ({
+      iso: e.lastUsedIso,
+      hue: projectHue(Math.max(0, projects.indexOf(e.projectDir))),
+      projectName: folderName(e.projectDir),
+    })),
+    now.getTime(),
+  ), [searched, projects, now]);
 
   // Entries arrive pre-sorted most-recent-first, so a flat filtered list
   // already matches the Today/Yesterday/Earlier render order below.
@@ -118,7 +144,7 @@ export default function SessionHistoryPanel({ projects, sessionNames, onResume, 
 
   useEffect(() => {
     setActiveIndex(-1);
-  }, [query, projectFilter]);
+  }, [query, projectFilter, dayFilter]);
 
   useEffect(() => {
     if (activeIndex < 0) return;
@@ -146,6 +172,11 @@ export default function SessionHistoryPanel({ projects, sessionNames, onResume, 
     if (e.key === '/' && !inSearch) {
       e.preventDefault();
       searchInputRef.current?.focus();
+      return;
+    }
+    if ((e.key === 'c' || e.key === 'C') && !inSearch) {
+      e.preventDefault();
+      setShowCalendar((v) => !v);
       return;
     }
     if (inSearch) {
@@ -181,13 +212,14 @@ export default function SessionHistoryPanel({ projects, sessionNames, onResume, 
         break;
       case 'Escape':
         if (pendingDeleteId) setPendingDeleteId(null);
+        else if (dayFilter) setDayFilter(null);
         break;
     }
-  }, [filteredEntries, activeIndex, pendingDeleteId, query, moveActive, onResume, onRead]);
+  }, [filteredEntries, activeIndex, pendingDeleteId, query, dayFilter, moveActive, onResume, onRead]);
 
   const totalCount = entries?.length ?? 0;
   const shownCount = filteredEntries.length;
-  const isFiltering = query.trim().length > 0 || projectFilter !== 'all';
+  const isFiltering = query.trim().length > 0 || projectFilter !== 'all' || dayFilter !== null;
 
   return (
     <div className="flex flex-col h-full overflow-hidden" onKeyDown={handlePanelKeyDown}>
@@ -204,6 +236,21 @@ export default function SessionHistoryPanel({ projects, sessionNames, onResume, 
               <><span className="text-foreground">{totalCount}</span> sessions</>
             )}
           </span>
+        )}
+        {entries !== null && entries.length > 0 && (
+          <button
+            className={cn(
+              'ml-auto flex items-center justify-center w-5.5 h-5.5 rounded-sm border cursor-pointer shrink-0',
+              showCalendar
+                ? 'text-primary bg-primary/10 border-primary/40'
+                : 'bg-transparent border-transparent text-muted-foreground hover:text-foreground hover:bg-white/[0.07]',
+            )}
+            aria-pressed={showCalendar}
+            title={showCalendar ? 'Hide the calendar (c)' : 'Show the calendar (c)'}
+            onClick={() => setShowCalendar((v) => !v)}
+          >
+            <CalendarDays size={13} />
+          </button>
         )}
       </div>
 
@@ -237,38 +284,71 @@ export default function SessionHistoryPanel({ projects, sessionNames, onResume, 
             )}
           </div>
 
-          {projects.length > 1 && (
+          {(projects.length > 1 || dayFilter) && (
             <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-thin">
-              <button
-                className={cn(
-                  'shrink-0 whitespace-nowrap text-[11px] rounded-full border px-2.5 py-[3px] cursor-pointer font-inherit transition-colors',
-                  projectFilter === 'all'
-                    ? 'border-primary/40 bg-primary/10 text-foreground'
-                    : 'border-border text-muted-foreground hover:text-foreground hover:border-[#33363f]',
-                )}
-                onClick={() => setProjectFilter('all')}
-              >
-                All folders
-              </button>
-              {projects.map((dir) => {
-                const isActive = projectFilter === dir;
-                return (
+              {dayFilter && (
+                <button
+                  className="shrink-0 flex items-center gap-1.5 whitespace-nowrap text-[11px] rounded-full border border-primary/40 bg-primary/10 text-foreground px-2.5 py-[3px] cursor-pointer font-inherit"
+                  onClick={() => setDayFilter(null)}
+                  title="Show every date"
+                >
+                  {dayFilterLabel(dayFilter)}
+                  <X size={10} className="text-muted-foreground" />
+                </button>
+              )}
+              {projects.length > 1 && (
+                <>
                   <button
-                    key={dir}
                     className={cn(
                       'shrink-0 whitespace-nowrap text-[11px] rounded-full border px-2.5 py-[3px] cursor-pointer font-inherit transition-colors',
-                      isActive
+                      projectFilter === 'all'
                         ? 'border-primary/40 bg-primary/10 text-foreground'
                         : 'border-border text-muted-foreground hover:text-foreground hover:border-[#33363f]',
                     )}
-                    onClick={() => setProjectFilter(isActive ? 'all' : dir)}
+                    onClick={() => setProjectFilter('all')}
                   >
-                    {folderName(dir)}
+                    All folders
                   </button>
-                );
-              })}
+                  {projects.map((dir) => {
+                    const isActive = projectFilter === dir;
+                    return (
+                      <button
+                        key={dir}
+                        className={cn(
+                          'shrink-0 whitespace-nowrap text-[11px] rounded-full border px-2.5 py-[3px] cursor-pointer font-inherit transition-colors',
+                          isActive
+                            ? 'border-primary/40 bg-primary/10 text-foreground'
+                            : 'border-border text-muted-foreground hover:text-foreground hover:border-[#33363f]',
+                        )}
+                        onClick={() => setProjectFilter(isActive ? 'all' : dir)}
+                      >
+                        {folderName(dir)}
+                      </button>
+                    );
+                  })}
+                </>
+              )}
             </div>
           )}
+        </div>
+      )}
+
+      {entries !== null && entries.length > 0 && showCalendar && (
+        <div className="px-4 py-2.5 border-b border-border shrink-0">
+          <div className="flex items-baseline justify-between gap-2 mb-2">
+            <span className="text-[10px] tracking-[0.16em] uppercase text-muted-foreground">
+              Sessions per day
+            </span>
+            <span className="text-[9.5px] tracking-[0.08em] uppercase text-muted-foreground/70">
+              last 3 months
+            </span>
+          </div>
+          <SessionCalendar
+            months={months}
+            now={now.getTime()}
+            selected={dayFilter}
+            onSelectDay={(key) => setDayFilter((cur) => (cur === key ? null : key))}
+          />
         </div>
       )}
 
@@ -301,7 +381,7 @@ export default function SessionHistoryPanel({ projects, sessionNames, onResume, 
             </div>
             <button
               className="mt-1 text-[11px] text-primary hover:bg-primary/10 bg-transparent border-none cursor-pointer px-2 py-1 rounded-sm font-inherit"
-              onClick={() => { setQuery(''); setProjectFilter('all'); }}
+              onClick={() => { setQuery(''); setProjectFilter('all'); setDayFilter(null); }}
             >
               Clear filters
             </button>
@@ -439,6 +519,8 @@ export default function SessionHistoryPanel({ projects, sessionNames, onResume, 
           <kbd className="mr-1 px-1 rounded-sm border border-border bg-white/[0.05] text-[#9297a3]">space</kbd> read
           <span className="mx-2 opacity-40">·</span>
           <kbd className="mr-1 px-1 rounded-sm border border-border bg-white/[0.05] text-[#9297a3]">del</kbd> delete
+          <span className="mx-2 opacity-40">·</span>
+          <kbd className="mr-1 px-1 rounded-sm border border-border bg-white/[0.05] text-[#9297a3]">c</kbd> calendar
           <span className="mx-2 opacity-40">·</span>
           <kbd className="mr-1 px-1 rounded-sm border border-border bg-white/[0.05] text-[#9297a3]">/</kbd> search
         </div>

@@ -18,9 +18,9 @@ export type Range = 7 | 30 | 'all';
 
 const DAY = 86_400_000;
 
-/** How many day-columns the cadence draws for each range. */
-export function cadenceDayCount(range: Range): number {
-  return range === 'all' ? 90 : range;
+/** How many month grids the calendar draws for each range. */
+export function calendarMonthCount(range: Range): number {
+  return range === 7 ? 1 : range === 30 ? 2 : 3;
 }
 
 function ms(iso: string | null): number | null {
@@ -71,33 +71,95 @@ export function summarize(stats: SessionStat[]): Summary {
   return { sessions: stats.length, turns, tokens, cacheHitPct: denom > 0 ? Math.round((cacheRead / denom) * 100) : null };
 }
 
-export interface CadenceMark { hue: number; projectName: string; preview: string; }
-export interface CadenceDay { key: string; label: string; marks: CadenceMark[]; }
+/** One session, ready to be dropped onto a calendar day. Both callers build
+ *  this: Home from its `ProjectStat`s, History from its transcript entries —
+ *  which is why `tokens` is optional, since a transcript listing hasn't
+ *  counted any. */
+export interface CalendarMark { iso: string; hue: number; projectName: string; tokens?: number; }
+
+export interface DayFolder { name: string; hue: number; count: number; }
+
+export interface CalendarDay {
+  /** Local `year-month-date` — `dayKey()` returns the same string for a
+   *  timestamp, so a day filter is a string comparison and nothing more. */
+  key: string;
+  date: number;
+  count: number;
+  /** Hue of the folder that ran the most sessions that day; null when empty. */
+  hue: number | null;
+  tokens: number;
+  /** Folders that ran something that day, busiest first. */
+  folders: DayFolder[];
+}
+
+export interface CalendarMonth {
+  key: string;
+  label: string;
+  /** Blank cells before the 1st, so the grid lines up under S M T W T F S. */
+  leading: number;
+  days: CalendarDay[];
+  total: number;
+}
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-/** `dayCount` columns ending today, each holding its sessions (newest folders
- *  don't matter here — order within a day is insertion order). */
-export function cadence(stats: ProjectStat[], dayCount: number, now: number): CadenceDay[] {
-  const byDay = new Map<number, CadenceMark[]>();
-  for (const s of stats) {
-    const t = ms(s.lastUsedIso);
-    if (t === null) continue;
-    const ord = dayOrdinal(t);
-    const marks = byDay.get(ord) ?? [];
-    marks.push({ hue: s.hue, projectName: s.projectName, preview: s.preview });
-    byDay.set(ord, marks);
+/** The local calendar day a timestamp falls on. Local, not UTC, for the same
+ *  reason `dayOrdinal` is: 11pm and 1am are different days to the person who
+ *  worked them, whatever the offset says. */
+export function dayKey(iso: string | number): string {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '' : `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
+/** The day's folders, busiest first — ties keep the order they were seen in.
+ *  The first one's hue is what fills the square. */
+function dayFolders(marks: CalendarMark[]): DayFolder[] {
+  const tally = new Map<string, DayFolder>();
+  for (const m of marks) {
+    const f = tally.get(m.projectName) ?? { name: m.projectName, hue: m.hue, count: 0 };
+    f.count += 1;
+    tally.set(m.projectName, f);
   }
+  return [...tally.values()].sort((a, b) => b.count - a.count);
+}
+
+/** The `monthCount` calendar months ending with the one `now` falls in. Empty
+ *  months are kept rather than dropped, so the grid doesn't reflow under you
+ *  as history fills in. */
+export function calendarMonths(marks: CalendarMark[], now: number, monthCount = 3): CalendarMonth[] {
+  const byDay = new Map<string, CalendarMark[]>();
+  for (const m of marks) {
+    if (ms(m.iso) === null) continue;
+    const k = dayKey(m.iso);
+    (byDay.get(k) ?? byDay.set(k, []).get(k)!).push(m);
+  }
+
   const base = new Date(now);
-  base.setHours(0, 0, 0, 0);
-  const days: CadenceDay[] = [];
-  for (let i = dayCount - 1; i >= 0; i--) {
-    const d = new Date(base);
-    d.setDate(base.getDate() - i);
-    const ord = Math.round(d.getTime() / DAY);
-    days.push({ key: String(ord), label: `${MONTHS[d.getMonth()]} ${d.getDate()}`, marks: byDay.get(ord) ?? [] });
+  const months: CalendarMonth[] = [];
+  for (let i = monthCount - 1; i >= 0; i--) {
+    const first = new Date(base.getFullYear(), base.getMonth() - i, 1);
+    const year = first.getFullYear();
+    const month = first.getMonth();
+    const dayCount = new Date(year, month + 1, 0).getDate();
+    const days: CalendarDay[] = [];
+    let total = 0;
+    for (let date = 1; date <= dayCount; date++) {
+      const key = `${year}-${month}-${date}`;
+      const list = byDay.get(key) ?? [];
+      total += list.length;
+      const folders = dayFolders(list);
+      days.push({
+        key,
+        date,
+        count: list.length,
+        hue: folders[0]?.hue ?? null,
+        tokens: list.reduce((n, m) => n + (m.tokens ?? 0), 0),
+        folders,
+      });
+    }
+    months.push({ key: `${year}-${month}`, label: `${MONTHS[month]} ${year}`, leading: first.getDay(), days, total });
   }
-  return days;
+  return months;
 }
 
 /** Merged first-token counts across every session, most-run first. */

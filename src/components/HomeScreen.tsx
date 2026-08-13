@@ -4,10 +4,11 @@ import * as ipc from '@/lib/ipc';
 import { cn, folderName } from '@/lib/utils';
 import { projectHue, type SessionUsageStats } from '@/types';
 import {
-  cadence, cadenceDayCount, depth, filterRange, formatCompact, formatDuration,
-  hourHistogram, modelShare, perProject, streaks, summarize, topCommands,
-  type ModelFamily, type ProjectStat, type Range,
+  calendarMonthCount, calendarMonths, depth, filterRange, formatCompact, formatDuration,
+  hourHistogram, modelShare, perProject, sessionTokens, streaks, summarize, topCommands,
+  type CalendarMark, type ModelFamily, type ProjectStat, type Range,
 } from '@/lib/stats';
+import SessionCalendar from './SessionCalendar';
 
 interface HomeScreenProps {
   projects: string[];
@@ -97,7 +98,6 @@ export default function HomeScreen({ projects, onAddProject }: HomeScreenProps) 
   const [stats, setStats] = useState<ProjectStat[] | null>(null);
   const [usage, setUsage] = useState<SessionUsageStats | null>(null);
   const [range, setRange] = useState<Range>(30);
-  const [caption, setCaption] = useState<{ name: string; preview: string; hue: number } | null>(null);
   // Fixed for the component's life so the day-bucketing memos stay stable;
   // Home remounts whenever you leave and come back, so it's always fresh.
   const now = useMemo(() => Date.now(), []);
@@ -125,7 +125,11 @@ export default function HomeScreen({ projects, onAddProject }: HomeScreenProps) 
 
   const scoped = useMemo(() => (stats ? filterRange(stats, range, now) : []), [stats, range, now]);
   const summary = useMemo(() => summarize(scoped), [scoped]);
-  const days = useMemo(() => cadence(scoped, cadenceDayCount(range), now), [scoped, range, now]);
+  const months = useMemo(() => calendarMonths(
+    scoped.map((s): CalendarMark => ({ iso: s.lastUsedIso, hue: s.hue, projectName: s.projectName, tokens: sessionTokens(s) })),
+    now,
+    calendarMonthCount(range),
+  ), [scoped, range, now]);
   const commands = useMemo(() => topCommands(scoped), [scoped]);
   const folders = useMemo(() => perProject(scoped), [scoped]);
   const hours = useMemo(() => hourHistogram(scoped), [scoped]);
@@ -204,53 +208,16 @@ export default function HomeScreen({ projects, onAddProject }: HomeScreenProps) 
             </p>
           </section>
 
-          {/* cadence — the hero: one mark per session, tinted by folder */}
+          {/* cadence — the hero: a day is a square, tinted by the folder that owned it */}
           <section className="border-b border-border">
             <div className="flex items-center justify-between px-4 pt-2.5 pb-1.5">
-              <Eyebrow>Cadence — each mark a session, tinted by folder</Eyebrow>
+              <Eyebrow>Cadence — sessions per day, tinted by folder</Eyebrow>
               <span className="text-[9.5px] tracking-[0.08em] uppercase text-muted-foreground/70">
-                {range === 'all' ? '90 days' : `${range} days`}
+                {range === 'all' ? 'last 3 months' : `${range} days`}
               </span>
             </div>
             <div className="px-4 pb-4">
-              <div
-                className="grid items-end gap-[3px] h-[132px] pt-1.5"
-                style={{ gridTemplateColumns: `repeat(${days.length}, minmax(0, 1fr))` }}
-                role="img"
-                aria-label={`${summary.sessions} sessions across ${days.length} days`}
-                onPointerLeave={() => setCaption(null)}
-              >
-                {days.map((day, di) => (
-                  <div key={day.key} className="flex flex-col-reverse gap-[2px] min-w-0" title={`${day.label} · ${day.marks.length} session${day.marks.length === 1 ? '' : 's'}`}>
-                    {day.marks.length === 0 ? (
-                      <span className="h-[3px] rounded-[1px] bg-white/5" />
-                    ) : day.marks.map((m, mi) => (
-                      <span
-                        key={mi}
-                        className="dash-mark h-[9px] rounded-[1px] last:rounded-t-[3px] hover:brightness-[1.35]"
-                        style={{ background: hue(m.hue), animationDelay: `${di * 12 + mi * 8}ms` }}
-                        onPointerEnter={() => setCaption({ name: m.projectName, preview: m.preview, hue: m.hue })}
-                      />
-                    ))}
-                  </div>
-                ))}
-              </div>
-              <div className="flex justify-between mt-2 text-[9px] tracking-[0.1em] uppercase text-muted-foreground/70">
-                <span>{days[0]?.label}</span>
-                <span>{days[days.length - 1]?.label} · today</span>
-              </div>
-              {/* hover caption — your own words come back in serif */}
-              <div className="mt-2 h-5 flex items-center gap-2.5 text-[10px] tracking-[0.1em] uppercase text-muted-foreground">
-                {caption ? (
-                  <>
-                    <span className="w-[7px] h-[7px] rounded-full shrink-0" style={{ background: hue(caption.hue, 60) }} />
-                    <b className="font-medium text-foreground normal-case tracking-normal">{caption.name}</b>
-                    <span className="dash-serif normal-case tracking-normal text-[13px] text-muted-foreground truncate">{caption.preview}</span>
-                  </>
-                ) : (
-                  <span className="text-muted-foreground/60">Point at a session to read the prompt that started it.</span>
-                )}
-              </div>
+              <SessionCalendar months={months} now={now} />
             </div>
           </section>
 

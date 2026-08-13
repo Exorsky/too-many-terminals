@@ -83,14 +83,16 @@ describe('HomeScreen dashboard', () => {
     expect(screen.getByText('21%')).toBeInTheDocument();
   });
 
-  it('reveals the session prompt in serif on hover', async () => {
+  it('reads out a day\'s totals on hover', async () => {
     const { container } = setup();
     await screen.findByText('sessions');
-    const marks = container.querySelectorAll<HTMLElement>('.dash-mark');
-    expect(marks.length).toBeGreaterThan(0);
-    // earliest lit day in view is a2, two days ago
-    await userEvent.hover(marks[0]);
-    await waitFor(() => expect(screen.getByText('why does the pty die')).toBeInTheDocument());
+    const lit = container.querySelectorAll<HTMLElement>('.dash-mark');
+    expect(lit.length).toBe(3); // three days, one session each
+    // earliest lit day in view is a2, two days ago — 100 output tokens ran on a1 only
+    await userEvent.hover(lit[0]);
+    await waitFor(() => expect(screen.getByText('1 session')).toBeInTheDocument());
+    // Also named by the per-folder panel below, hence "all".
+    expect(screen.getAllByText('claude-terminal').length).toBeGreaterThan(1);
   });
 
   it('switches the active time range', async () => {

@@ -73,4 +73,45 @@ describe('SessionHistoryPanel', () => {
     await userEvent.type(screen.getByPlaceholderText('Search sessions or folders…'), 'zzz-not-a-match');
     expect(await screen.findByText(/No sessions match/)).toBeInTheDocument();
   });
+
+  describe('the calendar', () => {
+    const OLD_ID = 'a0000000-0000-0000-0000-000000000000';
+    const fiveDaysAgo = new Date(Date.now() - 5 * 86_400_000);
+
+    beforeEach(() => {
+      vi.mocked(ipc.listSessions).mockResolvedValue([
+        entry(),
+        entry({ sessionId: OLD_ID, preview: 'why does the pty die', lastUsedIso: fiveDaysAgo.toISOString() }),
+      ]);
+    });
+
+    it('scopes the list to the day you click, and back', async () => {
+      renderPanel();
+      await screen.findByText('add a script to bulk-rename screenshots');
+
+      const month = fiveDaysAgo.toLocaleString('en-US', { month: 'short' });
+      const cell = `${month} ${fiveDaysAgo.getFullYear()} ${fiveDaysAgo.getDate()} — 1 session`;
+      await userEvent.click(screen.getByRole('button', { name: cell }));
+
+      // Twice over: the surviving row, and the hover caption the click left behind.
+      expect(screen.getAllByText('why does the pty die').length).toBeGreaterThan(0);
+      expect(screen.queryByText('add a script to bulk-rename screenshots')).not.toBeInTheDocument();
+      expect(screen.getByTitle('Show every date')).toBeInTheDocument();
+
+      // The chip clears the day — the grid it was picked from never filtered itself.
+      await userEvent.click(screen.getByTitle('Show every date'));
+      expect(screen.getByText('add a script to bulk-rename screenshots')).toBeInTheDocument();
+    });
+
+    it('hides and shows the grid', async () => {
+      renderPanel();
+      await screen.findByText('Sessions per day');
+
+      await userEvent.click(screen.getByTitle('Hide the calendar (c)'));
+      expect(screen.queryByText('Sessions per day')).not.toBeInTheDocument();
+
+      await userEvent.click(screen.getByTitle('Show the calendar (c)'));
+      expect(screen.getByText('Sessions per day')).toBeInTheDocument();
+    });
+  });
 });

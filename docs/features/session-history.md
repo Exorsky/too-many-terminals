@@ -32,6 +32,16 @@ under `~/.claude/projects/<encoded-dir>/*.jsonl`. Read-only and offline; nothing
   Works because both tools read the same transcript files this page describes.
 - **Delete** (trash / Del) removes the transcript file after inline confirmation.
   Session ids are validated (`[A-Za-z0-9_-]+`) so no path escapes.
+- **Calendar** (`c`, or the header's calendar button): a three-month grid above the list —
+  one square per day, filled by how many sessions ran and tinted with the hue of the folder
+  that ran most of them. Click a day to scope the list to it; the picked day shows as a chip
+  next to the folder chips, and clicking the chip, the day again, or `esc` clears it. The grid
+  itself is drawn from everything the search and folder filters left, *not* from the day
+  filter — so picking a day never empties the grid you picked it from. Hovering a day reads
+  out date · sessions · folders under the grid.
+  Same `SessionCalendar` component Home's cadence uses; passing `onSelectDay` is what makes
+  the days clickable there and not on Home. History lists transcripts without scanning them,
+  so its squares carry no token figure — the caption simply leaves it out.
 - Panel UX: search across preview text, folder name, and the session's name if it has
   one (`/`), Today/Yesterday/Earlier day groups, ↑↓/Enter keyboard nav.
 
@@ -40,6 +50,7 @@ under `~/.claude/projects/<encoded-dir>/*.jsonl`. Read-only and offline; nothing
 - `src-tauri/src/session_history.rs` (+ unit tests on tempfile fixtures) — unchanged by
   multi-project support; it already only ever took a single `project_dir` per call
 - `src/components/SessionHistoryPanel.tsx` (per-project fetch + merge), `src/lib/relative-time.ts`
+- `src/components/SessionCalendar.tsx` (+ test); `calendarMonths`/`dayKey` in `src/lib/stats.ts`
 - `src/lib/tabs.ts` `learnSessionNames` + `UNNAMED_TAB`; `src-tauri/src/workspace.rs`
   `session_names` (`#[serde(default)]`, so pre-existing workspace files still load)
 - Wiring: `App.tsx` `sessionNames` state (loaded/saved with the workspace) and

@@ -12,10 +12,22 @@ listed here; see `git log` for the full history.
 ## [Unreleased]
 
 ### Added
+- **A calendar of when you worked.** Session History now opens with a three-month
+  grid above the list: one square per day, filled by how many sessions ran that
+  day and tinted with the colour of the folder that ran most of them. Click a day
+  to see only that day's sessions, click again (or the date chip, or Esc) to clear
+  it; `c` hides and shows the grid. Hovering a day reads out its date, session
+  count and folders.
+
 - **Find in the transcript reader** — press Ctrl/Cmd+F in the Preview pane or the
   Session History reader to search the rendered (or raw) transcript. Every match
   is highlighted, the active one accented, with an `n/total` count; Enter jumps
   to the next match, Shift+Enter the previous, Esc closes.
+
+### Changed
+- **Home's cadence is now that same calendar** instead of a strip of day columns,
+  so weekdays line up and month boundaries are visible — with the day's tokens in
+  the hover readout. The time range switch now sets how many months are drawn.
 
 ### Fixed
 - **Session names now survive closing a tab.** History read names off the open
