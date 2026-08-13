@@ -152,6 +152,11 @@ export interface WorkspaceState {
   projects: string[];
   collapsed: boolean;
   tabs: SavedTab[];
+  /** Session id → the name that session was last known by. Kept apart from
+   *  `tabs` so closing a tab doesn't erase it — History, the sidebar, and a
+   *  resumed tab all read the same name. Absent in files saved before it
+   *  existed, hence optional. */
+  sessionNames?: Record<string, string>;
 }
 
 // --- App settings (theme selection + custom themes) ---

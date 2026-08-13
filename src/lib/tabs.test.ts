@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { initialTabsState, tabBarTabs, tabsReducer, type TabsState } from './tabs';
+import { initialTabsState, learnSessionNames, tabBarTabs, tabsReducer, type TabsState } from './tabs';
 import type { Tab } from '@/types';
 
 function makeTab(id: string, overrides: Partial<Tab> = {}): Tab {
@@ -230,5 +230,39 @@ describe('tabBarTabs', () => {
 
   it('never shows a file tab in the session slot', () => {
     expect(tabBarTabs([fileA], 'file-a')).toEqual([fileA]);
+  });
+});
+
+describe('learnSessionNames', () => {
+  const named = makeTab('t1', { kind: 'claude', name: 'Отладка settings', resumeSessionId: 'sess-1' });
+
+  it('records a claude tab\'s name against its session id', () => {
+    expect(learnSessionNames({}, [named])).toEqual({ 'sess-1': 'Отладка settings' });
+  });
+
+  it('keeps names of sessions whose tabs are gone', () => {
+    // The whole reason this lives outside the tab list: History still has to
+    // name a session hours after its tab was closed.
+    expect(learnSessionNames({ 'sess-old': 'A closed session' }, [named])).toEqual({
+      'sess-old': 'A closed session',
+      'sess-1': 'Отладка settings',
+    });
+  });
+
+  it('ignores the unnamed placeholder, shell tabs, and tabs with no session yet', () => {
+    const fresh = makeTab('t2', { kind: 'claude', name: 'Claude', resumeSessionId: 'sess-2' });
+    const shell = makeTab('t3', { name: 'PowerShell', resumeSessionId: 'sess-3' });
+    const pending = makeTab('t4', { kind: 'claude', name: 'Real name', resumeSessionId: null });
+    expect(learnSessionNames({}, [fresh, shell, pending])).toEqual({});
+  });
+
+  it('returns the same object when nothing is new, so state does not churn', () => {
+    const prev = { 'sess-1': 'Отладка settings' };
+    expect(learnSessionNames(prev, [named])).toBe(prev);
+  });
+
+  it('a rename overwrites the old name', () => {
+    const renamed = makeTab('t1', { kind: 'claude', name: 'New name', resumeSessionId: 'sess-1' });
+    expect(learnSessionNames({ 'sess-1': 'Old name' }, [renamed])).toEqual({ 'sess-1': 'New name' });
   });
 });

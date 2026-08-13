@@ -12,11 +12,15 @@ under `~/.claude/projects/<encoded-dir>/*.jsonl`. Read-only and offline; nothing
   (synthetic = starts with `<`, e.g. slash-command echoes), whitespace-collapsed,
   100 chars max.
 - **Name** (when known): a transcript file carries no name of its own — `SessionHistoryEntry`
-  has no `name` field. If some tab (open or restored from `workspace.json`) was ever
-  auto-named or renamed for that session id, its name is shown as the row's title, above
-  the raw preview, and matches search too. Sessions with no matching tab (e.g. started
-  outside TMT, like in the VS Code extension — see [vscode-handoff.md](vscode-handoff.md))
-  fall back to the preview alone, same as before.
+  has no `name` field. Names live in `workspace.json`'s `sessionNames` map (session id →
+  name), folded in from every tab that carries a real name by `learnSessionNames`
+  (`src/lib/tabs.ts`) and **kept after that tab is closed** — otherwise a closed session
+  would lose its title and become an unrecognizable row of raw preview text. The name is
+  the row's title, above the preview, and matches search too. The same map names a
+  **resumed** tab, so the sidebar and History always call a session the same thing.
+  Sessions never named in TMT (e.g. started in the VS Code extension — see
+  [vscode-handoff.md](vscode-handoff.md)) fall back to the preview alone.
+  The placeholder `Claude` a fresh tab starts with is not a name and never enters the map.
 - With more than one folder open, a project filter chip row appears (mirroring the
   original multi-project app) alongside the folder name shown on each row.
 - **Resume** (click / Enter / →) opens a new Claude tab, in that entry's project, with
@@ -36,4 +40,7 @@ under `~/.claude/projects/<encoded-dir>/*.jsonl`. Read-only and offline; nothing
 - `src-tauri/src/session_history.rs` (+ unit tests on tempfile fixtures) — unchanged by
   multi-project support; it already only ever took a single `project_dir` per call
 - `src/components/SessionHistoryPanel.tsx` (per-project fetch + merge), `src/lib/relative-time.ts`
-- Wiring: `App.tsx` `handleResumeSession`
+- `src/lib/tabs.ts` `learnSessionNames` + `UNNAMED_TAB`; `src-tauri/src/workspace.rs`
+  `session_names` (`#[serde(default)]`, so pre-existing workspace files still load)
+- Wiring: `App.tsx` `sessionNames` state (loaded/saved with the workspace) and
+  `handleResumeSession`

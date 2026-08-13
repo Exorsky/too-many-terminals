@@ -7,6 +7,30 @@ export interface TabsState {
 
 export const initialTabsState: TabsState = { tabs: [], activeTabId: null };
 
+/** Placeholder every fresh Claude tab starts with, until the auto-namer or the
+ *  user gives it a real one. Not a name, so it never becomes a session's. */
+export const UNNAMED_TAB = 'Claude';
+
+/** Folds the names currently on tabs into the persisted session-id → name map.
+ *  Kept separate from `tabs` (and from the reducer) because it has to outlive
+ *  the tab: History and a later resume both read it long after the tab is gone.
+ *  Returns `prev` unchanged when nothing is new, so it's safe to run on every
+ *  tab change without churning state. */
+export function learnSessionNames(
+  prev: Record<string, string>,
+  tabs: Tab[],
+): Record<string, string> {
+  let next = prev;
+  for (const tab of tabs) {
+    const id = tab.resumeSessionId;
+    if (tab.kind !== 'claude' || !id || tab.name === UNNAMED_TAB) continue;
+    if (prev[id] === tab.name) continue;
+    if (next === prev) next = { ...prev };
+    next[id] = tab.name;
+  }
+  return next;
+}
+
 export type TabsAction =
   | { type: 'add'; tab: Tab }
   | { type: 'close'; tabId: string }

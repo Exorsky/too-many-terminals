@@ -29,6 +29,15 @@ pub struct WorkspaceState {
     pub projects: Vec<String>,
     pub collapsed: bool,
     pub tabs: Vec<SavedTab>,
+    /// Session id → the name that session was last known by, kept apart from
+    /// `tabs` so closing a tab doesn't erase it: History and the sidebar then
+    /// call the same session the same thing, and resuming it restores its name
+    /// instead of inventing one from the transcript's first line.
+    ///
+    /// ponytail: never pruned — one short string per session ever opened.
+    /// Prune against the transcript files on load if it ever gets big.
+    #[serde(default)]
+    pub session_names: std::collections::HashMap<String, String>,
 }
 
 /// Directory the workspace file lives in (config dir keeps it out of the way
@@ -99,6 +108,8 @@ mod tests {
         fs::write(workspace_path(tmp.path()), json).unwrap();
         let state = load_workspace(tmp.path());
         assert_eq!(state.tabs[0].pinned, false);
+        // Same file predates session_names — it must load as empty, not fail.
+        assert!(state.session_names.is_empty());
     }
 
     #[test]
@@ -134,6 +145,13 @@ mod tests {
                     pinned: false,
                 },
             ],
+            // Outlives its tab on purpose — "sess-2" has no tab here.
+            session_names: [
+                ("sess-1".to_string(), "Fixing history".to_string()),
+                ("sess-2".to_string(), "A closed session".to_string()),
+            ]
+            .into_iter()
+            .collect(),
         };
 
         save_workspace(tmp.path(), &state).unwrap();
@@ -147,8 +165,7 @@ mod tests {
         let new = tmp.path().join("too-many-terminals");
         let state = WorkspaceState {
             projects: vec!["/home/x/project".to_string()],
-            collapsed: false,
-            tabs: vec![],
+            ..Default::default()
         };
         save_workspace(&legacy, &state).unwrap();
 

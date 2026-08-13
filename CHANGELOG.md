@@ -18,6 +18,14 @@ listed here; see `git log` for the full history.
   to the next match, Shift+Enter the previous, Esc closes.
 
 ### Fixed
+- **Session names now survive closing a tab.** History read names off the open
+  tabs, so closing a session stripped its title and left a row of raw preview
+  text you couldn't match to the session you meant — the transcript was never
+  lost, but you couldn't tell which row to resume. Names are now kept per
+  session id in the workspace file, so History and the sidebar always call a
+  session the same thing.
+- **Resuming a session keeps its name** instead of renaming the tab after the
+  transcript's opening line, which was the other half of the same mismatch.
 - **Scrolling in a down-split** — the transcript half of a top/bottom split
   wouldn't scroll; it now scrolls like the side-by-side split does.
 

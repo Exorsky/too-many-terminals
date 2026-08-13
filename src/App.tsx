@@ -15,7 +15,7 @@ import MarkdownPane from '@/components/MarkdownPane';
 import { disposeTerminal, writeToTerminal } from '@/components/terminalCache';
 import * as ipc from '@/lib/ipc';
 import { useSettings } from '@/lib/settings-store';
-import { initialTabsState, tabBarTabs, tabsReducer } from '@/lib/tabs';
+import { initialTabsState, learnSessionNames, tabBarTabs, tabsReducer, UNNAMED_TAB } from '@/lib/tabs';
 import { transcriptToMarkdown } from '@/lib/transcript';
 import { useTranscript } from '@/lib/use-transcript';
 import { cn } from '@/lib/utils';
@@ -35,6 +35,11 @@ export default function App() {
   const [state, dispatch] = useReducer(tabsReducer, initialTabsState);
   const [shellOptions, setShellOptions] = useState<ShellOption[]>([]);
   const [projects, setProjects] = useState<string[]>([]);
+  // Session id → name, accumulated from every tab that ever carried a real
+  // name and persisted with the workspace. Outlives the tab, which is the whole
+  // point: a closed session keeps its name in History, and resuming it gets
+  // that name back instead of a fresh one cut from the transcript.
+  const [sessionNames, setSessionNames] = useState<Record<string, string>>({});
   const [homeDir, setHomeDir] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -248,6 +253,7 @@ export default function App() {
       if (cancelled) return;
       setCollapsed(ws.collapsed);
       setProjects(ws.projects);
+      setSessionNames(ws.sessionNames ?? {});
       for (const saved of ws.tabs) {
         dispatch({
           type: 'add',
@@ -272,6 +278,13 @@ export default function App() {
     // Runs once on mount.
   }, []);
 
+  // Learn every session's name as soon as a tab carries one, so it's already
+  // recorded by the time that tab is closed. Runs on tab changes rather than in
+  // the rename action because a name can also arrive with a restored tab.
+  useEffect(() => {
+    setSessionNames((prev) => learnSessionNames(prev, state.tabs));
+  }, [state.tabs]);
+
   // Persist the workspace (debounced) whenever it changes, once the initial
   // load has finished — otherwise this would overwrite the saved state with
   // the empty pre-load state.
@@ -282,10 +295,10 @@ export default function App() {
         // File tabs aren't restored across restarts yet (no path in SavedTab).
         .filter((t) => !t.exited && t.kind !== 'file')
         .map((t) => ({ kind: t.kind, name: t.name, shellId: t.shellId, resumeSessionId: t.resumeSessionId, cwd: t.cwd, pinned: t.pinned }));
-      ipc.saveWorkspace({ projects, collapsed, tabs }).catch(() => {});
+      ipc.saveWorkspace({ projects, collapsed, tabs, sessionNames }).catch(() => {});
     }, SAVE_DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [workspaceLoaded, state.tabs, projects, collapsed]);
+  }, [workspaceLoaded, state.tabs, projects, collapsed, sessionNames]);
 
   const handleNewClaudeTab = useCallback(
     (dir: string) => spawnTabAt(dir, 'claude', null, 'Claude'),
@@ -399,11 +412,14 @@ export default function App() {
 
   const handleResumeSession = useCallback(
     (dir: string, entry: SessionHistoryEntry) => {
-      const name = entry.preview.slice(0, 30) || 'Claude';
+      // The name History showed for this row, so the tab you get back is the
+      // one you picked. Only sessions never named at all fall back to the
+      // transcript's opening line.
+      const name = sessionNames[entry.sessionId] || entry.preview.slice(0, 30) || UNNAMED_TAB;
       setReaderTarget(null);
       spawnTabAt(dir, 'claude', null, name, entry.sessionId);
     },
-    [spawnTabAt],
+    [spawnTabAt, sessionNames],
   );
 
   const handleReadSession = useCallback(
@@ -679,7 +695,7 @@ export default function App() {
           </div>
           {showHistory && projects.length > 0 && (
             <div className="absolute inset-0 bg-background">
-              <SessionHistoryPanel projects={projects} tabs={state.tabs} onResume={handleResumeSession} onRead={handleReadSession} />
+              <SessionHistoryPanel projects={projects} sessionNames={sessionNames} onResume={handleResumeSession} onRead={handleReadSession} />
             </div>
           )}
           {readerTarget && (
