@@ -24,3 +24,14 @@ export function parentPath(dir: string, levels = 2): string {
   const truncated = ancestors.length > shown.length;
   return (truncated ? ['…', ...shown] : shown).join(' / ');
 }
+
+/** A bare Escape or Ctrl+C keystroke — Claude Code's own interrupt keys.
+ *  Exact-match only: an escape *sequence* (arrow keys, etc.) arrives as
+ *  multiple bytes starting with ESC (e.g. `\x1b[A`), not the single byte a
+ *  real Escape keypress sends. Used to notice an interrupt Claude Code has no
+ *  hook for (its Stop hook explicitly skips firing on user interrupt), since
+ *  otherwise a tab's status is stuck at "working" until something else moves
+ *  it — see docs/features/tab-status-and-naming.md. */
+export function isInterruptKeystroke(data: string): boolean {
+  return data === '\x1b' || data === '\x03';
+}

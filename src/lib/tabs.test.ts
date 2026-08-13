@@ -96,6 +96,56 @@ describe('tabsReducer', () => {
     expect(state.tabs[0].status).toBe('requires_response');
   });
 
+  it('status stamps statusChangedAt on every transition', () => {
+    let state = stateWith('a');
+    const before = Date.now();
+    state = tabsReducer(state, { type: 'status', tabId: 'a', status: 'working' });
+    expect(state.tabs[0].statusChangedAt).toBeGreaterThanOrEqual(before);
+  });
+
+  it('status marks justFinished only on a working -> idle transition', () => {
+    let state = stateWith('a');
+    // new -> idle isn't a completion (no work happened).
+    state = tabsReducer(state, { type: 'status', tabId: 'a', status: 'idle' });
+    expect(state.tabs[0].justFinished).toBe(false);
+
+    state = tabsReducer(state, { type: 'status', tabId: 'a', status: 'working' });
+    state = tabsReducer(state, { type: 'status', tabId: 'a', status: 'idle' });
+    expect(state.tabs[0].justFinished).toBe(true);
+
+    // Starting new work clears it again.
+    state = tabsReducer(state, { type: 'status', tabId: 'a', status: 'working' });
+    expect(state.tabs[0].justFinished).toBe(false);
+  });
+
+  it('interrupt flips a working claude tab to requires_response', () => {
+    let state = initialTabsState;
+    state = tabsReducer(state, { type: 'add', tab: makeTab('a', { kind: 'claude', status: 'working' }) });
+    state = tabsReducer(state, { type: 'interrupt', tabId: 'a' });
+    expect(state.tabs[0].status).toBe('requires_response');
+    expect(state.tabs[0].statusChangedAt).toBeDefined();
+  });
+
+  it('interrupt is a no-op on a tab that is not a working claude tab', () => {
+    let state = initialTabsState;
+    state = tabsReducer(state, { type: 'add', tab: makeTab('shell', { kind: 'shell', status: 'working' }) });
+    state = tabsReducer(state, { type: 'add', tab: makeTab('idle-claude', { kind: 'claude', status: 'idle' }) });
+    state = tabsReducer(state, { type: 'interrupt', tabId: 'shell' });
+    state = tabsReducer(state, { type: 'interrupt', tabId: 'idle-claude' });
+    expect(state.tabs[0].status).toBe('working'); // shell untouched
+    expect(state.tabs[1].status).toBe('idle'); // already-idle claude untouched
+  });
+
+  it('select clears justFinished on the tab it activates (seen)', () => {
+    let state = stateWith('a');
+    state = tabsReducer(state, { type: 'status', tabId: 'a', status: 'working' });
+    state = tabsReducer(state, { type: 'status', tabId: 'a', status: 'idle' });
+    expect(state.tabs[0].justFinished).toBe(true);
+
+    state = tabsReducer(state, { type: 'select', tabId: 'a' });
+    expect(state.tabs[0].justFinished).toBe(false);
+  });
+
   it('wake clears the dormant flag on only the named tab', () => {
     let state = initialTabsState;
     state = tabsReducer(state, { type: 'add', tab: makeTab('a', { dormant: true }) });

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { CalendarClock, Check, FolderTree, History, MoreHorizontal, Settings, Zap, type LucideIcon } from 'lucide-react';
+import { CalendarClock, Check, History, MoreHorizontal, Settings, Zap, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import * as ipc from '@/lib/ipc';
 import { useSettings } from '@/lib/settings-store';
@@ -28,7 +28,7 @@ function barColor(percent: number): string {
   return 'bg-usage';
 }
 
-/** Marks whichever of History/Files/Settings is currently open. */
+/** Marks whichever of History/Settings is currently open. */
 function ActiveCheck() {
   return <span title="Currently open" className="ml-auto flex"><Check size={13} className="text-primary" /></span>;
 }
@@ -62,22 +62,23 @@ function UsageRow({ label, icon: Icon, window: w, now }: { label: string; icon: 
 
 interface SidebarFooterProps {
   showHistory: boolean;
-  showFiles: boolean;
   showSettings: boolean;
   onToggleHistory: () => void;
-  onToggleFiles: () => void;
   onToggleSettings: () => void;
 }
 
 /** The sidebar's bottom row. A single always-on strip shows both usage
  *  percentages at a glance; everything else — reset countdowns, bars, and
- *  History/Files/Settings — lives behind its "more" menu. Replaces two
+ *  History/Settings — lives behind its "more" menu. Replaces two
  *  stacked usage rows plus a mismatched nav row (one wide label button next to
  *  two bare icon squares) with one compact, consistently-shaped trigger.
- *  History/Files/Settings stay reachable even when usage stats fail to load —
- *  they're navigation, not usage display. See docs/features/usage-meter.md. */
+ *  History/Settings stay reachable even when usage stats fail to load —
+ *  they're navigation, not usage display. Files got its own always-visible
+ *  header button instead (`Sidebar.tsx`) — unlike History/Settings, it's a
+ *  workspace-wide panel that's open by default, not an occasional detour.
+ *  See docs/features/usage-meter.md. */
 export default function SidebarFooter({
-  showHistory, showFiles, showSettings, onToggleHistory, onToggleFiles, onToggleSettings,
+  showHistory, showSettings, onToggleHistory, onToggleSettings,
 }: SidebarFooterProps) {
   const settings = useSettings();
   const [stats, setStats] = useState<SessionUsageStats | null>(null);
@@ -109,7 +110,7 @@ export default function SidebarFooter({
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          aria-label="History, files, settings"
+          aria-label="History, settings"
           className="flex items-center gap-3 h-8 px-3 shrink-0 border-t border-border text-[10.5px] text-muted-foreground hover:text-foreground cursor-pointer bg-transparent border-x-0 border-b-0 font-inherit"
         >
           {stats?.session && (
@@ -137,11 +138,6 @@ export default function SidebarFooter({
           <History size={13} />
           <span>History</span>
           {showHistory && <ActiveCheck />}
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={onToggleFiles}>
-          <FolderTree size={13} />
-          <span>Files</span>
-          {showFiles && <ActiveCheck />}
         </DropdownMenuItem>
         <DropdownMenuItem onClick={onToggleSettings}>
           <Settings size={13} />

@@ -59,7 +59,7 @@ pub fn projects_root() -> Option<PathBuf> {
     dirs::home_dir().map(|h| h.join(".claude").join("projects"))
 }
 
-fn extract_text(content: &Value) -> Option<&str> {
+pub(crate) fn extract_text(content: &Value) -> Option<&str> {
     match content {
         Value::String(s) => Some(s),
         Value::Array(blocks) => blocks.iter().find_map(|b| {
@@ -74,11 +74,11 @@ fn extract_text(content: &Value) -> Option<&str> {
 /// True for Too Many Terminals / Claude Code's own synthetic wrapper messages
 /// (slash-command echoes, hook notices, caveats) rather than something the
 /// human actually typed.
-fn looks_synthetic(text: &str) -> bool {
+pub(crate) fn looks_synthetic(text: &str) -> bool {
     text.trim_start().starts_with('<')
 }
 
-fn clean_preview(text: &str) -> String {
+pub(crate) fn clean_preview(text: &str) -> String {
     text.split_whitespace()
         .collect::<Vec<_>>()
         .join(" ")
@@ -121,7 +121,7 @@ fn read_preview(file_path: &Path) -> String {
     clean_preview(fallback.as_deref().unwrap_or("(no preview)"))
 }
 
-fn mtime_iso(mtime: std::time::SystemTime) -> String {
+pub(crate) fn mtime_iso(mtime: std::time::SystemTime) -> String {
     chrono::DateTime::<chrono::Utc>::from(mtime)
         .format("%Y-%m-%dT%H:%M:%S%.3fZ")
         .to_string()

@@ -166,10 +166,16 @@ describe('Sidebar', () => {
     expect(screen.queryByText('Pin session')).not.toBeInTheDocument();
   });
 
-  it('opens the command palette from the search row', async () => {
+  it('opens the command palette from the header search button', async () => {
     const props = renderSidebar();
-    await userEvent.click(screen.getByText('Search sessions'));
+    await userEvent.click(screen.getByTitle('Search sessions (Ctrl Shift P)'));
     expect(props.onOpenSearch).toHaveBeenCalled();
+  });
+
+  it('toggles the file explorer from its own header button', async () => {
+    const props = renderSidebar();
+    await userEvent.click(screen.getByTitle('File explorer'));
+    expect(props.onToggleFiles).toHaveBeenCalled();
   });
 
   describe('Pinned strip', () => {
@@ -255,6 +261,42 @@ describe('Sidebar', () => {
       await userEvent.click(within(strip).getByText('needs-me'));
       expect(props.onSelectTab).toHaveBeenCalledWith('needs-me');
     });
+
+    it('shows how long a session has been waiting', () => {
+      renderSidebar({
+        tabs: [makeTab('needs-me', { status: 'requires_response', statusChangedAt: Date.now() - 5 * 60_000 })],
+      });
+      const strip = screen.getByText('Waiting on you').parentElement!.parentElement!;
+      expect(within(strip).getByText('5m')).toBeInTheDocument();
+    });
+  });
+
+  describe('"Just finished" strip', () => {
+    it('is absent when nothing just finished', () => {
+      renderSidebar({ tabs: [makeTab('a', { status: 'idle' })] });
+      expect(screen.queryByText('Just finished')).not.toBeInTheDocument();
+    });
+
+    it('lists a session that just went working -> idle, with a count', () => {
+      renderSidebar({
+        tabs: [
+          makeTab('done', { status: 'idle', justFinished: true, statusChangedAt: Date.now() - 2 * 60_000 }),
+          makeTab('untouched', { status: 'idle' }),
+        ],
+      });
+      const strip = screen.getByText('Just finished').parentElement!.parentElement!;
+      expect(within(strip).getByText('done')).toBeInTheDocument();
+      expect(within(strip).queryByText('untouched')).not.toBeInTheDocument();
+      expect(within(strip).getByText('1')).toBeInTheDocument();
+      expect(within(strip).getByText('2m ago')).toBeInTheDocument();
+    });
+
+    it('selects a just-finished session when its strip row is clicked', async () => {
+      const props = renderSidebar({ tabs: [makeTab('done', { status: 'idle', justFinished: true })] });
+      const strip = screen.getByText('Just finished').parentElement!.parentElement!;
+      await userEvent.click(within(strip).getByText('done'));
+      expect(props.onSelectTab).toHaveBeenCalledWith('done');
+    });
   });
 
   it('offers Claude and every OS shell in the New session menu, scoped to the project', async () => {
@@ -271,14 +313,14 @@ describe('Sidebar', () => {
 
   it('toggles the history panel from the footer menu', async () => {
     const props = renderSidebar();
-    await userEvent.click(screen.getByRole('button', { name: 'History, files, settings' }));
+    await userEvent.click(screen.getByRole('button', { name: 'History, settings' }));
     await userEvent.click(await screen.findByText('History'));
     expect(props.onToggleHistory).toHaveBeenCalled();
   });
 
   it('toggles settings from the footer menu', async () => {
     const props = renderSidebar();
-    await userEvent.click(screen.getByRole('button', { name: 'History, files, settings' }));
+    await userEvent.click(screen.getByRole('button', { name: 'History, settings' }));
     await userEvent.click(await screen.findByText('Settings'));
     expect(props.onToggleSettings).toHaveBeenCalled();
   });
@@ -300,10 +342,12 @@ describe('Sidebar', () => {
     expect(screen.getByText('claude-1')).toBeInTheDocument();
   });
 
-  it('shows the two nearest ancestor folders before the name by default', () => {
+  it('shows the nearest ancestor folder before the name by default', () => {
     renderSidebar();
-    // PROJECT = 'C:\Users\x\project' — the two folders right above it.
-    expect(screen.getByText(/Users \/ x/)).toBeInTheDocument();
+    // PROJECT = 'C:\Users\x\project' — just "x", the folder right above it,
+    // not "Users" too: a single near ancestor is what's worth showing next
+    // to the name, and it also sidesteps ever needing to truncate this text.
+    expect(screen.getByText(/…\s*\/\s*x/)).toBeInTheDocument();
     expect(screen.getByText('project')).toBeInTheDocument();
   });
 
@@ -311,7 +355,7 @@ describe('Sidebar', () => {
     vi.mocked(ipc.saveSettings).mockResolvedValue(undefined);
     patchSettings({ showFolderPaths: false });
     renderSidebar();
-    expect(screen.queryByText(/Users \/ x/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/…\s*\/\s*x/)).not.toBeInTheDocument();
     expect(screen.getByText('project')).toBeInTheDocument();
   });
 
@@ -360,11 +404,83 @@ describe('Sidebar', () => {
     expect(screen.getByText('b')).toBeInTheDocument();
   });
 
-  it('removes a folder via its card button without touching the dialog', async () => {
+  it('removes a folder via its card\'s right-click menu without touching the dialog', async () => {
     const props = renderSidebar();
-    await userEvent.click(screen.getByTitle('Remove folder'));
+    fireEvent.contextMenu(screen.getByText('project'));
+    await userEvent.click(await screen.findByText('Remove folder'));
     expect(props.onRemoveProject).toHaveBeenCalledWith(PROJECT);
     expect(props.onAddProject).not.toHaveBeenCalled();
+  });
+
+  it('spawns a new session from a folder\'s right-click menu while it is collapsed', async () => {
+    const props = renderSidebar({ tabs: [] });
+    await userEvent.click(screen.getByText('project')); // collapse the folder's own accordion
+    expect(screen.queryByText('New session')).not.toBeInTheDocument(); // the in-body row is gone
+
+    fireEvent.contextMenu(screen.getByText('project'));
+    await userEvent.click(await screen.findByText('New Claude session'));
+    expect(props.onNewClaudeTab).toHaveBeenCalledWith(PROJECT);
+
+    fireEvent.contextMenu(screen.getByText('project'));
+    await userEvent.click(await screen.findByText('New PowerShell'));
+    expect(props.onNewShellTab).toHaveBeenCalledWith(PROJECT, 'powershell');
+  });
+
+  it('tints a folder card while a session inside it is working, and marks it while collapsed', async () => {
+    const { container } = renderSidebar({ tabs: [makeTab('claude-1', { status: 'working' })] });
+    // Scoped to the card's own wrapper (`.mx-1.mb-1`), not an unbounded
+    // `.closest('[style]')` — that can walk all the way to `<body>`, which
+    // Radix (context menu/tooltip) sometimes leaves `style="pointer-events:
+    // none"` on between tests.
+    const card = screen.getByText('project').closest('.mx-1.mb-1');
+    expect(card).not.toBeNull();
+    expect(card!.getAttribute('style')).toContain('rgba(240, 179, 87');
+
+    // Collapse the folder — its own row's spinner disappears, so the header
+    // needs a stand-in or the working session becomes invisible.
+    await userEvent.click(screen.getByText('project'));
+    expect(container.querySelector('.animate-spin')).toBeInTheDocument();
+  });
+
+  it('tints a folder card neutrally while it just holds the active tab, doing nothing in particular', () => {
+    renderSidebar({
+      activeTabId: 'claude-1',
+      tabs: [makeTab('claude-1', { status: 'idle' })],
+    });
+    // Scoped to the card's own wrapper (`.mx-1.mb-1`), not an unbounded
+    // `.closest('[style]')` — that can walk all the way to `<body>`, which
+    // Radix (context menu/tooltip) sometimes leaves `style="pointer-events:
+    // none"` on between tests.
+    const card = screen.getByText('project').closest('.mx-1.mb-1');
+    expect(card).not.toBeNull();
+    expect(card!.getAttribute('style')).toContain('var(--border-hover)');
+  });
+
+  it('is not tinted at all when neither active nor doing anything', () => {
+    renderSidebar({
+      activeTabId: null,
+      tabs: [makeTab('claude-1', { status: 'idle' })],
+    });
+    const card = screen.getByText('project').closest('.mx-1.mb-1');
+    expect(card!.getAttribute('style')).toBeNull();
+  });
+
+  it('shows what a working session is doing, from the activity detail, target highlighted', () => {
+    renderSidebar({
+      tabs: [makeTab('claude-1', { status: 'working', statusDetail: 'editing Sidebar.tsx' })],
+    });
+    // "editing " (muted) + "Sidebar.tsx" (its own span, the warning accent) —
+    // two text nodes, not one, so match the target span directly.
+    const target = screen.getByText('Sidebar.tsx');
+    expect(target.tagName).toBe('SPAN');
+    expect(target.parentElement).toHaveTextContent('editing Sidebar.tsx');
+  });
+
+  it('falls back to the bare detail, unhighlighted, when it has no verb to split off', () => {
+    renderSidebar({
+      tabs: [makeTab('claude-1', { status: 'working', statusDetail: 'mcp__n8n-mcp__search_nodes' })],
+    });
+    expect(screen.getByText('mcp__n8n-mcp__search_nodes')).toBeInTheDocument();
   });
 
   it('offers to add another folder alongside existing ones', async () => {
@@ -386,6 +502,16 @@ describe('Sidebar', () => {
     expect(screen.queryByText('New session')).not.toBeInTheDocument();
     await userEvent.click(screen.getByTitle('Show sidebar'));
     expect(props.onToggleCollapse).toHaveBeenCalled();
+  });
+
+  it('badges the collapsed rail with the waiting-on-you count', () => {
+    renderSidebar({ collapsed: true, tabs: [makeTab('needs-me', { status: 'requires_response' })] });
+    expect(screen.getByTitle('1 session waiting on you')).toHaveTextContent('1');
+  });
+
+  it('shows no badge on the collapsed rail when nothing is waiting', () => {
+    renderSidebar({ collapsed: true, tabs: [makeTab('a', { status: 'idle' })] });
+    expect(screen.queryByTitle(/waiting on you/)).not.toBeInTheDocument();
   });
 
   it('shows a spinning indicator while a claude tab is working', () => {

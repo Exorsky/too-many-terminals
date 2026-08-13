@@ -295,6 +295,14 @@ pub fn read_transcript(
     crate::session_history::read_transcript(&root, &project_dir, &session_id)
 }
 
+#[tauri::command(async)]
+pub fn get_session_stats(
+    project_dir: String,
+) -> Result<Vec<crate::session_stats::SessionStat>, String> {
+    let root = projects_root().ok_or("could not resolve home directory")?;
+    Ok(crate::session_stats::read_session_stats(&root, &project_dir))
+}
+
 #[tauri::command]
 pub async fn get_session_usage_stats() -> Result<crate::session_usage::SessionUsageStats, String> {
     let credentials = crate::session_usage::credentials_path().ok_or("could not resolve home directory")?;

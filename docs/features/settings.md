@@ -19,7 +19,7 @@ Two switches, both default `true` (opt-out) and persisted in `settings.json`:
 - **Show Markdown Preview** (`showMarkdownToggle`) — gates
   [`SessionControls`](session-reader.md#session-controls), the Preview/Split
   controls docked to the tab strip.
-- **Show folder paths** (`showFolderPaths`) — gates the up-to-two-ancestor
+- **Show folder paths** (`showFolderPaths`) — gates the nearest-ancestor
   breadcrumb before each project's name in the sidebar (see
   [terminals.md](terminals.md#folder-paths)).
 

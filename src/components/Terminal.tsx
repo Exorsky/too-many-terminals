@@ -6,11 +6,18 @@ import { WebglAddon } from '@xterm/addon-webgl';
 import '@xterm/xterm/css/xterm.css';
 import * as ipc from '@/lib/ipc';
 import { getActiveXtermTheme } from '@/lib/themes';
+import { isInterruptKeystroke } from '@/lib/utils';
 import { terminalCache, flushPendingWrites, type CachedTerminal } from './terminalCache';
 
 interface TerminalProps {
   tabId: string;
   isVisible: boolean;
+  /** Called on a bare Escape/Ctrl+C keystroke — Claude Code's own Stop hook
+   *  doesn't fire on a user interrupt, so this is the only signal the app
+   *  gets that a "working" tab may actually be sitting idle. The caller
+   *  decides whether that's worth acting on (only meaningful for a claude
+   *  tab currently marked working). */
+  onInterrupt?: () => void;
 }
 
 /** Activate the WebGL renderer on an already-open terminal (no-op if it's
@@ -32,7 +39,7 @@ function ensureWebgl(cached: CachedTerminal): void {
   }
 }
 
-const Terminal = React.memo(function Terminal({ tabId, isVisible }: TerminalProps) {
+const Terminal = React.memo(function Terminal({ tabId, isVisible, onInterrupt }: TerminalProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const attachedRef = useRef<string | null>(null);
 
@@ -71,6 +78,7 @@ const Terminal = React.memo(function Terminal({ tabId, isVisible }: TerminalProp
       // Forward keyboard input to PTY
       const onDataDisposable = term.onData((data) => {
         ipc.writeToPty(tabId, data);
+        if (isInterruptKeystroke(data)) onInterrupt?.();
       });
 
       cached = { term, fitAddon, onDataDisposable };

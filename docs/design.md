@@ -34,7 +34,7 @@ new screen is what each token is *for*:
 | `muted-foreground` | Secondary text: descriptions, meta, folder chips | — |
 | `success` / `warning` / `attention` / `destructive` | Session status only (idle / working / needs-you / error) | **Never** — see [Status vocabulary](#status-vocabulary) |
 | `usage` | The usage-meter bar's color below the warning threshold. App chrome only, no ansi counterpart — kept separate from `primary` so a theme's accent and its "how much I've used" bar can differ | — |
-| project hue (`projectHue(index)`, `PROJECT_COLORS` in `types.ts`) | A folder's identity — one small dot, cycling blue→green→orange→purple→teal→red→pink→yellow in the order folders were added | Never a full tinted background (see [Shape](#shape)) |
+| project hue (`projectHue(index)`, `PROJECT_COLORS` in `types.ts`) | Cross-folder disambiguation — a small dot next to a folder-name chip in the Pinned/Attention strips, where several folders' sessions sit in one list and the color is doing real work. **Not** shown in the folder's own header (a neutral `Folder` glyph instead) — the name right there already identifies it; a second color badge on the same row would be decoration | Never a full tinted background (see [Shape](#shape)) |
 
 `primary` doing double duty (active state *and* pinned state) is deliberate,
 not sloppy overlap: both mean "this is here because you put it here," as
@@ -77,8 +77,9 @@ empty-state or oversized decorative icons. Never mix a 15px icon into an
 11px row — the row height (see below) was chosen around the smaller icon.
 
 Row/bar heights cluster at **32px** (`h-8` — the dominant chrome height:
-`SidebarFooter`'s trigger, the search row, `TabBar`) and **40px** (`h-10` —
-panel headers: Settings, History, the session bar). Uppercase eyebrow labels
+`SidebarFooter`'s trigger, `TabBar`) and **40px** (`h-10` —
+panel headers: Settings, History, the session bar, the sidebar header itself).
+Uppercase eyebrow labels
 (`SETTINGS`, `PINNED`, folder-group hints) get `tracking-[0.08em]` to
 `tracking-[0.16em]` and `text-muted-foreground` — never full-strength
 foreground, so they read as structure rather than content.
@@ -102,11 +103,21 @@ common radius in the codebase (32 uses vs. 21 `rounded-md`, 24 `rounded-full`,
 - **`rounded-lg` (4px)** — rare, a couple of larger containers.
 
 A folder or session row is **never** wrapped in its own tinted, bordered
-card — that was the pre-redesign look (a colored box per folder) and reads as
-busy once more than three or four are open. Color marks identity as one small
-dot; the row itself stays borderless and flat, differing from its neighbors
-only by a hover/active background tint (`hover:bg-white/4`,
-`bg-white/6`–`bg-white/8` for active/selected).
+card by default — that was the pre-redesign look (a colored box per folder)
+and reads as busy once more than three or four are open. Color marks identity
+as one small dot (or, since the folder header's own identity dot was dropped
+in favor of a neutral glyph, nowhere at all in the header — see
+[terminals.md](features/terminals.md#project-folders)); the row itself stays
+borderless and flat, differing from its neighbors only by a hover/active
+background tint (`hover:bg-white/4`, `bg-white/6`–`bg-white/8` for
+active/selected). The one sanctioned exception is **activity, not identity**:
+a folder with a live `working`/`requires_response` session inside earns a
+soft border + background tint (`folderActivity()`, `ProjectCard` in
+`Sidebar.tsx`) — gated on state that changes on its own, same test the
+[status vocabulary](#status-vocabulary) below already applies, and it reverts
+to flat the moment nothing inside it is active. A permanent per-folder card
+would still be the rejected pre-redesign look; a card that only exists while
+it's true is a status signal wearing the same shape.
 
 ## Iconography
 
@@ -168,9 +179,13 @@ came down to what kind of content is involved, not taste:
 - **One thing that's always glanceable plus a couple of rarely-used
   actions** → collapse the actions behind a **single trigger + menu**, keep
   the glanceable part always visible. `SidebarFooter` is the model: both
-  usage percentages sit in the open, History/Files/Settings live behind one
-  "⋯" (see [usage-meter.md](features/usage-meter.md)) — three separately
-  hoverable icons would cost the same information for more permanent chrome.
+  usage percentages sit in the open, History/Settings live behind one "⋯"
+  (see [usage-meter.md](features/usage-meter.md)) — two separately hoverable
+  icons would cost the same information for more permanent chrome. Files
+  used to live in this menu too, but it isn't a rarely-used action — it's a
+  workspace-wide panel that defaults to open — so it moved to its own button
+  in the sidebar header, next to Search, where it stays reachable no matter
+  what else is open.
 - **An action that applies to one specific item, only sometimes** → the
   item's own **right-click context menu**, not a new always-visible hover
   icon. Pin/unpin went through several drafts (a hover pin icon, a corner
@@ -189,22 +204,27 @@ are the same shape on purpose:
   folder list off-screen.
 - Returns `null` (zero height, zero cost) when empty — the empty state *is*
   the strip's absence, never a "nothing here" placeholder.
-- `shrink-0`, fixed between the header/search row and the scrolling folder
-  list, so it never scrolls away.
+- `shrink-0`, fixed between the header and the scrolling folder list, so it
+  never scrolls away.
 
 The only difference is who fills it and what color that implies: **Pinned**
 is user-controlled and rendered in `primary` blue; **Waiting on you** fills
-itself from live session state and is rendered in `attention` orange. Building
-a third strip later ("just finished," a per-repo queue, whatever) should copy
-this shape exactly and pick the color from that same rule — did a person ask
-for this, or did the app notice it?
+itself from live session state and is rendered in `attention` orange.
+**"Just finished"** ([attention-inbox.md](features/attention-inbox.md)) is the
+predicted third strip, now shipped, and it followed the same rule rather than
+inventing a color: it's app-noticed like Waiting-on-you, but it's reporting
+the `idle`/success outcome rather than something blocking you, so it takes
+`success` green — the color already reserved for that exact meaning — instead
+of a new hue. A fourth strip later should keep asking the same question: did
+a person ask for this (→ `primary`), or did the app notice it (→ whichever
+reserved status color actually matches what it's reporting)?
 
 ## Discoverability
 
 If a feature only exists behind a keyboard shortcut, it needs a visible
 entry point somewhere a mouse can find it — a shortcut alone is not
 discoverable. The command palette existed for a while as Ctrl+Shift+P only;
-the "Search sessions" row at the top of the sidebar
+the search icon button in the sidebar header
 (see [command-palette.md](features/command-palette.md)) is the fix, and the
 same question is worth asking of any future shortcut-only feature.
 

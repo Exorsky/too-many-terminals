@@ -14,7 +14,8 @@ export type TabsAction =
   | { type: 'rename'; tabId: string; name: string }
   | { type: 'exited'; tabId: string }
   | { type: 'sessionResolved'; tabId: string; sessionId: string }
-  | { type: 'status'; tabId: string; status: TabStatus }
+  | { type: 'status'; tabId: string; status: TabStatus; detail?: string }
+  | { type: 'interrupt'; tabId: string }
   | { type: 'wake'; tabId: string }
   | { type: 'sleep'; tabId: string }
   | { type: 'dirty'; tabId: string; dirty: boolean }
@@ -43,7 +44,14 @@ export function tabsReducer(state: TabsState, action: TabsAction): TabsState {
 
     case 'select':
       if (!state.tabs.some((t) => t.id === action.tabId)) return state;
-      return { ...state, activeTabId: action.tabId };
+      return {
+        ...state,
+        activeTabId: action.tabId,
+        // Selecting a "just finished" tab is what "seen" means for it.
+        tabs: state.tabs.map((t) =>
+          t.id === action.tabId && t.justFinished ? { ...t, justFinished: false } : t,
+        ),
+      };
 
     case 'rename':
       return {
@@ -69,13 +77,42 @@ export function tabsReducer(state: TabsState, action: TabsAction): TabsState {
         ),
       };
 
-    case 'status':
+    case 'status': {
+      const now = Date.now();
       return {
         ...state,
-        tabs: state.tabs.map((t) =>
-          t.id === action.tabId ? { ...t, status: action.status } : t,
-        ),
+        tabs: state.tabs.map((t) => {
+          if (t.id !== action.tabId) return t;
+          // Only a working -> idle transition counts as "just finished" — idle
+          // is Claude's resting state after any turn, so reaching it from
+          // anywhere else (new, requires_response) isn't a completion signal.
+          const justFinished = action.status === 'idle' && t.status === 'working';
+          // The activity detail only ever means something while working —
+          // carrying it past that would show a stale "editing X" caption
+          // once the tab has actually gone idle or is waiting on input.
+          const statusDetail = action.status === 'working' ? action.detail : undefined;
+          return { ...t, status: action.status, statusChangedAt: now, justFinished, statusDetail };
+        }),
       };
+    }
+
+    // Claude Code's Stop hook explicitly doesn't fire on a user interrupt
+    // (Escape/Ctrl+C), so a working tab would otherwise stay "working"
+    // forever after one. The interrupt always leaves Claude asking what to
+    // do next, which is what requires_response already means — a no-op
+    // unless the tab is a claude tab currently marked working, so an
+    // Escape/Ctrl+C sent for any other reason (a shell tab, a tab that's
+    // already idle/waiting) doesn't get reinterpreted.
+    case 'interrupt': {
+      const now = Date.now();
+      return {
+        ...state,
+        tabs: state.tabs.map((t) => {
+          if (t.id !== action.tabId || t.kind !== 'claude' || t.status !== 'working') return t;
+          return { ...t, status: 'requires_response', statusChangedAt: now, justFinished: false, statusDetail: undefined };
+        }),
+      };
+    }
 
     case 'wake':
       return {

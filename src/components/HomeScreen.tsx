@@ -1,381 +1,359 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { FolderOpen, History, Plus } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { FolderOpen } from 'lucide-react';
 import * as ipc from '@/lib/ipc';
-import { relativeTime } from '@/lib/relative-time';
 import { cn, folderName } from '@/lib/utils';
-import { projectHue, type SessionHistoryEntry, type Tab, type TabStatus } from '@/types';
-
-/** Windows per tower column, capped so even a 50-session folder stays short
- *  enough to fit the pane without measuring it. */
-const MAX_ROWS = 12;
-/** Dark floors left above the lit ones — the room this folder has left to grow. */
-const EMPTY_FLOORS = 2;
-/** How often a single lit window flickers. Paused while the window is unfocused. */
-const FLICKER_MS = 4200;
-/** How long a session takes to cool from "just now" to as dim as it ever gets. */
-const COLD_AFTER_DAYS = 60;
-
-/** A live Claude tab standing behind a window. */
-interface Live {
-  tabId: string;
-  status: TabStatus;
-}
-
-/** One window. Either a past session you can resume, or a session running right
- *  now — including one so new it hasn't been written to history yet, which has
- *  no `entry` and can only be opened by its tab. */
-interface Win {
-  key: string;
-  preview: string;
-  /** Null for a live session with no history entry yet. */
-  entry: SessionHistoryEntry | null;
-  live: Live | null;
-}
-
-interface Tower {
-  dir: string;
-  name: string;
-  hue: number;
-  /** Newest first — index 0 lights the top floor. */
-  wins: Win[];
-  cols: number;
-}
+import { projectHue, type SessionUsageStats } from '@/types';
+import {
+  cadence, cadenceDayCount, depth, filterRange, formatCompact, formatDuration,
+  hourHistogram, modelShare, perProject, streaks, summarize, topCommands,
+  type ModelFamily, type ProjectStat, type Range,
+} from '@/lib/stats';
 
 interface HomeScreenProps {
   projects: string[];
-  /** Open tabs, so a running session's window shows its live state. */
-  tabs: Tab[];
-  onResume: (projectDir: string, entry: SessionHistoryEntry) => void;
-  onSelectTab: (tabId: string) => void;
-  onNewSession: (projectDir: string) => void;
   onAddProject: () => void;
-  onOpenHistory: () => void;
 }
 
-/** Grid width that keeps a tower under MAX_ROWS floors. */
-function columnsFor(count: number): number {
-  return Math.min(6, Math.max(2, Math.ceil(count / MAX_ROWS)));
+const RANGES: { value: Range; label: string }[] = [
+  { value: 7, label: '7 days' },
+  { value: 30, label: '30 days' },
+  { value: 'all', label: 'All' },
+];
+
+/** Decorative identity hues for the three model families — labelled, so they
+ *  read by name, not by colour alone. Not status colours. */
+const MODEL_HUE: Record<ModelFamily, string> = {
+  opus: 'hsl(268 48% 60%)',
+  sonnet: 'hsl(176 42% 50%)',
+  haiku: 'hsl(220 12% 46%)',
+  other: 'hsl(32 40% 52%)',
+};
+
+const hue = (h: number, l = 58) => `hsl(${h} 55% ${l}%)`;
+
+/** An uppercase panel eyebrow. */
+function Eyebrow({ children }: { children: React.ReactNode }) {
+  return <span className="text-[10px] tracking-[0.16em] uppercase text-muted-foreground">{children}</span>;
 }
 
-/** How warm a session still is, 1 (minutes ago) to 0 (cold), from *elapsed
- *  time* rather than its rank in the folder's list. Rank would light the newest
- *  session of a folder you abandoned in March exactly as brightly as one from
- *  this morning. Log-scaled, so the first few days carry most of the range —
- *  that's where the difference actually matters. */
-export function warmth(iso: string, now: number = Date.now()): number {
-  const days = Math.max(0, (now - new Date(iso).getTime()) / 86_400_000);
-  if (!Number.isFinite(days)) return 0;
-  return Math.max(0, 1 - Math.log1p(days) / Math.log1p(COLD_AFTER_DAYS));
+/** One labelled horizontal bar (command / folder rows). */
+function BarRow({ label, swatch, value, frac, barColor }: {
+  label: string; swatch?: string; value: string; frac: number; barColor: string;
+}) {
+  return (
+    <div className="grid grid-cols-[76px_1fr_46px] items-center gap-2.5">
+      <span className="flex items-center gap-2 min-w-0 text-[11px] text-muted-foreground">
+        {swatch && <span className="w-[7px] h-[7px] rounded-[2px] shrink-0" style={{ background: swatch }} />}
+        <span className="truncate">{label}</span>
+      </span>
+      <span className="h-2 rounded-[2px] bg-white/5 overflow-hidden">
+        <span className="dash-grow block h-full rounded-[2px]" style={{ width: `${(frac * 100).toFixed(1)}%`, background: barColor }} />
+      </span>
+      <span className="text-[11px] text-right tabular-nums text-muted-foreground/80">{value}</span>
+    </div>
+  );
 }
 
-/** Same vocabulary the sidebar's status dot uses. */
-function statusLabel(status: TabStatus): string {
-  switch (status) {
-    case 'working': return 'Working';
-    case 'requires_response': return 'Waiting on you';
-    case 'idle': return 'Open, resting';
-    case 'new': return 'Starting';
-  }
+/** A small "big number + caption" cell used in the Rhythm / Depth panels. */
+function Stat({ value, label }: { value: string; label: string }) {
+  return (
+    <div>
+      <div className="text-[17px] font-medium text-foreground tabular-nums leading-none">{value}</div>
+      <div className="mt-1 text-[9px] tracking-[0.1em] uppercase text-muted-foreground/70">{label}</div>
+    </div>
+  );
 }
 
-export default function HomeScreen({
-  projects,
-  tabs,
-  onResume,
-  onSelectTab,
-  onNewSession,
-  onAddProject,
-  onOpenHistory,
-}: HomeScreenProps) {
-  const [byProject, setByProject] = useState<Map<string, SessionHistoryEntry[]> | null>(null);
-  const [hovered, setHovered] = useState<{ tower: Tower; win: Win } | null>(null);
-  const skylineRef = useRef<HTMLDivElement>(null);
+function UsagePanel({ usage }: { usage: SessionUsageStats | null }) {
+  const windows = usage?.available
+    ? ([['Session · 5h', usage.session], ['Week · 7d', usage.week]] as const).filter(([, w]) => w)
+    : [];
+  return (
+    <section className="border-b border-border">
+      <div className="flex items-center justify-between px-4 pt-2.5 pb-2">
+        <Eyebrow>Rate limit — live</Eyebrow>
+        <span className="text-[9.5px] tracking-[0.08em] uppercase text-muted-foreground/70">official /usage</span>
+      </div>
+      <div className="px-4 pb-4">
+        {windows.length === 0 ? (
+          <p className="text-[11px] text-muted-foreground/70 m-0 py-1.5">Usage unavailable — sign in with Claude Code to see your limits.</p>
+        ) : windows.map(([label, w]) => (
+          <div key={label} className="mt-3 first:mt-1">
+            <div className="flex items-baseline justify-between gap-2.5">
+              <span className="text-[10.5px] tracking-[0.06em] uppercase text-muted-foreground">{label}</span>
+              <span className="text-[15px] font-medium text-foreground tabular-nums">{Math.round(w!.percent)}%</span>
+            </div>
+            <span className="mt-1.5 block h-[5px] rounded-[3px] bg-white/8 overflow-hidden">
+              <span className="dash-grow block h-full rounded-[3px]" style={{ width: `${Math.min(100, w!.percent)}%`, background: 'var(--usage)' }} />
+            </span>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
 
-  // Same read the History panel does — listSessions only scans each session
-  // file until it finds the first real user message, so this is cheap enough
-  // to run on every visit to Home.
+export default function HomeScreen({ projects, onAddProject }: HomeScreenProps) {
+  const [stats, setStats] = useState<ProjectStat[] | null>(null);
+  const [usage, setUsage] = useState<SessionUsageStats | null>(null);
+  const [range, setRange] = useState<Range>(30);
+  const [caption, setCaption] = useState<{ name: string; preview: string; hue: number } | null>(null);
+  // Fixed for the component's life so the day-bucketing memos stay stable;
+  // Home remounts whenever you leave and come back, so it's always fresh.
+  const now = useMemo(() => Date.now(), []);
+
+  // One full-transcript scan per open folder, same trigger as the old skyline's
+  // listSessions read — runs off the main thread (the command is async).
   useEffect(() => {
-    if (projects.length === 0) {
-      setByProject(new Map());
-      return;
-    }
+    if (projects.length === 0) { setStats([]); return; }
     let cancelled = false;
     Promise.all(
-      projects.map((dir): Promise<[string, SessionHistoryEntry[]]> =>
-        ipc.listSessions(dir).catch((): SessionHistoryEntry[] => []).then((list) => [dir, list]),
+      projects.map((dir, i) =>
+        ipc.getSessionStats(dir)
+          .catch(() => [])
+          .then((list) => list.map((s): ProjectStat => ({ ...s, projectDir: dir, projectName: folderName(dir), hue: projectHue(i) }))),
       ),
-    ).then((pairs) => {
-      if (!cancelled) setByProject(new Map(pairs));
-    });
+    ).then((all) => { if (!cancelled) setStats(all.flat()); });
     return () => { cancelled = true; };
   }, [projects]);
 
-  /** Running Claude sessions, keyed by the session id their window carries. */
-  const liveBySession = useMemo(() => {
-    const map = new Map<string, Live>();
-    for (const tab of tabs) {
-      if (tab.kind !== 'claude' || tab.exited || !tab.resumeSessionId) continue;
-      map.set(tab.resumeSessionId, { tabId: tab.id, status: tab.status });
-    }
-    return map;
-  }, [tabs]);
-
-  /** Towers ordered by last activity, most recent on the left. */
-  const towers = useMemo<Tower[]>(() => {
-    if (!byProject) return [];
-    return projects
-      .map((dir, index): Tower => {
-        const sessions = byProject.get(dir) ?? [];
-        const recorded = new Set(sessions.map((s) => s.sessionId));
-        // A session started moments ago has no history entry yet — either its id
-        // hasn't been resolved or the transcript wasn't on disk when Home read
-        // it. Give it a floor of its own, above the recorded ones.
-        const unrecorded = tabs
-          .filter((t) => t.kind === 'claude' && !t.exited && t.cwd === dir
-            && (!t.resumeSessionId || !recorded.has(t.resumeSessionId)))
-          .map((t): Win => ({
-            key: t.id,
-            preview: t.name,
-            entry: null,
-            live: { tabId: t.id, status: t.status },
-          }));
-        const wins: Win[] = [
-          ...unrecorded,
-          ...sessions.map((entry): Win => ({
-            key: entry.sessionId,
-            preview: entry.preview,
-            entry,
-            live: liveBySession.get(entry.sessionId) ?? null,
-          })),
-        ];
-        return { dir, name: folderName(dir), hue: projectHue(index), wins, cols: columnsFor(wins.length) };
-      })
-      // A folder with something running sorts first; otherwise by last activity.
-      .sort((a, b) => {
-        const liveDiff = Number(b.wins.some((w) => w.live)) - Number(a.wins.some((w) => w.live));
-        if (liveDiff) return liveDiff;
-        return (b.wins[0]?.entry?.lastUsedIso ?? '').localeCompare(a.wins[0]?.entry?.lastUsedIso ?? '');
-      });
-  }, [byProject, projects, tabs, liveBySession]);
-
-  const totalSessions = towers.reduce((n, t) => n + t.wins.length, 0);
-  const running = towers.flatMap((t) => t.wins).filter((w) => w.live);
-  const waiting = running.filter((w) => w.live?.status === 'requires_response').length;
-
-  // Ambient life: one random window dips and comes back. Skipped entirely
-  // while the app is in the background so an idle Home costs nothing.
   useEffect(() => {
-    if (totalSessions === 0) return;
-    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
-    const id = setInterval(() => {
-      if (document.hidden || !document.hasFocus()) return;
-      // Live windows have their own state animation — leave them alone.
-      const lit = skylineRef.current?.querySelectorAll<HTMLElement>('.home-win-lit:not(.home-win-live)');
-      if (!lit?.length) return;
-      const win = lit[Math.floor(Math.random() * lit.length)];
-      win.classList.add('home-flicker');
-      setTimeout(() => win.classList.remove('home-flicker'), 950);
-    }, FLICKER_MS);
-    return () => clearInterval(id);
-  }, [totalSessions]);
+    let cancelled = false;
+    ipc.getSessionUsageStats().then((u) => { if (!cancelled) setUsage(u); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
-  /** Arrow keys walk the floors of the focused tower; Tab moves between towers. */
-  const handleFloorKeys = (e: React.KeyboardEvent<HTMLDivElement>, cols: number) => {
-    const target = e.target as HTMLElement;
-    if (!target.classList.contains('home-win-lit')) return;
-    const step = { ArrowRight: 1, ArrowLeft: -1, ArrowDown: cols, ArrowUp: -cols }[e.key];
-    if (!step) return;
-    const wins = [...e.currentTarget.querySelectorAll<HTMLElement>('.home-win-lit')];
-    const next = wins[Math.min(wins.length - 1, Math.max(0, wins.indexOf(target) + step))];
-    if (!next) return;
-    e.preventDefault();
-    target.tabIndex = -1;
-    next.tabIndex = 0;
-    next.focus();
-  };
+  const scoped = useMemo(() => (stats ? filterRange(stats, range, now) : []), [stats, range, now]);
+  const summary = useMemo(() => summarize(scoped), [scoped]);
+  const days = useMemo(() => cadence(scoped, cadenceDayCount(range), now), [scoped, range, now]);
+  const commands = useMemo(() => topCommands(scoped), [scoped]);
+  const folders = useMemo(() => perProject(scoped), [scoped]);
+  const hours = useMemo(() => hourHistogram(scoped), [scoped]);
+  const run = useMemo(() => streaks(scoped, now), [scoped, now]);
+  const dpt = useMemo(() => depth(scoped), [scoped]);
+  const models = useMemo(() => modelShare(scoped), [scoped]);
 
-  if (!byProject) return <div className="absolute inset-0 bg-background" />;
+  const cmdMax = commands[0]?.[1] ?? 1;
+  const folderMax = folders[0]?.count ?? 1;
+  const hourMax = Math.max(1, ...hours);
+  const peakHour = hours.some((h) => h > 0) ? hours.indexOf(Math.max(...hours)) : null;
 
-  const empty = projects.length === 0;
-  const now = Date.now();
+  const headline: [string, string][] = [
+    [String(summary.sessions), 'sessions'],
+    [summary.turns.toLocaleString(), 'turns'],
+    [formatCompact(summary.tokens), 'tokens'],
+    [summary.cacheHitPct === null ? '—' : `${summary.cacheHitPct}%`, 'cache hit'],
+  ];
 
   return (
-    <div className="home absolute inset-0 flex flex-col overflow-hidden select-none">
-      <div className="flex items-center justify-between gap-4 h-9 px-4 shrink-0 border-b border-[#14171e]">
-        <span className="text-[10.5px] tracking-[0.34em] uppercase text-[#9498a4]">
+    <div className="absolute inset-0 bg-background flex flex-col overflow-hidden select-none">
+      <header className="flex items-center justify-between gap-4 h-10 px-4 shrink-0 border-b border-border">
+        <span className="text-[10.5px] tracking-[0.32em] uppercase text-muted-foreground">
           <b className="font-medium text-foreground">Too many</b> terminals
+          <span className="text-muted-foreground/60"> · logbook</span>
         </span>
-        {!empty && (
-          <span className="flex items-center gap-3.5 text-[10px] tracking-[0.1em] uppercase text-[#4a4e59] tabular-nums">
-            <span><i className="not-italic text-[#868b98]">{projects.length}</i> folders</span>
-            <span><i className="not-italic text-[#868b98]">{totalSessions}</i> sessions</span>
-          </span>
-        )}
-      </div>
-
-      <div className="home-scene relative flex-1 min-h-0">
-        {empty ? (
-          <div className="absolute inset-0 flex flex-col items-center justify-end gap-4 pb-14 text-center">
-            <div className="w-32 h-[72px] border border-dashed border-[#23262f] border-b-0 grid place-items-center text-[#23262f] text-[22px]">
-              +
-            </div>
-            <p className="home-serif text-[14.5px] text-[#9398a5] max-w-[46ch] m-0">
-              No folders open yet. Open one, and every session you run there adds a window.
-            </p>
-          </div>
-        ) : (
-          <div className="absolute inset-0 overflow-x-auto overflow-y-hidden flex items-end scrollbar-thin">
-            <div
-              ref={skylineRef}
-              className="flex items-end gap-4 mx-auto px-8 pb-[34px] [justify-content:safe_center]"
+        <div className="flex gap-0.5" role="group" aria-label="Time range">
+          {RANGES.map((r) => (
+            <button
+              key={String(r.value)}
+              aria-pressed={range === r.value}
+              onClick={() => setRange(r.value)}
+              className={cn(
+                'text-[9.5px] tracking-[0.14em] uppercase px-2.5 py-1 rounded-sm border border-transparent transition-colors cursor-pointer',
+                range === r.value ? 'text-foreground bg-white/6 border-border' : 'text-muted-foreground/70 hover:text-muted-foreground',
+              )}
             >
-              {towers.map((tower, ti) => (
-                <div key={tower.dir} className="home-lot flex flex-col items-center">
-                  <div
-                    className="home-tower"
-                    style={{ '--hue': tower.hue, animationDelay: `${ti * 95}ms` } as React.CSSProperties}
-                  >
-                    {ti === 0 && tower.wins.length > 0 && (
-                      <span className="home-beacon" title="Last folder you worked in" />
-                    )}
-                    <div
-                      className="grid gap-1 justify-center"
-                      style={{ gridTemplateColumns: `repeat(${tower.cols}, 7px)` }}
-                      onKeyDown={(e) => handleFloorKeys(e, tower.cols)}
-                    >
-                      {/* dark floors first: the newest session sits on the top lit floor */}
-                      {Array.from({ length: EMPTY_FLOORS * tower.cols }, (_, i) => (
-                        <span key={`e${i}`} className="home-win" />
-                      ))}
-                      {tower.wins.map((win, si) => {
-                        const heat = win.entry ? warmth(win.entry.lastUsedIso, now) : 1;
-                        const live = win.live;
-                        return (
-                          <button
-                            key={win.key}
-                            className={cn(
-                              'home-win home-win-lit',
-                              live && 'home-win-live',
-                              live?.status === 'working' && 'home-win-working',
-                              live?.status === 'requires_response' && 'home-win-waiting',
-                            )}
-                            style={{
-                              '--a': live ? 1 : (0.35 + heat * 0.6).toFixed(2),
-                              '--l': live ? '78%' : `${(58 + heat * 14).toFixed(0)}%`,
-                              animationDelay: `${420 + ti * 95 + si * 26}ms`,
-                            } as React.CSSProperties}
-                            tabIndex={si === 0 ? 0 : -1}
-                            title={win.preview}
-                            aria-label={live
-                              ? `Open ${win.preview} in ${tower.name} — ${statusLabel(live.status)}`
-                              : `Resume session in ${tower.name}, ${relativeTime(win.entry!.lastUsedIso)}: ${win.preview}`}
-                            onPointerEnter={() => setHovered({ tower, win })}
-                            onPointerLeave={() => setHovered(null)}
-                            onFocus={() => setHovered({ tower, win })}
-                            onBlur={() => setHovered(null)}
-                            onClick={() => (live ? onSelectTab(live.tabId) : onResume(tower.dir, win.entry!))}
-                          />
-                        );
-                      })}
-                      {Array.from(
-                        { length: (tower.cols - (tower.wins.length % tower.cols)) % tower.cols },
-                        (_, i) => <span key={`p${i}`} className="home-win" />,
-                      )}
-                    </div>
-                  </div>
-                  <button
-                    className={cn(
-                      'home-plate mt-2.5 max-w-[104px] truncate text-[9px] tracking-[0.1em] uppercase',
-                      'text-[#4a4e59] hover:text-[#a2a7b4] transition-colors cursor-pointer',
-                      hovered?.tower.dir === tower.dir && 'text-[#a2a7b4]',
-                    )}
-                    aria-label={`New session in ${tower.name}`}
-                    title={tower.dir}
-                    onClick={() => onNewSession(tower.dir)}
-                  >
-                    {tower.name} <em className="not-italic text-[#34383f]">{tower.wins.length}</em>
-                  </button>
-                </div>
+              {r.label}
+            </button>
+          ))}
+        </div>
+      </header>
+
+      {projects.length === 0 ? (
+        <div className="flex-1 flex flex-col items-center justify-center gap-5 text-center px-6">
+          <div className="w-28 h-16 border border-dashed border-border grid place-items-center text-border-hover text-2xl">+</div>
+          <p className="dash-serif text-[15px] text-muted-foreground max-w-[42ch] m-0">
+            No folders open yet. Open one, and every session you run there fills in your logbook.
+          </p>
+          <button
+            onClick={onAddProject}
+            className="flex items-center gap-2 px-3.5 py-2 text-[11.5px] text-foreground/90 border border-border-hover rounded-sm hover:bg-white/5 cursor-pointer"
+          >
+            <FolderOpen size={13} /> Open folder
+          </button>
+        </div>
+      ) : stats === null ? (
+        <div className="flex-1 grid place-items-center text-[11px] tracking-[0.1em] uppercase text-muted-foreground/60">
+          Reading your sessions…
+        </div>
+      ) : (
+        <div className="flex-1 overflow-y-auto scrollbar-thin">
+          {/* headline readout */}
+          <section className="px-4 py-4 border-b border-border">
+            <div className="flex flex-wrap items-baseline gap-x-3.5 gap-y-2">
+              {headline.map(([v, u], i) => (
+                <span key={u} className="flex items-baseline gap-1.5">
+                  {i > 0 && <span className="text-border-hover text-lg self-center mr-2">·</span>}
+                  <span className="text-[30px] leading-none font-medium text-foreground tabular-nums">{v}</span>
+                  <span className="text-[10px] tracking-[0.13em] uppercase text-muted-foreground">{u}</span>
+                </span>
               ))}
             </div>
-          </div>
-        )}
-        <div className="home-horizon" />
-        <div className="home-ground" />
-      </div>
+            <p className="mt-2.5 text-[10px] tracking-[0.04em] text-muted-foreground/70 m-0">
+              Read from the transcripts Claude Code writes under <span className="text-muted-foreground">~/.claude/projects</span> — offline, nothing uploaded.
+            </p>
+          </section>
 
-      <div className="flex items-center justify-between gap-5 shrink-0 min-h-[62px] px-4 py-2.5 border-t border-[#14171e] bg-[#0a0b0f]">
-        <div className="min-w-0">
-          {hovered ? (
-            <>
-              <div className="flex items-baseline gap-2.5 text-[10px] tracking-[0.12em] uppercase text-muted-foreground">
-                <span
-                  className="w-1.5 h-1.5 rounded-full self-center shrink-0"
-                  style={{ background: `hsl(${hovered.tower.hue} 70% 60%)` }}
-                />
-                <b className="font-medium tracking-[0.06em] text-foreground">{hovered.tower.name}</b>
-                <u
-                  className={cn(
-                    'no-underline tabular-nums',
-                    hovered.win.live?.status === 'requires_response' ? 'text-attention'
-                      : hovered.win.live?.status === 'working' ? 'text-warning'
-                      : 'text-[#4a4e59]',
-                  )}
-                >
-                  {hovered.win.live
-                    ? statusLabel(hovered.win.live.status)
-                    : relativeTime(hovered.win.entry!.lastUsedIso)}
-                </u>
+          {/* cadence — the hero: one mark per session, tinted by folder */}
+          <section className="border-b border-border">
+            <div className="flex items-center justify-between px-4 pt-2.5 pb-1.5">
+              <Eyebrow>Cadence — each mark a session, tinted by folder</Eyebrow>
+              <span className="text-[9.5px] tracking-[0.08em] uppercase text-muted-foreground/70">
+                {range === 'all' ? '90 days' : `${range} days`}
+              </span>
+            </div>
+            <div className="px-4 pb-4">
+              <div
+                className="grid items-end gap-[3px] h-[132px] pt-1.5"
+                style={{ gridTemplateColumns: `repeat(${days.length}, minmax(0, 1fr))` }}
+                role="img"
+                aria-label={`${summary.sessions} sessions across ${days.length} days`}
+                onPointerLeave={() => setCaption(null)}
+              >
+                {days.map((day, di) => (
+                  <div key={day.key} className="flex flex-col-reverse gap-[2px] min-w-0" title={`${day.label} · ${day.marks.length} session${day.marks.length === 1 ? '' : 's'}`}>
+                    {day.marks.length === 0 ? (
+                      <span className="h-[3px] rounded-[1px] bg-white/5" />
+                    ) : day.marks.map((m, mi) => (
+                      <span
+                        key={mi}
+                        className="dash-mark h-[9px] rounded-[1px] last:rounded-t-[3px] hover:brightness-[1.35]"
+                        style={{ background: hue(m.hue), animationDelay: `${di * 12 + mi * 8}ms` }}
+                        onPointerEnter={() => setCaption({ name: m.projectName, preview: m.preview, hue: m.hue })}
+                      />
+                    ))}
+                  </div>
+                ))}
               </div>
-              <div className="home-serif mt-0.5 text-[14px] leading-snug text-[#b7bbc6] truncate max-w-[62ch]">
-                {hovered.win.preview}
+              <div className="flex justify-between mt-2 text-[9px] tracking-[0.1em] uppercase text-muted-foreground/70">
+                <span>{days[0]?.label}</span>
+                <span>{days[days.length - 1]?.label} · today</span>
               </div>
-            </>
-          ) : (
-            <>
-              <div className="text-[10px] tracking-[0.12em] uppercase text-muted-foreground">
-                {running.length > 0 ? (
+              {/* hover caption — your own words come back in serif */}
+              <div className="mt-2 h-5 flex items-center gap-2.5 text-[10px] tracking-[0.1em] uppercase text-muted-foreground">
+                {caption ? (
                   <>
-                    <b className="font-medium text-foreground">{running.length} running</b>
-                    {waiting > 0 && <u className="no-underline ml-2.5 text-attention">{waiting} waiting on you</u>}
+                    <span className="w-[7px] h-[7px] rounded-full shrink-0" style={{ background: hue(caption.hue, 60) }} />
+                    <b className="font-medium text-foreground normal-case tracking-normal">{caption.name}</b>
+                    <span className="dash-serif normal-case tracking-normal text-[13px] text-muted-foreground truncate">{caption.preview}</span>
                   </>
                 ) : (
+                  <span className="text-muted-foreground/60">Point at a session to read the prompt that started it.</span>
+                )}
+              </div>
+            </div>
+          </section>
+
+          {/* readouts */}
+          <div className="grid grid-cols-1 sm:grid-cols-2">
+            <div className="sm:border-r border-border">
+              <UsagePanel usage={usage} />
+            </div>
+
+            {/* top commands */}
+            <section className="border-b border-border">
+              <div className="flex items-center justify-between px-4 pt-2.5 pb-2">
+                <Eyebrow>Top commands</Eyebrow>
+                <span className="text-[9.5px] tracking-[0.08em] uppercase text-muted-foreground/70 tabular-nums">
+                  {commands.reduce((s, [, n]) => s + n, 0).toLocaleString()} runs
+                </span>
+              </div>
+              <div className="px-4 pb-4 flex flex-col gap-2">
+                {commands.length === 0
+                  ? <p className="text-[11px] text-muted-foreground/70 m-0 py-1">No shell commands in this window.</p>
+                  : commands.map(([name, n]) => (
+                    <BarRow key={name} label={name} value={n.toLocaleString()} frac={n / cmdMax} barColor="rgb(255 255 255 / 0.22)" />
+                  ))}
+              </div>
+            </section>
+
+            {/* where the time went */}
+            <section className="border-b border-border sm:border-r">
+              <div className="px-4 pt-2.5 pb-2"><Eyebrow>Where the time went</Eyebrow></div>
+              <div className="px-4 pb-4 flex flex-col gap-2">
+                {folders.length === 0
+                  ? <p className="text-[11px] text-muted-foreground/70 m-0 py-1">Nothing in this window.</p>
+                  : folders.map((f) => (
+                    <BarRow key={f.projectDir} label={f.name} swatch={hue(f.hue)} value={String(f.count)} frac={f.count / folderMax} barColor={hue(f.hue, 50)} />
+                  ))}
+              </div>
+            </section>
+
+            {/* rhythm */}
+            <section className="border-b border-border">
+              <div className="flex items-center justify-between px-4 pt-2.5 pb-2">
+                <Eyebrow>Rhythm</Eyebrow>
+                <span className="text-[9.5px] tracking-[0.08em] uppercase text-muted-foreground/70">local time</span>
+              </div>
+              <div className="px-4 pb-4">
+                <div className="flex gap-6">
+                  <Stat value={`${run.current}d`} label="current streak" />
+                  <Stat value={`${run.best}d`} label="best streak" />
+                  <Stat value={peakHour === null ? '—' : `${String(peakHour).padStart(2, '0')}:00`} label="busiest hour" />
+                </div>
+                <div className="grid grid-cols-24 items-end gap-0.5 h-11.5 mt-3.5">
+                  {hours.map((c, h) => (
+                    <span
+                      key={h}
+                      className="dash-grow rounded-[1px]"
+                      title={`${String(h).padStart(2, '0')}:00 · ${c} session${c === 1 ? '' : 's'}`}
+                      style={{ height: `${Math.max(6, (c / hourMax) * 100)}%`, background: h === peakHour ? 'var(--usage)' : 'rgb(255 255 255 / 0.14)' }}
+                    />
+                  ))}
+                </div>
+                <div className="flex justify-between mt-1.5 text-[8.5px] tracking-[0.08em] text-muted-foreground/70 tabular-nums">
+                  <span>00</span><span>06</span><span>12</span><span>18</span><span>23</span>
+                </div>
+              </div>
+            </section>
+
+            {/* depth + models — full width */}
+            <section className="border-b border-border sm:col-span-2">
+              <div className="flex items-center justify-between px-4 pt-2.5 pb-2">
+                <Eyebrow>Depth &amp; models</Eyebrow>
+                <span className="text-[9.5px] tracking-[0.08em] uppercase text-muted-foreground/70 tabular-nums">
+                  {summary.turns.toLocaleString()} turns total
+                </span>
+              </div>
+              <div className="px-4 pb-4">
+                <div className="flex flex-wrap gap-x-8 gap-y-3">
+                  <Stat value={String(dpt.avgTurns)} label="avg turns / session" />
+                  <Stat value={String(dpt.longestTurns)} label="longest — turns" />
+                  <Stat value={dpt.longestDurationMs === null ? '—' : formatDuration(dpt.longestDurationMs)} label="longest — duration" />
+                  <Stat value={dpt.avgDurationMs === null ? '—' : formatDuration(dpt.avgDurationMs)} label="avg duration" />
+                </div>
+                {models.length > 0 && (
                   <>
-                    <b className="font-medium text-foreground">Nothing running</b>
-                    {totalSessions > 0 && <u className="no-underline ml-2.5 text-[#4a4e59] tabular-nums">{totalSessions} sessions kept</u>}
+                    <div className="flex gap-[2px] h-[9px] mt-4">
+                      {models.map((m) => (
+                        <span key={m.family} className="h-full first:rounded-l-[2px] last:rounded-r-[2px]" style={{ flex: m.pct, background: MODEL_HUE[m.family] }} />
+                      ))}
+                    </div>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-2.5">
+                      {models.map((m) => (
+                        <span key={m.family} className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                          <span className="w-2 h-2 rounded-[2px]" style={{ background: MODEL_HUE[m.family] }} />
+                          {m.family}<span className="text-muted-foreground/70 tabular-nums ml-0.5">{m.pct}%</span>
+                        </span>
+                      ))}
+                    </div>
                   </>
                 )}
               </div>
-              <div className="home-serif mt-0.5 text-[14px] leading-snug text-muted-foreground">
-                {empty
-                  ? 'Open a folder to start your first session.'
-                  : waiting > 0
-                    ? 'The pulsing windows are the ones asking for you.'
-                    : running.length > 0
-                      ? 'Lit and steady is running; click a window to go back to it.'
-                      : totalSessions > 0
-                        ? 'Pick a window to pick up where you left off.'
-                        : 'Start a session and this folder gets its first window.'}
-              </div>
-            </>
-          )}
+            </section>
+          </div>
         </div>
-        <div className="flex gap-2 shrink-0">
-          {!empty && (
-            <button className="home-act home-act-primary" onClick={() => onNewSession(towers[0]?.dir ?? projects[0])}>
-              <Plus size={12} /> New session
-            </button>
-          )}
-          <button className="home-act" onClick={onAddProject}>
-            <FolderOpen size={12} /> Open folder
-          </button>
-          {!empty && (
-            <button className="home-act" onClick={onOpenHistory}>
-              <History size={12} /> All sessions
-            </button>
-          )}
-        </div>
-      </div>
+      )}
     </div>
   );
 }

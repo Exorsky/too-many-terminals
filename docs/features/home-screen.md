@@ -1,138 +1,108 @@
 # Home screen
 
-What fills the terminal pane when no tab is open. Instead of a line of grey text,
-the pane draws a night skyline built from your own session history: **each open
-folder is a tower, each past Claude session is a lit window**, newest on the top
-floor. Point at a window and the bar below shows the prompt that started that
-session; click it and the session resumes.
+What fills the terminal pane when no tab is open. Instead of a line of grey
+text, Home draws a **metrics dashboard built from your own session history** —
+a quiet readout of how much you've worked and what Claude did, in the app's own
+dark/monospace vocabulary. Everything is read locally from the transcripts
+Claude Code itself writes under `~/.claude/projects/<encoded-dir>/*.jsonl`
+(the same files [session history](session-history.md) lists). Offline, read-only,
+nothing uploaded.
 
-So the empty state isn't a placeholder — it's the session picker, laid out in
-space instead of a list, and it grows a floor every time you work.
+> **Previously** Home was a night skyline: each folder a tower, each past
+> session a lit window you clicked to resume. That doubled as a session picker;
+> resuming now lives in the sidebar and the [History panel](session-history.md),
+> and Home is a readout. The skyline component, its `warmth()` cooling curve and
+> the `.home-*` scene CSS were all removed.
 
-## What draws what
+## The time range
 
-| In the scene | Comes from | Reads as |
+A **7 days / 30 days / All** switch in the header rescopes every panel at once.
+"All" is bounded by the same 50-newest-per-folder cap the history read uses, so
+it means "everything on record" rather than an unbounded scan.
+
+## What each panel shows
+
+| Panel | Reads | From the transcript |
 | --- | --- | --- |
-| Tower | an entry in `projects` | one folder |
-| Tower height | session count + 2 dark floors | how much work lives here |
-| Window | a `SessionHistoryEntry` | one resumable session |
-| Window brightness | elapsed time since `lastUsedIso` | how warm the session still is |
-| Window colour | `projectHue(index)` — the folder's sidebar accent | which folder you're looking at |
-| Top lit floor | most recent session | where you left off |
-| Beacon | the leftmost tower | the folder you worked in last |
-| Name plate | folder name + session count | a button that starts a fresh session there |
-| Tower order | running folders first, then last activity | where things are happening |
-| Steady bright window + ring | a session open right now | this one is already running |
-| Amber breathing window | tab status `working` | Claude is busy here |
-| Orange blinking window | tab status `requires_response` | this one is blocked on you |
+| Headline | sessions · turns · tokens · cache-hit rate | counts + `message.usage` |
+| **Cadence** (hero) | one mark per session, per day, tinted by its folder | file mtime + folder |
+| Rate limit — live | the official 5h / 7d rate-limit percentages | the `/usage` endpoint, **not** the transcripts — see [usage-meter.md](usage-meter.md) |
+| Top commands | first word of every Bash/PowerShell call, ranked | `tool_use` inputs |
+| Where the time went | sessions per open folder | counts |
+| Rhythm | current & best day streak, busiest hour, a 24-hour histogram | message timestamps |
+| Depth & models | avg/longest turns, avg/longest duration, token share by model | timestamps + `message.usage` |
 
-Towers with a running session sort first; the rest fall back to their newest
-session's `lastUsedIso`, so the folder you touched last is leftmost and carries
-the beacon.
+**Turns** counts the prompts you actually typed — real, non-synthetic user
+messages, the same "is this something the human wrote" test the history preview
+uses. **Tokens** is a raw sum of input/output/cache tokens; that's an honest
+count, unlike the percentage-of-limit estimate the old usage meter derived and
+deleted (see [usage-meter.md](usage-meter.md)). The live rate-limit gauges are
+the only percentages here, and they come from Anthropic's endpoint, not a guess.
 
-Live state comes from the open tabs, not from disk: a Claude tab that hasn't
-exited is matched to its window by `resumeSessionId`. Clicking a live window
-selects that tab instead of resuming a second copy of the session. A session
-started moments ago has no history entry yet — no resolved id, or its transcript
-wasn't on disk when Home read it — so it gets a window of its own above the
-recorded ones, labelled with the tab name. Working and waiting borrow the
-sidebar's own `--warning` and `--attention` colours and are told apart by rhythm:
-a slow breath versus a sharp double-blink.
+## The cadence
 
-## How far back it goes
+The dashboard's hero, and the one thing that carries over from the old skyline's
+grammar: **a session is a small lit mark, tinted by the hue of the folder it ran
+in** ([`projectHue`](../../src/types.ts)). Where the skyline stacked those marks
+into towers-per-folder, the cadence stacks them into columns-per-day, so the
+same lights now plot *when* you worked instead of *where*. Point at a mark and a
+caption shows that session's opening prompt in a serif face — the same "your own
+words come back in a different face" cue Home has always used.
 
-There is no time cutoff, and adding one would be the wrong lever: the backend
-already caps `list_sessions` at 50 entries per folder, which is what actually
-bounds both the read and the tower height. A "last 30 days" filter would cut
-nothing until a folder exceeds 50 sessions inside the window, and at that point
-the cap has already done the job.
+Marks here are a readout, not buttons: to reopen a past session, use the
+[History panel](session-history.md) or the sidebar. Keeping the cadence
+non-interactive is what lets it stay dense (dozens of days on screen) without
+turning every 9px mark into a focus target.
 
-Age is expressed in **brightness instead of deletion**. `warmth()` maps elapsed
-time to 1 (minutes ago) → 0 (cold), log-scaled over `COLD_AFTER_DAYS` = 60 so the
-first week carries most of the range, and drives both the window's alpha
-(0.95 → 0.35) and its lightness (72% → 58%). Rank in the list would have been
-wrong here: it would light the newest session of a folder abandoned in March
-exactly as brightly as one from this morning. A dormant folder now reads as a
-genuinely dark tower, which is the thing a cutoff was reaching for.
+## Data & cost
 
-## Typography
+One `get_session_stats` call per open folder on mount — the same trigger the old
+skyline used for `listSessions`, but a **fuller** read: it scans each transcript
+end-to-end to sum turns, tokens, commands and model use, rather than stopping at
+the first message. The command is `async`, so the scan runs off the main thread
+and the pane shows "Reading your sessions…" until it lands. Capped at the newest
+50 transcripts per folder. There is no cache today — an idle screen scanning at
+most 50 files per folder is cheap enough; if a very large history ever drags,
+the fix is an mtime-keyed parse cache (noted in `session_stats.rs`).
 
-Two faces, split by who is speaking. Mono (the app's own stack) for everything
-the *system* says — labels, counts, folder names. A serif (`Iowan Old
-Style`/`Palatino`/`Georgia`) for everything *you* wrote: session previews and the
-prose lines. Reading a preview in a different face is the cue that those are your
-own words coming back.
+Stats load once per `projects` change, and `now` is fixed at mount, so the
+day-bucketing is stable while Home is open. Home unmounts the moment you enter a
+session, so every visit already reads fresh.
 
 ## Getting there
 
-**Every launch opens on Home**, restored workspace or not — you land on the city
-and pick where to go, instead of on whichever tab happened to be active last.
-Restored tabs stay dormant while Home is up, so nothing spawns a process until
-you actually open it.
-
-Home is also implicit whenever no tab is open. To reach it with sessions running,
-click the **Too Many Terminals** wordmark at the top of the sidebar — it toggles,
-so clicking it again drops you back on the active tab. In the collapsed rail the
-same thing lives as the app's own terminal-square icon above History.
-
-Anything that puts you into a session — opening a tab, resuming from a window,
-picking a tab in the sidebar or the command palette — leaves Home automatically.
+**Every launch opens on Home**, restored workspace or not — you land on the
+dashboard and pick where to go. Restored tabs stay dormant while Home is up, so
+nothing spawns a process until you open it. Home is also implicit whenever no
+tab is open; click the **Too Many Terminals** wordmark (or, collapsed, the app's
+terminal-square icon) to toggle back to it with sessions running. Anything that
+puts you into a session leaves Home automatically.
 
 ## States
 
-- **No folders open** — a dashed empty lot and "Open a folder to start your first
-  session", with the Open folder action.
-- **Folders open, no sessions yet** — towers stand as dark outlines with a `0`
-  plate; clicking a plate starts the first session there.
-- **History present** — the full skyline.
-
-The bottom bar always carries the three actions: **New session** (in the most
-recent folder), **Open folder**, **All sessions** (opens the history panel).
+- **No folders open** — a dashed empty lot and an Open-folder action.
+- **Folders open** — the dashboard; panels read zero where a window has no data.
 
 ## Motion
 
-One orchestrated moment on mount, then near-silence:
-
-1. Towers rise from the horizon, staggered 95 ms apart (`home-rise`).
-2. Windows light one by one, 26 ms apart within a tower (`home-lit`).
-3. After that: the beacon pulses, live windows breathe or blink, and one random
-   *past* window flickers every 4.2 s — live windows are excluded so their state
-   animation is never interrupted.
-
-Delays are CSS `animation-delay` values computed at render, not timers — the only
-JS interval is the flicker, and it returns early when `document.hidden` or the
-window isn't focused, so a Home screen left open in the background does no work.
-`prefers-reduced-motion` disables all four animations.
-
-## Cost
-
-The scene is ~30 DOM nodes per folder and nothing recomputes after mount. The
-real cost is the one `listSessions` call per open folder on mount — the same read
-the history panel already does, and `read_preview` stops scanning each session
-file at the first real user message, so it is tens of milliseconds for a typical
-workspace.
-
-Sessions load once per `projects` change. Windows are real `<button>`s, so hover,
-focus rings and screen-reader labels come free; arrow keys walk the floors of the
-focused tower while Tab moves between towers (roving `tabIndex`).
-
-## Deliberately left out
-
-- **Shell tabs.** Only Claude sessions get windows; a shell has no session to
-  resume and no status to show.
-- **Live-updating history.** Sessions load once when Home opens. Since Home
-  unmounts the moment you enter a session, every visit already reads fresh — but
-  a session finishing *while you watch* won't add a window until you leave and
-  come back. Live status does update, because it comes from the tab state.
-- **Greeting copy and stat tiles.** The rail carries the two counts that matter.
-- **Canvas rendering.** DOM buttons keep the whole thing accessible for free.
+Quiet, matching the rest of the chrome (the skyline's ambient animation was the
+one sanctioned exception, and it's gone). Cadence marks rise as they appear
+(staggered per mark); bars and gauges grow from their leading edge once on mount.
+Nothing loops. `prefers-reduced-motion` disables all of it — bars simply appear
+at their real width, since the width is the value and the animation only reveals
+it.
 
 ## Files
 
-- `src/components/HomeScreen.tsx` — the component.
-- `src/components/HomeScreen.test.tsx` — window-per-session, tower ordering,
-  resume/new-session wiring, hover preview, empty states, arrow-key focus.
-- `src/globals.css` — `.home-*` scene styles and the four keyframes.
-- `src/App.tsx` — `showHome` state; renders Home when `showHome || state.tabs.length === 0`
-  and no overlay is up.
-- `src/components/Sidebar.tsx` — the wordmark/rail button (`onGoHome`, `showHome`).
+- `src/components/HomeScreen.tsx` — the dashboard component.
+- `src/components/HomeScreen.test.tsx` — headline rollup, command ranking,
+  per-folder counts, live gauges, hover caption, range switch, empty state.
+- `src/lib/stats.ts` (+ `stats.test.ts`) — the pure aggregation (range filter,
+  summary, cadence bucketing, top commands, per-folder, rhythm, streaks, depth,
+  model share, formatters).
+- `src/lib/ipc.ts` — `getSessionStats`.
+- `src-tauri/src/session_stats.rs` (+ tests) — the per-session transcript scan.
+- `src-tauri/src/commands.rs` — `get_session_stats` (async adapter).
+- `src/globals.css` — `.dash-*` motion/primitive classes.
+- `src/App.tsx` — renders Home when `showHome || state.tabs.length === 0` and no
+  overlay is up.

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type MutableRefObject } from 'react';
 import {
-  CheckCircle2, ChevronRight, Circle, Code, File, Folder, FolderOpen, FolderPlus, FolderTree, History, KeyRound,
+  CheckCircle2, ChevronRight, Circle, Code, File, Folder, FolderOpen, FolderPlus, History, KeyRound,
   Loader2, MessageCircle, Moon, PanelLeftClose, PanelLeftOpen, Pencil, Pin, PinOff, Plus, Search, Settings, Sparkles,
   TerminalSquare, X,
 } from 'lucide-react';
@@ -9,7 +9,7 @@ import type { EnvReport, EnvSource } from '@/lib/ipc';
 import { cn, folderName, parentPath } from '@/lib/utils';
 import { useSettings } from '@/lib/settings-store';
 import { projectHue, type ShellOption, type Tab, type TabStatus } from '@/types';
-import SidebarFooter from './SidebarFooter';
+import SidebarFooter, { formatDuration } from './SidebarFooter';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -116,16 +116,52 @@ export function TabIndicator({ status, dormant, size = 12 }: { status: TabStatus
   }
 }
 
+/** How long a `requires_response` tab has been waiting — the only status
+ *  where elapsed time is the useful signal ("waiting 2h" vs. "waiting 10s"
+ *  are different problems). `working` gets its own caption line instead
+ *  (see `ActivityCaption` below) — Claude Code's PreToolUse hook says what
+ *  it's doing, which says more than a duration would. */
+function elapsedLabel(tab: Tab, now: number): string | null {
+  if (tab.status !== 'requires_response' || !tab.statusChangedAt) return null;
+  return formatDuration((now - tab.statusChangedAt) / 1000);
+}
+
+/** Splits a tool-summary string ("editing Sidebar.tsx") into a muted verb
+ *  and the thing it's acting on, so the caption can highlight the target the
+ *  way the mockup did — the target is what's worth a second glance, not the
+ *  verb. Falls back to showing the whole string muted when there's no clean
+ *  split (a bare tool/MCP name with no leading verb). */
+function splitActivityDetail(detail: string): [verb: string, target: string | null] {
+  const spaceAt = detail.indexOf(' ');
+  return spaceAt === -1 ? [detail, null] : [detail.slice(0, spaceAt + 1), detail.slice(spaceAt + 1)];
+}
+
+/** The "what Claude is doing right now" line under a working row — its own
+ *  line rather than squeezed into the row itself, so a longer tool summary
+ *  never crowds out the tab name. Reuses `warning`, already reserved for
+ *  `working` in the status vocabulary, for the target — not a new accent. */
+function ActivityCaption({ tab }: { tab: Tab }) {
+  if (tab.status !== 'working' || !tab.statusDetail) return null;
+  const [verb, target] = splitActivityDetail(tab.statusDetail);
+  return (
+    <div className="pl-8 pr-3 -mt-0.5 pb-1 text-[9.5px] leading-tight truncate text-muted-foreground/70">
+      {verb}
+      {target && <span className="text-warning">{target}</span>}
+    </div>
+  );
+}
+
 /** The pinned "Waiting on you" strip above the project cards: every Claude
  *  session that stopped and is blocked on you (status `requires_response`),
  *  gathered across *all* folders so you never have to hunt for the one that's
  *  asking. Collapses to nothing when the queue is empty — the only place a
  *  session is allowed to chase you. See docs/features/attention-inbox.md. */
-function AttentionStrip({ tabs, projects, activeTabId, showHistory, onSelectTab }: {
+function AttentionStrip({ tabs, projects, activeTabId, showHistory, now, onSelectTab }: {
   tabs: Tab[];
   projects: string[];
   activeTabId: string | null;
   showHistory: boolean;
+  now: number;
   onSelectTab: (tabId: string) => void;
 }) {
   const waiting = tabs.filter(
@@ -165,7 +201,76 @@ function AttentionStrip({ tabs, projects, activeTabId, showHistory, onSelectTab 
             >
               <MessageCircle size={12} className="shrink-0 text-attention animate-pulse" />
               <span className="truncate flex-1">{tab.name}</span>
-              <span className="flex items-center gap-1 shrink-0 max-w-[45%] text-[10px] text-muted-foreground/70">
+              {elapsedLabel(tab, now) && (
+                <span className="shrink-0 text-[9.5px] text-muted-foreground/70 tabular-nums">{elapsedLabel(tab, now)}</span>
+              )}
+              <span className="flex items-center gap-1 shrink-0 max-w-[40%] text-[10px] text-muted-foreground/70">
+                <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: `hsl(${hue} 55% 50%)` }} />
+                <span className="truncate">{folderName(tab.cwd)}</span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** Every Claude session that just went `working` → `idle` and hasn't been
+ *  looked at since (`Tab.justFinished`, cleared by `select` — see tabs.ts).
+ *  Same strip shape as Pinned/Waiting-on-you, but in `success` green: this is
+ *  the aggregate of the `idle` status itself, not a new color, and unlike
+ *  Waiting-on-you it never pulses — nothing here is asking for you, it's
+ *  reporting what already happened. See docs/features/attention-inbox.md. */
+function JustFinishedStrip({ tabs, projects, activeTabId, showHistory, now, onSelectTab }: {
+  tabs: Tab[];
+  projects: string[];
+  activeTabId: string | null;
+  showHistory: boolean;
+  now: number;
+  onSelectTab: (tabId: string) => void;
+}) {
+  const finished = tabs.filter((t) => t.kind === 'claude' && t.justFinished && !t.exited);
+  if (finished.length === 0) return null;
+
+  return (
+    <div
+      className="mx-2 mt-1 mb-1 rounded-md border overflow-hidden shrink-0"
+      style={{ borderColor: 'rgba(139,209,124,0.24)', backgroundColor: 'rgba(139,209,124,0.05)' }}
+    >
+      <div className="flex items-center gap-1.5 px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-success">
+        <CheckCircle2 size={11} className="shrink-0" />
+        <span>Just finished</span>
+        <span className="ml-auto flex items-center justify-center min-w-4 h-4 px-1 rounded-full bg-success text-[10px] font-bold text-background">
+          {finished.length}
+        </span>
+      </div>
+      <div className="max-h-[30vh] overflow-y-auto scrollbar-thin pb-1">
+        {finished.map((tab) => {
+          const idx = projects.indexOf(tab.cwd);
+          const hue = projectHue(idx < 0 ? 0 : idx);
+          const isActive = !showHistory && tab.id === activeTabId;
+          return (
+            <button
+              key={tab.id}
+              className={cn(
+                'relative flex items-center gap-2 w-[calc(100%-8px)] mx-1 my-0.5 px-2 py-1.5 rounded-sm',
+                'text-[11px] text-left border-none cursor-pointer font-inherit transition-colors duration-100',
+                isActive
+                  ? 'bg-white/8 text-foreground'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-white/4',
+              )}
+              onClick={() => onSelectTab(tab.id)}
+              title={tab.cwd}
+            >
+              <CheckCircle2 size={12} className="shrink-0 text-success" />
+              <span className="truncate flex-1">{tab.name}</span>
+              {tab.statusChangedAt && (
+                <span className="shrink-0 text-[9.5px] text-muted-foreground/70 tabular-nums">
+                  {formatDuration((now - tab.statusChangedAt) / 1000)} ago
+                </span>
+              )}
+              <span className="flex items-center gap-1 shrink-0 max-w-[40%] text-[10px] text-muted-foreground/70">
                 <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: `hsl(${hue} 55% 50%)` }} />
                 <span className="truncate">{folderName(tab.cwd)}</span>
               </span>
@@ -183,13 +288,14 @@ function AttentionStrip({ tabs, projects, activeTabId, showHistory, onSelectTab 
  *  you asked for, attention orange for what's blocking you. Pin/unpin lives
  *  in each session's own context menu (see TabRow), not a control here. */
 function PinnedStrip({
-  tabs, projects, activeTabId, showHistory,
+  tabs, projects, activeTabId, showHistory, now,
   onSelectTab, onCloseTab, onRenameTab, onOpenDirectory, onOpenInVscode, onTogglePin,
 }: {
   tabs: Tab[];
   projects: string[];
   activeTabId: string | null;
   showHistory: boolean;
+  now: number;
   onSelectTab: (tabId: string) => void;
   onCloseTab: (tabId: string) => void;
   onRenameTab: (tabId: string, name: string) => void;
@@ -223,6 +329,7 @@ function PinnedStrip({
               dragRef={dragRef}
               showFolder
               hue={projectHue(idx < 0 ? 0 : idx)}
+              now={now}
               onSelectTab={onSelectTab}
               onCloseTab={onCloseTab}
               onRenameTab={onRenameTab}
@@ -274,7 +381,7 @@ function NewSessionMenu({ dir, shellOptions, onNewClaudeTab, onNewShellTab }: {
 }
 
 function TabRow({
-  tab, isActive, dragRef, showFolder, hue,
+  tab, isActive, dragRef, showFolder, hue, now,
   onSelectTab, onCloseTab, onRenameTab, onOpenDirectory, onOpenInVscode, onTogglePin, onReorderTab,
 }: {
   tab: Tab;
@@ -285,6 +392,7 @@ function TabRow({
   showFolder?: boolean;
   /** The owning folder's accent hue; only read when `showFolder` is set. */
   hue?: number;
+  now: number;
   onSelectTab: (tabId: string) => void;
   onCloseTab: (tabId: string) => void;
   onRenameTab: (tabId: string, name: string) => void;
@@ -355,89 +463,95 @@ function TabRow({
   }
 
   return (
-    <ContextMenu>
-      <ContextMenuTrigger asChild>
-        <div
-          className={cn(rowClass, 'cursor-pointer')}
-          draggable
-          onDragStart={(e) => {
-            dragRef.current = { kind: 'tab', id: tab.id, cwd: tab.cwd };
-            e.dataTransfer.effectAllowed = 'move';
-            e.dataTransfer.setData('text/plain', tab.id);
-            e.stopPropagation();
-          }}
-          onDragEnd={() => { dragRef.current = null; setDropPos(null); }}
-          onDragOver={(e) => {
-            if (!canAccept()) return;
-            e.preventDefault();
-            e.dataTransfer.dropEffect = 'move';
-            setDropPos(dropSide(e)); // identical value bails out of re-render, so no flicker
-          }}
-          onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropPos(null); }}
-          onDrop={(e) => {
-            const d = dragRef.current;
-            if (d?.kind === 'tab' && d.cwd === tab.cwd && d.id !== tab.id) {
+    <>
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <div
+            className={cn(rowClass, 'cursor-pointer')}
+            draggable
+            onDragStart={(e) => {
+              dragRef.current = { kind: 'tab', id: tab.id, cwd: tab.cwd };
+              e.dataTransfer.effectAllowed = 'move';
+              e.dataTransfer.setData('text/plain', tab.id);
+              e.stopPropagation();
+            }}
+            onDragEnd={() => { dragRef.current = null; setDropPos(null); }}
+            onDragOver={(e) => {
+              if (!canAccept()) return;
               e.preventDefault();
-              onReorderTab(d.id, tab.id, dropSide(e));
-            }
-            setDropPos(null);
-          }}
-          onClick={() => onSelectTab(tab.id)}
-          onDoubleClick={startRename}
-          title={tab.cwd}
-        >
-          {dropPos && <DropLine pos={dropPos} />}
-          {isActive && <span className="absolute left-0 top-1 bottom-1 w-0.5 rounded-full bg-primary" />}
-          {icon}
-          <span className="truncate flex-1">{tab.name}{tab.exited ? ' (exited)' : ''}</span>
-          {showFolder && (
-            <span className="flex items-center gap-1 shrink-0 max-w-[40%] text-[10px] text-muted-foreground/70">
-              <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: `hsl(${hue ?? 0} 55% 50%)` }} />
-              <span className="truncate">{folderName(tab.cwd)}</span>
-            </span>
-          )}
-          {tab.kind === 'file' && tab.dirty && (
-            <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-warning" title="Unsaved changes" />
-          )}
-          <button
-            className={cn(
-              'flex items-center justify-center w-4 h-4 rounded-sm shrink-0 border-none cursor-pointer',
-              'bg-transparent text-muted-foreground/60 hover:text-foreground hover:bg-white/10',
-              'opacity-0 group-hover:opacity-100',
-            )}
-            onClick={(e) => { e.stopPropagation(); onCloseTab(tab.id); }}
-            title="Close tab"
+              e.dataTransfer.dropEffect = 'move';
+              setDropPos(dropSide(e)); // identical value bails out of re-render, so no flicker
+            }}
+            onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropPos(null); }}
+            onDrop={(e) => {
+              const d = dragRef.current;
+              if (d?.kind === 'tab' && d.cwd === tab.cwd && d.id !== tab.id) {
+                e.preventDefault();
+                onReorderTab(d.id, tab.id, dropSide(e));
+              }
+              setDropPos(null);
+            }}
+            onClick={() => onSelectTab(tab.id)}
+            onDoubleClick={startRename}
+            title={tab.cwd}
           >
-            <X size={11} />
-          </button>
-        </div>
-      </ContextMenuTrigger>
-      <ContextMenuContent className="min-w-40">
-        <ContextMenuItem onSelect={startRename}>
-          <Pencil size={13} />
-          <span>Rename</span>
-        </ContextMenuItem>
-        <ContextMenuItem onSelect={() => onOpenDirectory(tab.cwd)}>
-          <FolderOpen size={13} />
-          <span>Open directory</span>
-        </ContextMenuItem>
-        {tab.kind === 'claude' && tab.resumeSessionId && (
-          <ContextMenuItem onSelect={() => onOpenInVscode(tab.id)}>
-            <Code size={13} />
-            <span>Open in VS Code</span>
+            {dropPos && <DropLine pos={dropPos} />}
+            {isActive && <span className="absolute left-0 top-1 bottom-1 w-0.5 rounded-full bg-primary" />}
+            {icon}
+            <span className="truncate flex-1">{tab.name}{tab.exited ? ' (exited)' : ''}</span>
+            {elapsedLabel(tab, now) && (
+              <span className="shrink-0 text-[9.5px] text-muted-foreground/70 tabular-nums">{elapsedLabel(tab, now)}</span>
+            )}
+            {showFolder && (
+              <span className="flex items-center gap-1 shrink-0 max-w-[40%] text-[10px] text-muted-foreground/70">
+                <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: `hsl(${hue ?? 0} 55% 50%)` }} />
+                <span className="truncate">{folderName(tab.cwd)}</span>
+              </span>
+            )}
+            {tab.kind === 'file' && tab.dirty && (
+              <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-warning" title="Unsaved changes" />
+            )}
+            <button
+              className={cn(
+                'flex items-center justify-center w-4 h-4 rounded-sm shrink-0 border-none cursor-pointer',
+                'bg-transparent text-muted-foreground/60 hover:text-foreground hover:bg-white/10',
+                'opacity-0 group-hover:opacity-100',
+              )}
+              onClick={(e) => { e.stopPropagation(); onCloseTab(tab.id); }}
+              title="Close tab"
+            >
+              <X size={11} />
+            </button>
+          </div>
+        </ContextMenuTrigger>
+        <ContextMenuContent className="min-w-40">
+          <ContextMenuItem onSelect={startRename}>
+            <Pencil size={13} />
+            <span>Rename</span>
           </ContextMenuItem>
-        )}
-        <ContextMenuItem onSelect={() => onTogglePin(tab.id)}>
-          {tab.pinned ? <PinOff size={13} /> : <Pin size={13} />}
-          <span>{tab.pinned ? 'Unpin' : 'Pin session'}</span>
-        </ContextMenuItem>
-        <ContextMenuSeparator />
-        <ContextMenuItem variant="destructive" onSelect={() => onCloseTab(tab.id)}>
-          <X size={13} />
-          <span>Close</span>
-        </ContextMenuItem>
-      </ContextMenuContent>
-    </ContextMenu>
+          <ContextMenuItem onSelect={() => onOpenDirectory(tab.cwd)}>
+            <FolderOpen size={13} />
+            <span>Open directory</span>
+          </ContextMenuItem>
+          {tab.kind === 'claude' && tab.resumeSessionId && (
+            <ContextMenuItem onSelect={() => onOpenInVscode(tab.id)}>
+              <Code size={13} />
+              <span>Open in VS Code</span>
+            </ContextMenuItem>
+          )}
+          <ContextMenuItem onSelect={() => onTogglePin(tab.id)}>
+            {tab.pinned ? <PinOff size={13} /> : <Pin size={13} />}
+            <span>{tab.pinned ? 'Unpin' : 'Pin session'}</span>
+          </ContextMenuItem>
+          <ContextMenuSeparator />
+          <ContextMenuItem variant="destructive" onSelect={() => onCloseTab(tab.id)}>
+            <X size={13} />
+            <span>Close</span>
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
+      <ActivityCaption tab={tab} />
+    </>
   );
 }
 
@@ -467,18 +581,45 @@ export function envTooltip(dir: string, report: EnvReport): string {
   return lines.join('\n');
 }
 
+/** The worst of a folder's live Claude statuses, in the order that matters —
+ *  needs-you outranks working outranks everything else — or `null` when
+ *  there's nothing worth flagging (idle/new/no claude tabs). Powers both the
+ *  card's activity tint (shown whether expanded or not) and the small status
+ *  glyph next to a *collapsed* folder's chevron, which is otherwise the only
+ *  place that information would be hidden. */
+function folderActivity(tabs: Tab[]): 'requires_response' | 'working' | null {
+  const live = tabs.filter((t) => t.kind === 'claude' && !t.exited && !t.dormant);
+  if (live.some((t) => t.status === 'requires_response')) return 'requires_response';
+  if (live.some((t) => t.status === 'working')) return 'working';
+  return null;
+}
+
+/** rgba() border/tint pair per activity state — same technique AttentionStrip
+ *  already uses for its own border, just keyed off whichever reserved status
+ *  color applies (attention orange outranks working amber). No new hues. */
+const ACTIVITY_TINT: Record<'requires_response' | 'working', { border: string; bg: string }> = {
+  requires_response: { border: 'rgba(255,159,90,0.28)', bg: 'rgba(255,159,90,0.05)' },
+  working: { border: 'rgba(240,179,87,0.24)', bg: 'rgba(240,179,87,0.05)' },
+};
+
+/** Marks "you're currently looking at a session in here" — no status color,
+ *  since nothing is actually happening on its own; a folder with an active
+ *  claude/requires_response session still wins the louder ACTIVITY_TINT
+ *  above it. */
+const ACTIVE_FOLDER_TINT = { border: 'var(--border-hover)', bg: 'rgba(255,255,255,0.03)' };
+
 function ProjectCard({
-  dir, hue, tabs, activeTabId, showHistory, shellOptions, dragRef,
+  dir, tabs, activeTabId, showHistory, shellOptions, dragRef, now,
   onSelectTab, onCloseTab, onRenameTab, onOpenDirectory, onOpenInVscode, onTogglePin, onNewClaudeTab, onNewShellTab,
   onRemoveProject, onReorderProject, onReorderTab,
 }: {
   dir: string;
-  hue: number;
   tabs: Tab[];
   activeTabId: string | null;
   showHistory: boolean;
   shellOptions: ShellOption[];
   dragRef: DragRef;
+  now: number;
   onSelectTab: (tabId: string) => void;
   onCloseTab: (tabId: string) => void;
   onRenameTab: (tabId: string, name: string) => void;
@@ -494,7 +635,14 @@ function ProjectCard({
   const [expanded, setExpanded] = useState(true);
   const [dropPos, setDropPos] = useState<DropPos | null>(null);
   const settings = useSettings();
-  const breadcrumb = settings.showFolderPaths ? parentPath(dir) : '';
+  // Just the nearest ancestor, not two — a CSS trick to truncate long
+  // breadcrumbs from their *start* (keeping the near, useful ancestor next
+  // to the name instead of the far, useless one) turned out to reorder
+  // multi-word RTL-marked text instead of just flipping which edge
+  // truncates, moving the "…" marker next to the name. One short ancestor
+  // rarely needs truncation at all, which sidesteps the problem instead of
+  // trying to solve it with CSS.
+  const breadcrumb = settings.showFolderPaths ? parentPath(dir, 1) : '';
 
   // Which credentials this folder hands to sessions opened in it. Read here
   // rather than reported back from a spawn, so a folder you haven't opened a
@@ -513,9 +661,14 @@ function ProjectCard({
     return d?.kind === 'folder' && d.dir !== dir;
   };
 
+  const activity = folderActivity(tabs);
+  const isActiveFolder = !showHistory && tabs.some((t) => t.id === activeTabId);
+  const tint = activity ? ACTIVITY_TINT[activity] : isActiveFolder ? ACTIVE_FOLDER_TINT : null;
+
   return (
     <div
-      className="relative mx-1 mb-1"
+      className={cn('relative mx-1 mb-1 rounded-sm', tint && 'border')}
+      style={tint ? { borderColor: tint.border, backgroundColor: tint.bg } : undefined}
       onDragOver={(e) => {
         if (!canAccept()) return;
         e.preventDefault();
@@ -531,45 +684,68 @@ function ProjectCard({
       onDragEnd={() => setDropPos(null)}
     >
       {dropPos && <DropLine pos={dropPos} flush />}
-      <div
-        className="group/card relative flex items-center gap-2 w-full text-left px-2 py-1.5 rounded-sm text-[11px] font-semibold text-foreground cursor-pointer hover:bg-white/4"
-        draggable
-        onDragStart={(e) => {
-          dragRef.current = { kind: 'folder', dir };
-          e.dataTransfer.effectAllowed = 'move';
-          e.dataTransfer.setData('text/plain', dir);
-        }}
-        onDragEnd={() => { dragRef.current = null; setDropPos(null); }}
-        onClick={() => setExpanded((v) => !v)}
-        title={dir}
-      >
-        <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: `hsl(${hue} 55% 50%)` }} />
-        <span className="flex items-baseline min-w-0 flex-1">
-          {breadcrumb && (
-            <span className="shrink truncate text-[10px] font-normal text-muted-foreground">{breadcrumb} /&nbsp;</span>
-          )}
-          <span className="truncate">{folderName(dir)}</span>
-        </span>
-        {envReport?.folderScoped && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className={cn('flex items-center shrink-0 text-muted-foreground', envReport.unreadable && 'opacity-50')}>
-                <KeyRound size={11} />
-              </span>
-            </TooltipTrigger>
-            <TooltipContent side="right">{envTooltip(dir, envReport)}</TooltipContent>
-          </Tooltip>
-        )}
-        <span className="shrink-0 text-[10px] font-normal text-muted-foreground">{tabs.length}</span>
-        <button
-          className="flex items-center justify-center w-5 h-5 rounded-sm shrink-0 border-none cursor-pointer bg-transparent text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover/card:opacity-100"
-          onClick={(e) => { e.stopPropagation(); onRemoveProject(dir); }}
-          title="Remove folder"
-        >
-          <X size={12} />
-        </button>
-        <ChevronRight size={12} className={cn('shrink-0 text-muted-foreground/60 transition-transform duration-150', expanded && 'rotate-90')} />
-      </div>
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <div
+            className="group/card relative flex items-center gap-2 w-full text-left px-2 py-1.5 rounded-sm text-[11px] font-semibold text-foreground cursor-pointer hover:bg-white/4"
+            draggable
+            onDragStart={(e) => {
+              dragRef.current = { kind: 'folder', dir };
+              e.dataTransfer.effectAllowed = 'move';
+              e.dataTransfer.setData('text/plain', dir);
+            }}
+            onDragEnd={() => { dragRef.current = null; setDropPos(null); }}
+            onClick={() => setExpanded((v) => !v)}
+            title={dir}
+          >
+            <Folder size={12} className="shrink-0 text-muted-foreground" />
+            <span className="flex items-baseline min-w-0 flex-1">
+              {breadcrumb && (
+                <span className="min-w-0 shrink truncate text-[10px] font-normal text-muted-foreground">{breadcrumb} /&nbsp;</span>
+              )}
+              <span className="shrink-0 truncate">{folderName(dir)}</span>
+            </span>
+            {envReport?.folderScoped && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className={cn('flex items-center shrink-0 text-muted-foreground', envReport.unreadable && 'opacity-50')}>
+                    <KeyRound size={11} />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="right">{envTooltip(dir, envReport)}</TooltipContent>
+              </Tooltip>
+            )}
+            <span className="shrink-0 text-[10px] font-normal text-muted-foreground">{tabs.length}</span>
+            {/* Expanded, each row already shows its own TabIndicator — this
+               glyph would just repeat that. Collapsed, it's the only place
+               "something here needs attention" survives at all. */}
+            {!expanded && activity === 'requires_response' && (
+              <MessageCircle size={11} className="shrink-0 text-attention animate-pulse" />
+            )}
+            {!expanded && activity === 'working' && (
+              <Loader2 size={11} className="shrink-0 text-warning animate-spin" />
+            )}
+            <ChevronRight size={12} className={cn('shrink-0 text-muted-foreground/60 transition-transform duration-150', expanded && 'rotate-90')} />
+          </div>
+        </ContextMenuTrigger>
+        <ContextMenuContent className="min-w-40">
+          <ContextMenuItem onSelect={() => onNewClaudeTab(dir)}>
+            <Sparkles size={13} />
+            <span>New Claude session</span>
+          </ContextMenuItem>
+          {shellOptions.map((shell) => (
+            <ContextMenuItem key={shell.id} onSelect={() => onNewShellTab(dir, shell.id)}>
+              <TerminalSquare size={13} />
+              <span>New {shell.label}</span>
+            </ContextMenuItem>
+          ))}
+          <ContextMenuSeparator />
+          <ContextMenuItem variant="destructive" onSelect={() => onRemoveProject(dir)}>
+            <X size={13} />
+            <span>Remove folder</span>
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
 
       {expanded && (
         <div className="pb-1">
@@ -579,6 +755,7 @@ function ProjectCard({
               tab={tab}
               isActive={!showHistory && tab.id === activeTabId}
               dragRef={dragRef}
+              now={now}
               onSelectTab={onSelectTab}
               onCloseTab={onCloseTab}
               onRenameTab={onRenameTab}
@@ -602,6 +779,17 @@ export default function Sidebar({
   onAddProject, onRemoveProject, onReorderProject, onReorderTab, onToggleCollapse,
 }: SidebarProps) {
   const dragRef = useRef<DragItem | null>(null);
+
+  // Powers every elapsed-time label (working/waiting rows, "Just finished").
+  // A 30s tick is plenty — these are "how long", not a live stopwatch.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const waitingCount = tabs.filter((t) => t.kind === 'claude' && t.status === 'requires_response' && !t.exited).length;
+
   // A single root element (shared across the collapsed/expanded states) lets
   // the width change animate — swapping to two separate `if`-return roots
   // would remount the whole sidebar and skip the transition entirely.
@@ -615,7 +803,7 @@ export default function Sidebar({
     >
       {collapsed ? (
         <>
-          <div className="flex items-center justify-center h-10 w-full border-b border-border shrink-0">
+          <div className="relative flex items-center justify-center h-10 w-full border-b border-border shrink-0">
             <button
               className="flex items-center justify-center w-7 h-7 rounded-sm text-muted-foreground hover:text-foreground hover:bg-white/8 border-none cursor-pointer"
               onClick={onToggleCollapse}
@@ -623,6 +811,14 @@ export default function Sidebar({
             >
               <PanelLeftOpen size={15} />
             </button>
+            {waitingCount > 0 && (
+              <span
+                className="absolute top-1 right-1.5 flex items-center justify-center min-w-3.5 h-3.5 px-0.5 rounded-full bg-attention text-[9px] font-bold text-background"
+                title={`${waitingCount} session${waitingCount === 1 ? '' : 's'} waiting on you`}
+              >
+                {waitingCount}
+              </span>
+            )}
           </div>
 
           <div className="flex-1 overflow-y-auto overflow-x-hidden w-full py-2 flex flex-col items-center gap-1.5 scrollbar-thin">
@@ -682,7 +878,7 @@ export default function Sidebar({
             onClick={onToggleFiles}
             title="File explorer"
           >
-            <FolderTree size={15} />
+            <Folder size={15} />
           </button>
           <button
             className="flex items-center justify-center w-8 h-8 rounded-md border-none cursor-pointer bg-transparent text-muted-foreground hover:text-foreground hover:bg-white/5 shrink-0"
@@ -721,7 +917,25 @@ export default function Sidebar({
               <span className="text-[12px] font-semibold tracking-wide truncate">Too Many Terminals</span>
             </button>
             <button
-              className="flex items-center justify-center w-6 h-6 ml-auto rounded-sm text-muted-foreground hover:text-foreground hover:bg-white/8 border-none cursor-pointer shrink-0"
+              data-active={showFiles}
+              className={cn(
+                'flex items-center justify-center w-6 h-6 ml-auto rounded-sm border-none cursor-pointer shrink-0',
+                showFiles ? 'text-foreground bg-white/8' : 'text-muted-foreground hover:text-foreground hover:bg-white/8',
+              )}
+              onClick={onToggleFiles}
+              title="File explorer"
+            >
+              <Folder size={14} />
+            </button>
+            <button
+              className="flex items-center justify-center w-6 h-6 rounded-sm text-muted-foreground hover:text-foreground hover:bg-white/8 border-none cursor-pointer shrink-0"
+              onClick={onOpenSearch}
+              title="Search sessions (Ctrl Shift P)"
+            >
+              <Search size={14} />
+            </button>
+            <button
+              className="flex items-center justify-center w-6 h-6 rounded-sm text-muted-foreground hover:text-foreground hover:bg-white/8 border-none cursor-pointer shrink-0"
               onClick={onToggleCollapse}
               title="Hide sidebar"
             >
@@ -729,21 +943,12 @@ export default function Sidebar({
             </button>
           </div>
 
-          <button
-            className="flex items-center gap-2 mx-2 mt-2 px-2.5 py-1.5 rounded-sm border border-border text-[11px] text-muted-foreground hover:text-foreground hover:border-border-hover bg-transparent cursor-pointer font-inherit shrink-0"
-            onClick={onOpenSearch}
-            title="Search sessions"
-          >
-            <Search size={12} className="shrink-0" />
-            <span className="flex-1 text-left">Search sessions</span>
-            <span className="shrink-0 text-[9px] text-muted-foreground/70 border border-border rounded-sm px-1">Ctrl Shift P</span>
-          </button>
-
           <PinnedStrip
             tabs={tabs}
             projects={projects}
             activeTabId={activeTabId}
             showHistory={showHistory}
+            now={now}
             onSelectTab={onSelectTab}
             onCloseTab={onCloseTab}
             onRenameTab={onRenameTab}
@@ -757,6 +962,16 @@ export default function Sidebar({
             projects={projects}
             activeTabId={activeTabId}
             showHistory={showHistory}
+            now={now}
+            onSelectTab={onSelectTab}
+          />
+
+          <JustFinishedStrip
+            tabs={tabs}
+            projects={projects}
+            activeTabId={activeTabId}
+            showHistory={showHistory}
+            now={now}
             onSelectTab={onSelectTab}
           />
 
@@ -768,16 +983,16 @@ export default function Sidebar({
               </div>
             )}
 
-            {projects.map((dir, index) => (
+            {projects.map((dir) => (
               <ProjectCard
                 key={dir}
                 dir={dir}
-                hue={projectHue(index)}
                 tabs={tabs.filter((t) => t.cwd === dir && t.kind !== 'file')}
                 activeTabId={activeTabId}
                 showHistory={showHistory}
                 shellOptions={shellOptions}
                 dragRef={dragRef}
+                now={now}
                 onSelectTab={onSelectTab}
                 onCloseTab={onCloseTab}
                 onRenameTab={onRenameTab}
@@ -803,10 +1018,8 @@ export default function Sidebar({
 
           <SidebarFooter
             showHistory={showHistory}
-            showFiles={showFiles}
             showSettings={showSettings}
             onToggleHistory={onToggleHistory}
-            onToggleFiles={onToggleFiles}
             onToggleSettings={onToggleSettings}
           />
         </>

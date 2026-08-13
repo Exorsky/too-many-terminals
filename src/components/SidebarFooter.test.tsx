@@ -28,10 +28,8 @@ function mockStats(stats: SessionUsageStats) {
 function renderFooter(overrides: Partial<React.ComponentProps<typeof SidebarFooter>> = {}) {
   const props = {
     showHistory: false,
-    showFiles: false,
     showSettings: false,
     onToggleHistory: vi.fn(),
-    onToggleFiles: vi.fn(),
     onToggleSettings: vi.fn(),
     ...overrides,
   };
@@ -39,7 +37,7 @@ function renderFooter(overrides: Partial<React.ComponentProps<typeof SidebarFoot
   return props;
 }
 
-const trigger = () => screen.getByRole('button', { name: 'History, files, settings' });
+const trigger = () => screen.getByRole('button', { name: 'History, settings' });
 
 afterEach(cleanup);
 
@@ -53,7 +51,7 @@ describe('formatDuration', () => {
 });
 
 describe('SidebarFooter', () => {
-  it('keeps History/Files/Settings reachable even when usage is unavailable', async () => {
+  it('keeps History/Settings reachable even when usage is unavailable', async () => {
     mockStats({ available: false, session: null, week: null, fetchedAtMs: null, fromCache: false });
     const props = renderFooter();
     await vi.waitFor(() => expect(ipc.getSessionUsageStats).toHaveBeenCalled());
@@ -99,14 +97,14 @@ describe('SidebarFooter', () => {
     expect(await screen.findByText('cached — as of 1h 30m ago')).toBeInTheDocument();
   });
 
-  it('checkmarks whichever of History/Files/Settings is currently open', async () => {
+  it('checkmarks whichever of History/Settings is currently open', async () => {
     mockStats(STATS);
-    renderFooter({ showFiles: true });
+    renderFooter({ showHistory: true });
     await screen.findByText('14%');
     await userEvent.click(trigger());
-    const filesItem = (await screen.findByText('Files')).closest('[role="menuitem"]') as HTMLElement;
-    expect(within(filesItem).getByTitle('Currently open')).toBeInTheDocument();
-    const historyItem = screen.getByText('History').closest('[role="menuitem"]') as HTMLElement;
-    expect(within(historyItem).queryByTitle('Currently open')).not.toBeInTheDocument();
+    const historyItem = (await screen.findByText('History')).closest('[role="menuitem"]') as HTMLElement;
+    expect(within(historyItem).getByTitle('Currently open')).toBeInTheDocument();
+    const settingsItem = screen.getByText('Settings').closest('[role="menuitem"]') as HTMLElement;
+    expect(within(settingsItem).queryByTitle('Currently open')).not.toBeInTheDocument();
   });
 });

@@ -36,7 +36,11 @@ struct HookMessage {
 
 #[derive(Debug, PartialEq)]
 enum RoutedAction {
-    Status { tab_id: String, status: &'static str },
+    /// `detail` is only ever set alongside `working` — a short "what Claude
+    /// is doing right now" label from the PreToolUse payload (`hooks::tool_summary`).
+    /// Every other status carries `None`; there's nothing to summarize for
+    /// idle/requires_response/new.
+    Status { tab_id: String, status: &'static str, detail: Option<String> },
     SessionResolved { tab_id: String, session_id: String },
     GenerateName { tab_id: String, prompt: String },
     NamingFlagReset { tab_id: String },
@@ -53,8 +57,15 @@ struct ReadyPayload {
 /// Kept separate from the async server loop so it's unit-testable.
 fn route_message(msg: &HookMessage) -> Vec<RoutedAction> {
     match msg.event.as_str() {
-        "tab:status:working" => vec![RoutedAction::Status { tab_id: msg.tab_id.clone(), status: "working" }],
-        "tab:status:idle" => vec![RoutedAction::Status { tab_id: msg.tab_id.clone(), status: "idle" }],
+        // `data` is the PreToolUse activity summary (`hooks::tool_summary`),
+        // already truncated/sanitized on the hook-client side — passed
+        // through as-is, empty just means it couldn't summarize this tool.
+        "tab:status:working" => vec![RoutedAction::Status {
+            tab_id: msg.tab_id.clone(),
+            status: "working",
+            detail: msg.data.clone(),
+        }],
+        "tab:status:idle" => vec![RoutedAction::Status { tab_id: msg.tab_id.clone(), status: "idle", detail: None }],
         // Claude Code's Notification hook fires both for genuine permission/
         // input requests AND as an idle nudge ("Claude is waiting for your
         // input") ~60s after a turn ends, even when Claude asked nothing. Only
@@ -70,7 +81,7 @@ fn route_message(msg: &HookMessage) -> Vec<RoutedAction> {
             if is_idle_nudge {
                 vec![]
             } else {
-                vec![RoutedAction::Status { tab_id: msg.tab_id.clone(), status: "requires_response" }]
+                vec![RoutedAction::Status { tab_id: msg.tab_id.clone(), status: "requires_response", detail: None }]
             }
         }
 
@@ -82,6 +93,7 @@ fn route_message(msg: &HookMessage) -> Vec<RoutedAction> {
             let mut actions = vec![RoutedAction::Status {
                 tab_id: msg.tab_id.clone(),
                 status: if session_id.is_some() { "idle" } else { "new" },
+                detail: None,
             }];
             if let Some(session_id) = session_id {
                 actions.push(RoutedAction::SessionResolved { tab_id: msg.tab_id.clone(), session_id });
@@ -114,6 +126,7 @@ fn route_message(msg: &HookMessage) -> Vec<RoutedAction> {
 struct TabStatusPayload {
     tab_id: String,
     status: String,
+    detail: Option<String>,
 }
 
 #[derive(Serialize, Clone)]
@@ -125,8 +138,8 @@ struct SessionResolvedPayload {
 
 fn apply_action(action: RoutedAction, app: &AppHandle, naming_queue: &NamingQueue) {
     match action {
-        RoutedAction::Status { tab_id, status } => {
-            let _ = app.emit("claude-tab-status", TabStatusPayload { tab_id, status: status.to_string() });
+        RoutedAction::Status { tab_id, status, detail } => {
+            let _ = app.emit("claude-tab-status", TabStatusPayload { tab_id, status: status.to_string(), detail });
         }
         RoutedAction::SessionResolved { tab_id, session_id } => {
             let _ = app.emit("claude-session-resolved", SessionResolvedPayload { tab_id, session_id });
@@ -204,25 +217,34 @@ mod tests {
     #[test]
     fn tool_use_maps_to_working() {
         let actions = route_message(&msg("t1", "tab:status:working", None));
-        assert_eq!(actions, vec![RoutedAction::Status { tab_id: "t1".into(), status: "working" }]);
+        assert_eq!(actions, vec![RoutedAction::Status { tab_id: "t1".into(), status: "working", detail: None }]);
+    }
+
+    #[test]
+    fn tool_use_carries_the_activity_summary_through_as_detail() {
+        let actions = route_message(&msg("t1", "tab:status:working", Some("editing Sidebar.tsx")));
+        assert_eq!(
+            actions,
+            vec![RoutedAction::Status { tab_id: "t1".into(), status: "working", detail: Some("editing Sidebar.tsx".into()) }],
+        );
     }
 
     #[test]
     fn stop_maps_to_idle() {
         let actions = route_message(&msg("t1", "tab:status:idle", None));
-        assert_eq!(actions, vec![RoutedAction::Status { tab_id: "t1".into(), status: "idle" }]);
+        assert_eq!(actions, vec![RoutedAction::Status { tab_id: "t1".into(), status: "idle", detail: None }]);
     }
 
     #[test]
     fn notification_without_message_defaults_to_requires_response() {
         let actions = route_message(&msg("t1", "tab:status:input", None));
-        assert_eq!(actions, vec![RoutedAction::Status { tab_id: "t1".into(), status: "requires_response" }]);
+        assert_eq!(actions, vec![RoutedAction::Status { tab_id: "t1".into(), status: "requires_response", detail: None }]);
     }
 
     #[test]
     fn permission_notification_maps_to_requires_response() {
         let actions = route_message(&msg("t1", "tab:status:input", Some("Claude needs your permission to use Bash")));
-        assert_eq!(actions, vec![RoutedAction::Status { tab_id: "t1".into(), status: "requires_response" }]);
+        assert_eq!(actions, vec![RoutedAction::Status { tab_id: "t1".into(), status: "requires_response", detail: None }]);
     }
 
     #[test]
@@ -238,7 +260,7 @@ mod tests {
         let data = r#"{"sessionId":"sess-1","source":"startup"}"#;
         let actions = route_message(&msg("t1", "tab:ready", Some(data)));
         assert_eq!(actions, vec![
-            RoutedAction::Status { tab_id: "t1".into(), status: "idle" },
+            RoutedAction::Status { tab_id: "t1".into(), status: "idle", detail: None },
             RoutedAction::SessionResolved { tab_id: "t1".into(), session_id: "sess-1".into() },
         ]);
     }
@@ -247,7 +269,7 @@ mod tests {
     fn session_start_without_id_yields_new_only() {
         let data = r#"{"sessionId":null,"source":"startup"}"#;
         let actions = route_message(&msg("t1", "tab:ready", Some(data)));
-        assert_eq!(actions, vec![RoutedAction::Status { tab_id: "t1".into(), status: "new" }]);
+        assert_eq!(actions, vec![RoutedAction::Status { tab_id: "t1".into(), status: "new", detail: None }]);
     }
 
     #[test]
@@ -255,7 +277,7 @@ mod tests {
         let data = r#"{"sessionId":"sess-2","source":"clear"}"#;
         let actions = route_message(&msg("t1", "tab:ready", Some(data)));
         assert_eq!(actions, vec![
-            RoutedAction::Status { tab_id: "t1".into(), status: "idle" },
+            RoutedAction::Status { tab_id: "t1".into(), status: "idle", detail: None },
             RoutedAction::SessionResolved { tab_id: "t1".into(), session_id: "sess-2".into() },
             RoutedAction::NamingFlagReset { tab_id: "t1".into() },
         ]);
@@ -288,6 +310,6 @@ mod tests {
     #[test]
     fn malformed_ready_payload_falls_back_to_new() {
         let actions = route_message(&msg("t1", "tab:ready", Some("not json")));
-        assert_eq!(actions, vec![RoutedAction::Status { tab_id: "t1".into(), status: "new" }]);
+        assert_eq!(actions, vec![RoutedAction::Status { tab_id: "t1".into(), status: "new", detail: None }]);
     }
 }

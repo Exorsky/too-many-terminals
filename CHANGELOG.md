@@ -11,10 +11,68 @@ listed here; see `git log` for the full history.
 
 ## [Unreleased]
 
+### Changed
+- **Home is now a metrics dashboard** instead of the night-skyline session
+  picker. The idle screen reads your own Claude Code history — sessions, turns,
+  tokens and cache-hit rate up top; a per-day **cadence** of every session
+  tinted by its folder; **top shell commands**, sessions per folder, your
+  daily rhythm and streaks, session depth and model split; plus the live 5h/7d
+  rate-limit gauges. A **7 days / 30 days / All** switch rescopes everything.
+  All of it is read locally from the transcripts Claude Code already writes —
+  offline, nothing uploaded.
+
 ### Added
 - A live session's tab context menu now has **Open in VS Code**, handing it
   off to the native Claude Code VS Code extension — both tools read the same
   transcript file, so there's nothing to migrate.
+- A folder's right-click menu can now spawn a **New Claude session** or shell
+  directly, whether the folder is expanded or collapsed — previously the
+  "New session" menu only rendered in the expanded body.
+- A `requires_response` row now shows how long it's been waiting ("5m",
+  "2h"), on the row itself and in the Waiting-on-you strip.
+- A `working` row now shows a second line underneath it with what Claude is
+  actually doing ("editing Sidebar.tsx", "running pnpm test"), read from the
+  PreToolUse hook's own tool call — the target is highlighted, the verb
+  stays muted.
+- A folder with a live session inside it gets a soft activity tint (amber for
+  working, orange for needs-you) whether expanded or collapsed; collapsed, it
+  also gets a small status glyph next to the chevron, since collapsing a
+  folder otherwise hides every child row's own status dot. A folder just
+  holding the currently-selected tab gets the same tint treatment, neutrally,
+  when nothing else is happening in it.
+- The collapsed sidebar rail's expand button now carries a count badge when
+  sessions are waiting on you.
+- A new **"Just finished"** strip lists Claude sessions that just went from
+  working to idle and haven't been looked at yet — selecting one (or it going
+  back to work) clears it.
+- Interrupting a Claude session (Escape/Ctrl+C) now flips it to "waiting on
+  you" instead of leaving it stuck on "working" forever — Claude Code's Stop
+  hook doesn't fire on a user interrupt, so the app now notices the
+  keystroke itself instead.
+
+### Changed
+- The **Files** panel toggle moved out of the sidebar's "⋯" (History/Settings)
+  menu into its own always-visible header button, next to Search — unlike
+  History/Settings it's a workspace-wide panel that's open by default, not an
+  occasional detour.
+- Sidebar decluttered: **Search sessions** folded into a header icon button
+  (was its own full-width row), and a folder's **Remove folder** action moved
+  from a hover icon into its right-click menu, next to how every other rare
+  per-item action already works.
+- A folder's header now leads with a neutral `Folder` glyph instead of its
+  colored hue dot — the name already identifies the folder, so the dot was
+  decoration there. The hue still marks a folder in the Pinned/Attention
+  strips' cross-folder chips, where it disambiguates a mixed list.
+
+### Fixed
+- A folder's name in the sidebar could get truncated before its breadcrumb
+  path did, or vice versa, since neither had a defined shrink priority — the
+  name now always renders in full and the (already-secondary) breadcrumb
+  yields space first.
+- The folder breadcrumb now shows only the one ancestor nearest the project
+  ("…/prog/vps") instead of two ("Desktop /prog/vps") — the nearer one is
+  the useful one for telling folders apart, and showing just it means the
+  breadcrumb is short enough to not need mid-path truncation at all.
 
 ## [0.17.0] - 2026-08-12
 

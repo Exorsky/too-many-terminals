@@ -25,39 +25,63 @@ even when Claude asked nothing. That idle nudge is filtered out in
 `hook_server::route_message` (it inspects the forwarded notification `message`),
 so a finished-but-unanswered session no longer falsely lands in this strip.
 
-Each row shows the pulsing attention icon, the tab name, and its folder (with the
-folder's accent dot), so a waiting session tells you *where* it is at a glance.
-The header carries a live count badge. Clicking a row selects that tab (same
-`onSelectTab` path as a normal tab row), which also closes History/Settings.
+Each row shows the pulsing attention icon, the tab name, its folder (with the
+folder's accent dot), and — since a `requires_response` tab's `statusChangedAt`
+is stamped by `tabsReducer`'s `status` action (`src/lib/tabs.ts`) — how long it's
+been waiting (`5m`, `2h`, via `SidebarFooter`'s `formatDuration`), so "waiting
+10s" and "waiting 2h" don't look identical. The header carries a live count
+badge. Clicking a row selects that tab (same `onSelectTab` path as a normal tab
+row), which also closes History/Settings.
 
 ## Where it lives
 
 `AttentionStrip` (in `Sidebar.tsx`) renders in the expanded sidebar, fixed
-(`shrink-0`) between the search row/Pinned strip above and the scrolling
-project list below, so it stays put while you scroll folders. Its own list
-caps at `max-h-[38vh]` and scrolls internally if the queue is ever long. When
-nothing is waiting the component returns `null`, so it collapses to zero
-height and costs no space — the empty state *is* the absence of the strip.
+(`shrink-0`) between the Pinned strip above and the scrolling project list
+below, so it stays put while you scroll folders. Its own list caps at
+`max-h-[38vh]` and scrolls internally if the queue is ever long. When nothing
+is waiting the component returns `null`, so it collapses to zero height and
+costs no space — the empty state *is* the absence of the strip.
 
-It needs no new props: `Sidebar` already receives `tabs`, `projects`,
-`activeTabId`, `showHistory`, and `onSelectTab`, and the strip derives its list
-from `tabs`.
+## Collapsed rail
 
-## Not included (yet)
+The 11px icon rail already shows each tab's own status icon (the pulsing
+`MessageCircle`), but with the sidebar itself collapsed there's no strip to
+scan. The rail's "Show sidebar" toggle carries a small count badge
+(`waitingCount` in `Sidebar`, same `requires_response`+`!exited` filter as the
+strip) when the queue isn't empty — enough to know to expand, without
+duplicating the strip's row-by-row detail into the 11px rail.
 
-- **Collapsed rail.** The 11px icon rail already shows each tab's status icon
-  (the pulsing `MessageCircle`), so the strip is expanded-mode only for now; a
-  count badge on the collapsed rail is a possible follow-up.
-- **A "just finished" section.** `idle` is Claude's resting state after *any*
-  turn, not an unread "done" signal, so listing it would surface nearly every
-  Claude tab. A real done/unseen queue needs seen-tracking — left for later.
-- Desktop notifications / taskbar badge for the same queue — see the roadmap in
-  the feature-exploration artifact; a separate follow-up.
+A collapsed *folder* (its own accordion, not the sidebar rail) gets the same
+treatment one level down: see [Project folders](terminals.md#project-folders)
+for the per-folder activity card and status glyph.
+
+## "Just finished"
+
+A second, `success`-green strip below Waiting-on-you: every Claude tab whose
+last transition was `working` → `idle` and hasn't been looked at since
+(`Tab.justFinished`, set by `tabsReducer`'s `status` case only on that specific
+transition — reaching `idle` from `new` or `requires_response` doesn't count,
+since those aren't "was busy, now isn't"). `idle` alone was rejected in an
+earlier pass here for exactly this reason: it's Claude's resting state after
+*any* turn, so without the working→idle condition the strip would list nearly
+every Claude tab. "Seen" is simply selecting the tab — `tabsReducer`'s `select`
+case clears `justFinished` for whatever it activates — so no separate dismiss
+control was needed; in normal use a session that goes back to `working` clears
+its own entry too. No pulse on this one: design.md's pulsing icons are reserved
+for things waiting on a human, and nothing here is.
 
 ## Files
 
-- `src/components/Sidebar.tsx` — `AttentionStrip` component + its render slot in
-  the expanded sidebar.
-- `src/components/Sidebar.test.tsx` — strip tests: absent when nothing waits,
-  lists `requires_response` Claude tabs across folders with a count, excludes
-  shells/exited, and selects a tab when its strip row is clicked.
+- `src/components/Sidebar.tsx` — `AttentionStrip` and `JustFinishedStrip`
+  components + their render slots in the expanded sidebar; the collapsed
+  rail's badge and a folder's own activity card/glyph (`folderActivity`,
+  `ProjectCard`).
+- `src/lib/tabs.ts` — `statusChangedAt` and `justFinished` bookkeeping in the
+  `status` and `select` reducer cases.
+- `src/lib/tabs.test.ts` — `statusChangedAt` stamped on every transition,
+  `justFinished` set only on working→idle and cleared by a subsequent status
+  change or by `select`.
+- `src/components/Sidebar.test.tsx` — strip tests: absent when nothing
+  waits/nothing just finished, lists the right tabs across folders with a
+  count and elapsed time, excludes shells/exited, selects a tab when its strip
+  row is clicked, the collapsed-rail badge, and the folder activity tint.

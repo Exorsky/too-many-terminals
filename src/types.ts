@@ -27,6 +27,16 @@ export interface Tab {
   dirty?: boolean;
   /** User-pinned to the sidebar's Pinned section, independent of folder or status. */
   pinned?: boolean;
+  /** Epoch ms of the last status transition — powers the elapsed-time label
+   *  on working/requires_response rows. */
+  statusChangedAt?: number;
+  /** A short "what Claude is doing right now" label from the PreToolUse
+   *  hook payload (e.g. "editing Sidebar.tsx") — only ever set alongside
+   *  `working`; cleared on any other status. */
+  statusDetail?: string;
+  /** True right after a working → idle transition, until the tab is selected
+   *  (seen) or starts working again — powers the "Just finished" strip. */
+  justFinished?: boolean;
 }
 
 /** A shell available on the current OS, provided by the Rust backend. */
@@ -84,6 +94,30 @@ export interface SessionHistoryEntry {
   preview: string;
   /** ISO timestamp of the session file's last write. */
   lastUsedIso: string;
+}
+
+// --- Session stats (per-session aggregates for the Home dashboard, scanned
+// from the same transcripts session history reads) ---
+
+export interface SessionStat {
+  sessionId: string;
+  /** File mtime — buckets the session onto a day. */
+  lastUsedIso: string;
+  /** First / last message timestamp — session duration + time-of-day. */
+  startedIso: string | null;
+  endedIso: string | null;
+  /** Prompts you actually typed (real, non-synthetic user messages). */
+  turns: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+  /** Model that produced the most output this session, if any. */
+  model: string | null;
+  /** First real prompt, for the hover caption. */
+  preview: string;
+  /** First token of every shell call, counted: `[["git", 12], ...]`. */
+  commands: [string, number][];
 }
 
 // --- Transcript reading (a past session rendered as a document) ---

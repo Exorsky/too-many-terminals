@@ -13,7 +13,7 @@ Feature and architecture docs live in `docs/` — **keep them updated when featu
   left rail vs. a menu vs. a context menu
 - [docs/features/terminals.md](docs/features/terminals.md) — sidebar (folders, pinning, drag-reorder), tabs, PTY spawning per OS
 - [docs/features/file-explorer.md](docs/features/file-explorer.md) — file tree + CodeMirror editor docked to the right edge
-- [docs/features/home-screen.md](docs/features/home-screen.md) — idle Home: a skyline built from your session history
+- [docs/features/home-screen.md](docs/features/home-screen.md) — idle Home: a metrics dashboard built from your session history
 - [docs/features/attention-inbox.md](docs/features/attention-inbox.md) — "Waiting on you" strip: sessions blocked on you
 - [docs/features/command-palette.md](docs/features/command-palette.md) — Ctrl+Shift+P fuzzy jump to any open terminal
 - [docs/features/notifications.md](docs/features/notifications.md) — desktop notifications when an unfocused session needs you

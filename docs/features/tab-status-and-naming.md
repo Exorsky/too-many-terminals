@@ -3,7 +3,9 @@
 Claude tabs show their live state (spinning while Claude works, a checkmark once
 it's done, a pulsing icon when it needs input) and get a short auto-generated title
 from their first prompt — both driven by Claude Code's own hooks, not by scraping
-terminal output.
+terminal *output*. The one exception, [interrupt detection](#detecting-an-interrupt)
+below, watches the keystrokes the app itself relays to the pty — input it already
+has its hands on — never the text Claude prints back.
 
 ## No bundled Node.js
 
@@ -54,7 +56,7 @@ through the pure `route_message` function (fully unit-tested, no I/O).
 | hook event | wire event | effect |
 | --- | --- | --- |
 | SessionStart | `tab:ready` | status → `idle` (has a session id) or `new`; also emits `claude-session-resolved` (reinforces/replaces the poll-based detection in `session_history.rs`) |
-| PreToolUse | `tab:status:working` | status → `working` |
+| PreToolUse | `tab:status:working` | status → `working`, `data` → an activity summary (see below) |
 | Stop | `tab:status:idle` | status → `idle` |
 | Notification | `tab:status:input` | status → `requires_response`, **unless** the notification is Claude Code's idle nudge (message contains "waiting for your input", fired ~60s after a turn ends even when nothing was asked) — that's ignored so a finished session doesn't falsely appear in "Waiting on you". The hook client forwards the notification `message` as `data` so the server can tell the two apart; a missing message defaults to `requires_response`. |
 | SessionEnd | `tab:closed` | ignored — real exits are already handled by the pty's own exit event; `/clear` is detected via the *next* SessionStart instead |
@@ -63,6 +65,48 @@ through the pure `route_message` function (fully unit-tested, no I/O).
 Status/session-id/naming-result reach the frontend as Tauri events
 (`claude-tab-status`, `claude-session-resolved`, `claude-tab-named`), handled in
 `App.tsx` by dispatching `tabsReducer` actions (`status`, `sessionResolved`, `rename`).
+
+## The activity caption
+
+`hooks::tool_summary` turns a PreToolUse payload's `tool_name`/`tool_input`
+into a short "what Claude is doing right now" string — `reading Sidebar.tsx`,
+`running pnpm test`, `searching for TODO`, and so on for the handful of tools
+worth a specific phrasing; everything else (every MCP tool included) falls
+back to the bare tool name, still better than a bare spinner. Capped at 40
+chars and deliberately shows a path/command *prefix*, never full arguments —
+the same "names, not values" restraint `envTooltip` already applies to env
+var display, since this ends up as glanceable sidebar chrome, not a log.
+
+That string travels as `RoutedAction::Status`'s `detail` field (only ever set
+alongside `working`) → `TabStatusPayload.detail` → the frontend's
+`claude-tab-status` event → `Tab.statusDetail` (`tabsReducer`'s `status`
+case; cleared on any status other than `working`, so it can't outlive the
+turn it described). `Sidebar.tsx`'s `ActivityCaption` renders it as a second
+line under a working row — `splitActivityDetail` breaks it into a muted verb
+and a target highlighted in `warning` (the status vocabulary's own `working`
+color, not a new accent) — rather than squeezing it into the row itself,
+so a long summary never crowds out the tab name.
+
+## Detecting an interrupt
+
+Claude Code's own docs are explicit that the **Stop hook does not fire when
+the user interrupts** (Escape/Ctrl+C) — there's no hook event at all for it
+(tracked upstream as [anthropics/claude-code#9516](https://github.com/anthropics/claude-code/issues/9516)).
+Left alone, an interrupted tab's status stays `working` forever, since
+nothing ever tells the app otherwise.
+
+Since there's no hook to listen for, the app notices the *keystroke* instead:
+`Terminal.tsx`'s `onData` handler already sees every byte typed into a pty
+before forwarding it; `isInterruptKeystroke` (`src/lib/utils.ts`) flags a
+bare Escape (`\x1b`) or Ctrl+C (`\x03`) — exact-match only, so an escape
+*sequence* (arrow keys, `\x1b[A`) doesn't false-positive. That fires
+`onInterrupt`, which `App.tsx` wires straight to `dispatch({ type:
+'interrupt', tabId })`. The reducer (`tabs.ts`) does the actual gating: a
+no-op unless the tab is a claude tab currently `working`, in which case it
+flips to `requires_response` (an interrupt always leaves Claude asking what
+to do next — the same thing that status already means) and clears
+`statusDetail`. This is a heuristic, not ground truth from Claude Code
+itself — a real hook, if one ships, should replace it outright.
 
 ## Auto-naming
 
@@ -100,10 +144,13 @@ file if nothing else is left in it), leaving any user-authored hooks untouched.
 
 ## Files
 
-- `src-tauri/src/hooks.rs` — install/uninstall/merge logic (+ tests), hook-client entry point
+- `src-tauri/src/hooks.rs` — install/uninstall/merge logic (+ tests), hook-client entry point,
+  `tool_summary` (+ tests)
 - `src-tauri/src/namer.rs` — prompt building, name cleanup, subprocess call, naming queue (+ tests for the pure parts)
-- `src-tauri/src/hook_server.rs` — pipe/socket server, message routing (+ tests for `route_message`)
+- `src-tauri/src/hook_server.rs` — pipe/socket server, message routing incl. the `detail` field (+ tests for `route_message`)
 - `src-tauri/src/main.rs` — argv dispatch into hook-client mode
-- `src/components/Sidebar.tsx` — `TabIndicator` (status icon)
-- `src/lib/tabs.ts` — `status` action
-- Wiring: `src/App.tsx` (`onTabStatus`, `onTabNamed` listeners)
+- `src/components/Sidebar.tsx` — `TabIndicator` (status icon), `ActivityCaption` + `splitActivityDetail`
+- `src/components/Terminal.tsx` — `onInterrupt`, wired off `isInterruptKeystroke`
+- `src/lib/utils.ts` — `isInterruptKeystroke` (+ tests)
+- `src/lib/tabs.ts` — `status` action (incl. `statusDetail`), `interrupt` action (+ tests)
+- Wiring: `src/App.tsx` (`onTabStatus`, `onTabNamed` listeners, `onInterrupt` → `dispatch({ type: 'interrupt' })`)

@@ -84,7 +84,7 @@ percentage as live.
   native-tls, so the one network call needs no system OpenSSL on Linux.
 - `src-tauri/src/settings.rs` — `usage_refresh_seconds` (default 300).
 - `src/components/SidebarFooter.tsx` (+ `SidebarFooter.test.tsx`) — the trigger
-  button, `UsageRow`, and the History/Files/Settings menu items. The reset
+  button, `UsageRow`, and the History/Settings menu items. The reset
   countdown ticks locally every second so it doesn't stall between polls. The
   bar uses the themeable `usage` color below 70%, then escalates to `warning`
   and `destructive` — that escalation is deliberately not themeable, it's a

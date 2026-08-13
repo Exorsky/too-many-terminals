@@ -186,6 +186,56 @@ pub fn uninstall_hooks(cwd: &Path) -> Result<(), String> {
     }
 }
 
+/// Longest a tool summary is allowed to run before truncation — this ends up
+/// as sidebar chrome, not a log, so it stays a glance, not a transcript.
+const SUMMARY_MAX_CHARS: usize = 40;
+
+fn truncate(s: &str, max: usize) -> String {
+    let mut out: String = s.chars().take(max).collect();
+    if s.chars().count() > max {
+        out.push('…');
+    }
+    out
+}
+
+fn basename(path: &str) -> &str {
+    path.rsplit(['/', '\\']).next().unwrap_or(path)
+}
+
+/// A short "what Claude is doing right now" label from a PreToolUse payload —
+/// the sidebar's activity caption. `tool_input`'s shape is tool-specific, so
+/// this only reaches into the couple of fields worth showing (a file path, a
+/// command, a search pattern); anything it doesn't recognize — including
+/// every MCP tool — falls back to the bare tool name, which is still more
+/// than a bare spinner says. Deliberately shows a path/command *prefix*, not
+/// full arguments, for the same reason env var values never reach the UI
+/// (see `envTooltip` on the frontend): this is glanceable chrome, not a log.
+fn tool_summary(payload: &Value) -> Option<String> {
+    let tool_name = payload.get("tool_name").and_then(Value::as_str)?;
+    let input = payload.get("tool_input");
+    let field = |name: &str| input.and_then(|i| i.get(name)).and_then(Value::as_str);
+
+    let summary = match tool_name {
+        "Read" => field("file_path").map(|p| format!("reading {}", basename(p))),
+        "Write" => field("file_path").map(|p| format!("writing {}", basename(p))),
+        "Edit" | "NotebookEdit" => field("file_path").map(|p| format!("editing {}", basename(p))),
+        "Bash" | "BashOutput" => field("command").map(|c| format!("running {}", truncate(c, 28))),
+        "Grep" => field("pattern").map(|p| format!("searching for {}", truncate(p, 22))),
+        "Glob" => Some("finding files".to_string()),
+        "WebFetch" | "WebSearch" => Some("browsing the web".to_string()),
+        "TodoWrite" => Some("updating the task list".to_string()),
+        "Task" => Some(
+            field("description")
+                .map(|d| truncate(d, 30))
+                .unwrap_or_else(|| "delegating to an agent".to_string()),
+        ),
+        // Everything else — KillShell, ExitPlanMode, every MCP tool — the raw
+        // name is the best available summary.
+        other => Some(other.to_string()),
+    };
+    summary.map(|s| truncate(&s, SUMMARY_MAX_CHARS))
+}
+
 /// Flag file marking a tab as already auto-named, so later prompts in the
 /// same session don't trigger another rename. Both the hook client (which
 /// checks it) and the running app (which clears it on `/clear`, or
@@ -232,7 +282,11 @@ pub fn run_hook_client(event_arg: &str) {
                 "source": payload.get("source").and_then(Value::as_str),
             }).to_string(),
         })),
-        "pre-tool-use" => Some(json!({ "tabId": tab_id, "event": "tab:status:working", "data": null })),
+        "pre-tool-use" => Some(json!({
+            "tabId": tab_id,
+            "event": "tab:status:working",
+            "data": tool_summary(&payload),
+        })),
         "stop" => Some(json!({ "tabId": tab_id, "event": "tab:status:idle", "data": null })),
         // Forward the Notification's `message` so the server can tell a real
         // permission/input request from Claude Code's idle "waiting for your
@@ -284,6 +338,61 @@ fn send_line(pipe: &str, message: &str) {
     use std::os::unix::net::UnixStream;
     if let Ok(mut stream) = UnixStream::connect(pipe) {
         let _ = writeln!(stream, "{message}");
+    }
+}
+
+#[cfg(test)]
+mod tool_summary_tests {
+    use super::tool_summary;
+    use serde_json::json;
+
+    #[test]
+    fn read_and_write_and_edit_show_the_file_basename() {
+        assert_eq!(
+            tool_summary(&json!({ "tool_name": "Read", "tool_input": { "file_path": "/a/b/Sidebar.tsx" } })),
+            Some("reading Sidebar.tsx".to_string()),
+        );
+        assert_eq!(
+            tool_summary(&json!({ "tool_name": "Write", "tool_input": { "file_path": "C:\\a\\b\\Sidebar.tsx" } })),
+            Some("writing Sidebar.tsx".to_string()),
+        );
+        assert_eq!(
+            tool_summary(&json!({ "tool_name": "Edit", "tool_input": { "file_path": "/a/Sidebar.tsx" } })),
+            Some("editing Sidebar.tsx".to_string()),
+        );
+    }
+
+    #[test]
+    fn bash_shows_a_truncated_command() {
+        assert_eq!(
+            tool_summary(&json!({ "tool_name": "Bash", "tool_input": { "command": "pnpm test" } })),
+            Some("running pnpm test".to_string()),
+        );
+        let long = tool_summary(&json!({
+            "tool_name": "Bash",
+            "tool_input": { "command": "a very long command that goes on and on and on and on" }
+        })).unwrap();
+        assert!(long.chars().count() <= 40, "got: {long}");
+        assert!(long.ends_with('…'));
+    }
+
+    #[test]
+    fn unrecognized_tool_falls_back_to_the_bare_name() {
+        assert_eq!(
+            tool_summary(&json!({ "tool_name": "mcp__n8n-mcp__search_nodes" })),
+            Some("mcp__n8n-mcp__search_nodes".to_string()),
+        );
+    }
+
+    #[test]
+    fn missing_tool_name_yields_nothing() {
+        assert_eq!(tool_summary(&json!({})), None);
+    }
+
+    #[test]
+    fn missing_expected_field_falls_back_to_none_for_that_tool() {
+        // Read with no file_path in the payload — no basename to show.
+        assert_eq!(tool_summary(&json!({ "tool_name": "Read", "tool_input": {} })), None);
     }
 }
 

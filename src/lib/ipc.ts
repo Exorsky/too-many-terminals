@@ -13,7 +13,7 @@ import {
   requestPermission,
   sendNotification,
 } from '@tauri-apps/plugin-notification';
-import type { AppSettings, SessionHistoryEntry, SessionUsageStats, ShellOption, TabStatus, TranscriptTurn, WorkspaceState } from '@/types';
+import type { AppSettings, SessionHistoryEntry, SessionStat, SessionUsageStats, ShellOption, TabStatus, TranscriptTurn, WorkspaceState } from '@/types';
 
 export interface DirEntry {
   name: string;
@@ -74,10 +74,10 @@ export function onClaudeSessionResolved(
 /** Fired when Claude Code's own hooks (PreToolUse/Stop/Notification/
  *  SessionStart) report a Claude tab's live state. */
 export function onTabStatus(
-  callback: (tabId: string, status: TabStatus) => void,
+  callback: (tabId: string, status: TabStatus, detail?: string) => void,
 ): Promise<UnlistenFn> {
-  return listen<{ tabId: string; status: TabStatus }>('claude-tab-status', (event) =>
-    callback(event.payload.tabId, event.payload.status));
+  return listen<{ tabId: string; status: TabStatus; detail?: string }>('claude-tab-status', (event) =>
+    callback(event.payload.tabId, event.payload.status, event.payload.detail));
 }
 
 /** Fired once a background `claude -p` call has generated a short title for
@@ -114,6 +114,13 @@ export function deleteSession(projectDir: string, sessionId: string): Promise<vo
 /** Full transcript of a past session, parsed into ordered turns for reading. */
 export function readTranscript(projectDir: string, sessionId: string): Promise<TranscriptTurn[]> {
   return invoke('read_transcript', { projectDir, sessionId });
+}
+
+/** Per-session aggregates for the Home dashboard (turns, tokens, commands,
+ *  model), scanned from this project's transcripts — see
+ *  docs/features/home-screen.md. */
+export function getSessionStats(projectDir: string): Promise<SessionStat[]> {
+  return invoke('get_session_stats', { projectDir });
 }
 
 /** The official 5-hour session and 7-day week rate-limit windows, read from

@@ -169,10 +169,10 @@ export default function App() {
   // Claude Code's own hooks report live tab state (idle/working/awaiting
   // input) and, once the first prompt is submitted, a generated title.
   useEffect(() => {
-    const unlisten = ipc.onTabStatus((tabId, status) => {
+    const unlisten = ipc.onTabStatus((tabId, status, detail) => {
       const prev = prevStatusRef.current.get(tabId);
       prevStatusRef.current.set(tabId, status);
-      dispatch({ type: 'status', tabId, status });
+      dispatch({ type: 'status', tabId, status, detail });
       maybeNotify(tabId, prev, status);
     });
     return () => { unlisten.then((fn) => fn()); };
@@ -619,6 +619,7 @@ export default function App() {
                     key={tab.id}
                     tabId={tab.id}
                     isVisible={tab.id === state.activeTabId && !overlaysUp && !homeUp && !mdFull}
+                    onInterrupt={() => dispatch({ type: 'interrupt', tabId: tab.id })}
                   />
                 ))}
                 {state.tabs.filter((tab) => tab.kind === 'file').map((tab) => (
@@ -632,12 +633,7 @@ export default function App() {
                 {!overlaysUp && !mdReading && !fileUp && homeUp && (
                   <HomeScreen
                     projects={projects}
-                    tabs={state.tabs}
-                    onResume={handleResumeSession}
-                    onSelectTab={handleSelectTab}
-                    onNewSession={handleNewClaudeTab}
                     onAddProject={handleAddProject}
-                    onOpenHistory={() => { setShowHistory(true); setShowSettings(false); setShowHome(false); }}
                   />
                 )}
               </div>

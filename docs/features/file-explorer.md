@@ -1,7 +1,7 @@
 # File explorer
 
 A file browser and editor docked to the right edge of the window, toggled from
-the sidebar (the folder-tree icon, next to History/Settings) — **open by
+its own folder-tree button in the sidebar header (next to Search) — **open by
 default**. Browse every open project's files, open one as a tab, and edit it
 in place.
 
@@ -81,6 +81,8 @@ per-project session list and from the command palette (both stay scoped to
   whatever tab list it's given.
 - `src/components/FileExplorerPanel.tsx` (+ test) — the panel: header, search
   box, and per-project trees or search results.
+- `src/components/Sidebar.tsx` — the folder-tree toggle button in the expanded
+  header row, next to Search; the collapsed rail has its own copy.
 - `src/components/Editor.tsx` (+ test) — the CodeMirror 6 instance: creates once
   per `path`, exposes an imperative `save()` handle, Ctrl+S keymap, async
   language loading.
