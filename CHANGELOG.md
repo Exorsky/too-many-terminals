@@ -11,6 +11,25 @@ listed here; see `git log` for the full history.
 
 ## [Unreleased]
 
+### Changed
+- **Real tab management up top.** The tab strip used to hold only your open
+  files plus a single slot for the last session you touched. Now every session
+  you go into is *added* to it and stays: click a session in the sidebar and it
+  appears up there, click another and both are there to switch between.
+  Sessions, shells and files share the row, in the order you opened them.
+  Drag tabs to reorder the strip, middle-click to close, and the active tab is
+  always scrolled into view. Closing a session's tab up here only takes it out
+  of the strip — it keeps running and stays in the sidebar; files still close
+  for real.
+
+### Added
+- **Hand a session to another machine.** Export a Claude Code session to a file
+  (the upload button on a Session History row) and import it on another computer
+  (right-click a folder → Import session…) to resume it there — so a colleague
+  can pick up your shift where you left off. The transcript is re-homed under the
+  importing machine's path; the code travels separately via git. See
+  docs/features/session-transfer.md.
+
 ## [0.19.0] - 2026-08-13
 
 ### Added

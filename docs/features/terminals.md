@@ -220,5 +220,5 @@ does nothing — the terminal's old copy-on-select/paste-on-right-click is gone.
 Manual PTY verification checklist: docs/development.md.
 
 See also: [workspace persistence](workspace-persistence.md) for how open tabs survive
-an app restart, and [file explorer](file-explorer.md) for `TabBar` — the strip of open
-file tabs (plus a single slot for your last-active session) docked above the content pane.
+an app restart, and [file explorer](file-explorer.md) for `TabBar` — the strip above the
+content pane holding every tab you've gone into (sessions, shells and files).

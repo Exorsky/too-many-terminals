@@ -5,20 +5,45 @@ its own folder-tree button in the sidebar header (next to Search) — **open by
 default**. Browse every open project's files, open one as a tab, and edit it
 in place.
 
-Open files live on their own axis from Claude/shell sessions: a session is
-already always-open the moment it's created (spawned pty, listed in the
-sidebar), so it doesn't get a permanent row of its own up top the way a file
-does — that would just be every session that exists, all the time. Instead,
+## The tab strip
+
 `TabBar.tsx` (docked above the content pane, its trailing edge hosting
-`SessionControls` — Preview/Split — for the active session) shows every open
-file tab plus a single slot for whichever session/terminal you were last on:
-pick a session from the sidebar,
-work in a file, and that one session tab stays there to click back to,
-without a sidebar detour. Picking a *different* session from the sidebar
-replaces that slot — it's a "come back here" pointer, not a history of every
-session you've touched. File tabs are still excluded from the sidebar's
-per-project session list and from the command palette (both stay scoped to
-"jump to a terminal").
+`SessionControls` — Preview/Split — for the active session) holds **the tabs
+you've gone into**, in the order you first opened them. Existing and being
+*open* are two different things here: every session lives in the sidebar from
+the moment it's created, but it only joins the strip when you actually click
+into it (`App.tsx` `barTabIds` + `openInBar`, called from `handleSelectTab`,
+`spawnTabAt` and `handleOpenFile` — the three ways you enter a tab on purpose).
+Open a second session and the first stays up there to click back to; sessions,
+shells and files all sit in the same row.
+
+- **Click** to switch. The active tab is scrolled into view whenever it changes,
+  since the strip scrolls once enough tabs are open.
+- **Drag** a tab onto another to reorder (`moveId` splicing `barTabIds`). The
+  strip's order is its own: it doesn't touch the sidebar's, and a session can
+  land next to one from a different folder — which the sidebar's own reorder
+  refuses, since there a row's position *means* which folder it's in. A vertical
+  accent line marks the gap; which side is decided by the cursor against the
+  target's horizontal midpoint (`dropSide` in `TabBar.tsx` — the sidebar's own
+  turned 90°, four lines, not worth a shared abstraction).
+- **× / middle-click** on a *session* takes it out of the strip only — it keeps
+  running and stays in the sidebar, which is what owns a session's life.
+  Removing the one you're looking at hands you its neighbour in the strip. A
+  *file* has no such home, so closing its tab really closes the file (with the
+  usual unsaved-changes confirmation).
+- Closing a session from the **sidebar** removes it from the strip too, and any
+  id whose tab is gone is dropped when the strip is rebuilt — nothing to clean up.
+- The strip doesn't survive a restart (it isn't in `SavedTab`); a restored
+  workspace opens on Home with an empty strip.
+
+The strip used to hold only file tabs plus a *single* slot for the session you
+were last on — the theory being that the sidebar already lists every session, so
+a row up top would be redundant. That made it useless for what a tab strip is
+for: bouncing between the two or three sessions you're actually working in. The
+sidebar is the *organizer* (folders, pinning, renaming, reordering); the strip is
+the *switcher*, and it holds what you chose to put there. File tabs are still
+excluded from the sidebar's per-project session list and from the command palette
+(both stay scoped to "jump to a terminal").
 
 ## Behavior
 
@@ -77,8 +102,11 @@ per-project session list and from the command palette (both stay scoped to
 - `src/lib/file-search.ts` (+ test) — the bounded breadth-first filename search.
 - `src/components/FileTree.tsx` (+ test) — the recursive, lazily-loaded tree node.
 - `src/components/TabBar.tsx` (+ test) — the top strip; kind-agnostic
-  internally (reuses `Sidebar.tsx`'s exported `TabIndicator`) so it renders
-  whatever tab list it's given.
+  (reuses `Sidebar.tsx`'s exported `TabIndicator`) so it renders whatever list
+  it's given. Middle-click close, and a `scrollIntoView` on the active tab.
+- `src/lib/tabs.ts` (+ test) — `tabBarTabs(tabs, openIds)`: resolves the opened
+  ids against the live tab list, dropping ids whose tab is gone. `moveId`: the
+  strip's drag-reorder splice.
 - `src/components/FileExplorerPanel.tsx` (+ test) — the panel: header, search
   box, and per-project trees or search results.
 - `src/components/Sidebar.tsx` — the folder-tree toggle button in the expanded
@@ -92,11 +120,10 @@ per-project session list and from the command palette (both stay scoped to
 - `src/lib/tabs.ts` (+ test) — `dirty` reducer action.
 - Wiring in `App.tsx`: `showFiles` state (defaults `true`), the resize seam,
   `handleOpenFile`, one `FileViewer` mounted per file tab (not just the active
-  one — same pattern as the `Terminal` map), `lastSessionTabIdRef` (updated
-  during render, not an effect — see its comment) feeding the single session
-  slot into `TabBar` alongside the file tabs, `SessionControls` hiding itself
-  for a file tab (since the strip already shows its name), and the
-  `window.confirm` guards in `handleCloseTab` / `handleRemoveProject`.
+  one — same pattern as the `Terminal` map), `barTabIds`/`openInBar`/
+  `handleCloseBarTab` feeding the strip, `SessionControls` hiding itself for a
+  file tab (since the strip already shows its name), and the `window.confirm`
+  guards in `handleCloseTab` / `handleRemoveProject`.
 
 ## Scope / follow-ups
 

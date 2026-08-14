@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, createEvent, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Tab } from '@/types';
 import TabBar from './TabBar';
@@ -53,6 +53,46 @@ describe('TabBar', () => {
     expect(onCloseTab).toHaveBeenCalledWith('a');
     // Closing shouldn't also select the tab underneath it.
     expect(onSelectTab).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes a tab on middle-click without selecting it', () => {
+    const onSelectTab = vi.fn();
+    const onCloseTab = vi.fn();
+    render(<TabBar tabs={[makeTab('a')]} activeTabId={null} onSelectTab={onSelectTab} onCloseTab={onCloseTab} />);
+
+    fireEvent.mouseDown(screen.getByTitle('/proj/a'), { button: 1 });
+    expect(onCloseTab).toHaveBeenCalledWith('a');
+    expect(onSelectTab).not.toHaveBeenCalled();
+  });
+
+  it('drag-reorders onto the side of the target the cursor is on', () => {
+    const onReorderTab = vi.fn();
+    render(
+      <TabBar
+        tabs={[makeTab('a'), makeTab('b')]}
+        activeTabId="a"
+        onSelectTab={vi.fn()}
+        onCloseTab={vi.fn()}
+        onReorderTab={onReorderTab}
+      />,
+    );
+    const target = screen.getByTitle('/proj/b');
+    // jsdom has no layout, so the target's box is stated outright.
+    vi.spyOn(target, 'getBoundingClientRect').mockReturnValue({ left: 100, width: 100 } as DOMRect);
+    const dataTransfer = { setData: vi.fn(), effectAllowed: '', dropEffect: '' };
+    // jsdom has no DragEvent, so RTL falls back to a plain Event and drops
+    // clientX from the init — it has to be defined on the event by hand.
+    const drag = (type: 'dragOver' | 'drop', clientX: number) => {
+      const event = createEvent[type](target, { dataTransfer });
+      Object.defineProperty(event, 'clientX', { value: clientX });
+      fireEvent(target, event);
+    };
+
+    fireEvent.dragStart(screen.getByTitle('/proj/a'), { dataTransfer });
+    drag('dragOver', 120); // left of the midpoint (100 + 100/2)
+    drag('drop', 120);
+
+    expect(onReorderTab).toHaveBeenCalledWith('a', 'b', 'before');
   });
 
   it('shows an unsaved indicator for a dirty tab', () => {

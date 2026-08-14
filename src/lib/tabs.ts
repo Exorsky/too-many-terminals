@@ -31,6 +31,27 @@ export function learnSessionNames(
   return next;
 }
 
+/** The tabs the top strip shows: the ones you've opened (`openIds`, in the
+ *  order you first went into them), resolved against the live tab list. An id
+ *  whose tab is gone is dropped, so a closed session self-cleans. */
+export function tabBarTabs(tabs: Tab[], openIds: string[]): Tab[] {
+  return openIds
+    .map((id) => tabs.find((t) => t.id === id))
+    .filter((t): t is Tab => t !== undefined);
+}
+
+/** Moves `id` before/after `targetId` in a plain id list — the top strip's own
+ *  order. No folder rules apply here (unlike the sidebar's session order): the
+ *  strip is whatever you dragged it into. Returns the list unchanged when the
+ *  move is a no-op or names an id that isn't there. */
+export function moveId(ids: string[], id: string, targetId: string, position: 'before' | 'after'): string[] {
+  if (id === targetId || !ids.includes(id) || !ids.includes(targetId)) return ids;
+  const rest = ids.filter((x) => x !== id);
+  const at = rest.indexOf(targetId);
+  rest.splice(position === 'after' ? at + 1 : at, 0, id);
+  return rest;
+}
+
 export type TabsAction =
   | { type: 'add'; tab: Tab }
   | { type: 'close'; tabId: string }
@@ -187,15 +208,4 @@ export function tabsReducer(state: TabsState, action: TabsAction): TabsState {
       return { ...state, tabs };
     }
   }
-}
-
-/** Which tabs the top TabBar should show: every open file tab, plus a single
- *  slot for whichever session/terminal you were last on (if it's still
- *  open) — not a row per session, just a "come back here" pointer so
- *  switching between the session you were on and any open files doesn't need
- *  a sidebar detour. */
-export function tabBarTabs(tabs: Tab[], lastSessionTabId: string | null): Tab[] {
-  const files = tabs.filter((t) => t.kind === 'file');
-  const session = tabs.find((t) => t.id === lastSessionTabId && t.kind !== 'file');
-  return session ? [session, ...files] : files;
 }

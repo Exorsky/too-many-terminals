@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { initialTabsState, learnSessionNames, tabBarTabs, tabsReducer, type TabsState } from './tabs';
+import { initialTabsState, learnSessionNames, moveId, tabBarTabs, tabsReducer, type TabsState } from './tabs';
 import type { Tab } from '@/types';
 
 function makeTab(id: string, overrides: Partial<Tab> = {}): Tab {
@@ -214,22 +214,33 @@ describe('tabBarTabs', () => {
   const claudeTab = makeTab('claude-1', { kind: 'claude' });
   const shellTab = makeTab('shell-1', { kind: 'shell' });
   const fileA = makeTab('file-a', { kind: 'file', path: '/proj/a.md' });
-  const fileB = makeTab('file-b', { kind: 'file', path: '/proj/b.md' });
 
-  it('lists every file tab when there is no last session', () => {
-    expect(tabBarTabs([fileA, fileB, claudeTab], null)).toEqual([fileA, fileB]);
+  it('shows nothing until a tab has been opened', () => {
+    expect(tabBarTabs([claudeTab, shellTab], [])).toEqual([]);
   });
 
-  it('puts the last session tab first, ahead of the file tabs', () => {
-    expect(tabBarTabs([fileA, claudeTab, fileB], 'claude-1')).toEqual([claudeTab, fileA, fileB]);
+  it('keeps the order tabs were opened in, not the sidebar order', () => {
+    expect(tabBarTabs([claudeTab, shellTab, fileA], ['file-a', 'claude-1'])).toEqual([fileA, claudeTab]);
   });
 
-  it('drops the session slot once that tab is closed', () => {
-    expect(tabBarTabs([fileA, shellTab], 'claude-1')).toEqual([fileA]);
+  it('drops an id whose tab is gone', () => {
+    expect(tabBarTabs([claudeTab], ['claude-1', 'closed-one'])).toEqual([claudeTab]);
+  });
+});
+
+describe('moveId', () => {
+  const ids = ['a', 'b', 'c'];
+
+  it('moves before and after a target', () => {
+    expect(moveId(ids, 'a', 'c', 'before')).toEqual(['b', 'a', 'c']);
+    expect(moveId(ids, 'a', 'c', 'after')).toEqual(['b', 'c', 'a']);
+    expect(moveId(ids, 'c', 'a', 'before')).toEqual(['c', 'a', 'b']);
   });
 
-  it('never shows a file tab in the session slot', () => {
-    expect(tabBarTabs([fileA], 'file-a')).toEqual([fileA]);
+  it('leaves the list alone for a no-op or an unknown id', () => {
+    expect(moveId(ids, 'a', 'a', 'before')).toBe(ids);
+    expect(moveId(ids, 'a', 'zzz', 'after')).toBe(ids);
+    expect(moveId(ids, 'zzz', 'a', 'after')).toBe(ids);
   });
 });
 

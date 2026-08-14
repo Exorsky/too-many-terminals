@@ -15,7 +15,7 @@ import MarkdownPane from '@/components/MarkdownPane';
 import { disposeTerminal, writeToTerminal } from '@/components/terminalCache';
 import * as ipc from '@/lib/ipc';
 import { useSettings } from '@/lib/settings-store';
-import { initialTabsState, learnSessionNames, tabBarTabs, tabsReducer, UNNAMED_TAB } from '@/lib/tabs';
+import { initialTabsState, learnSessionNames, moveId, tabBarTabs, tabsReducer, UNNAMED_TAB } from '@/lib/tabs';
 import { transcriptToMarkdown } from '@/lib/transcript';
 import { useTranscript } from '@/lib/use-transcript';
 import { cn } from '@/lib/utils';
@@ -47,7 +47,10 @@ export default function App() {
   const [filesPanelWidth, setFilesPanelWidth] = useState(260);
   const [draggingFilesSeam, setDraggingFilesSeam] = useState(false);
   const filesPanelRef = useRef<HTMLDivElement>(null);
-  const lastSessionTabIdRef = useRef<string | null>(null);
+  // Which tabs the top strip holds, in the order you first opened them. A tab
+  // exists (sidebar) long before it's "open" up here — it lands in the strip
+  // when you actually go into it, and stays until you close it from there.
+  const [barTabIds, setBarTabIds] = useState<string[]>([]);
   // Home is the resting screen: implicit when no tab is open, reachable any time
   // from the sidebar wordmark, and where every launch starts — a restored
   // workspace opens on the city, not on whichever tab happened to be last.
@@ -220,6 +223,12 @@ export default function App() {
     ipc.killPty(tabId);
   }, []);
 
+  /** Puts a tab in the top strip. Idempotent, appends — so the strip keeps the
+   *  order you opened things in and re-entering a tab never reshuffles it. */
+  const openInBar = useCallback((tabId: string) => {
+    setBarTabIds((ids) => (ids.includes(tabId) ? ids : [...ids, tabId]));
+  }, []);
+
   /** Spawns a tab at an explicit project folder — used for user-initiated new
    *  sessions and for resuming a past session; the pty starts immediately. */
   const spawnTabAt = useCallback(
@@ -235,12 +244,13 @@ export default function App() {
         status: 'new',
       };
       dispatch({ type: 'add', tab });
+      openInBar(tab.id);
       setShowHistory(false);
       setShowSettings(false);
       setShowHome(false);
       startPty(tab);
     },
-    [startPty],
+    [startPty, openInBar],
   );
 
   // Restore the previous workspace (projects + open tabs) once on startup.
@@ -324,8 +334,35 @@ export default function App() {
       next.delete(tabId);
       return next;
     });
+    setBarTabIds((ids) => ids.filter((id) => id !== tabId));
     dispatch({ type: 'close', tabId });
   }, [state.tabs]);
+
+  /** The strip's ×: a session only *leaves the strip* — it's still open, still
+   *  running, still in the sidebar, which is what owns a session's life. A file
+   *  has no such home, so closing its tab really closes the file. */
+  const handleCloseBarTab = useCallback((tabId: string) => {
+    const tab = state.tabs.find((t) => t.id === tabId);
+    if (!tab || tab.kind === 'file') { handleCloseTab(tabId); return; }
+    const index = barTabIds.indexOf(tabId);
+    const rest = barTabIds.filter((id) => id !== tabId);
+    setBarTabIds(rest);
+    // Closing the tab you're looking at hands you its neighbour in the strip.
+    if (state.activeTabId === tabId) {
+      const fallback = rest[index] ?? rest[index - 1];
+      if (fallback) dispatch({ type: 'select', tabId: fallback });
+    }
+  }, [state.tabs, state.activeTabId, barTabIds, handleCloseTab]);
+
+  /** Drag-reorder inside the strip. Its order is its own — dragging a session
+   *  here doesn't touch the sidebar's order (and can cross folders, which the
+   *  sidebar's own reorder refuses). */
+  const handleReorderBarTab = useCallback(
+    (tabId: string, targetId: string, position: 'before' | 'after') => {
+      setBarTabIds((ids) => moveId(ids, tabId, targetId, position));
+    },
+    [],
+  );
 
   /** Set a tab's view mode: terminal (default), full markdown, or split. */
   const setTabMode = useCallback((tabId: string, mode: SessionMode) => {
@@ -341,8 +378,9 @@ export default function App() {
     setShowHistory(false);
     setShowSettings(false);
     setShowHome(false);
+    openInBar(tabId);
     dispatch({ type: 'select', tabId });
-  }, []);
+  }, [openInBar]);
 
   /** Opens a file from the explorer as a read-only tab — reuses the tab if
    *  that file is already open instead of duplicating it. No pty involved. */
@@ -364,10 +402,11 @@ export default function App() {
       path,
     };
     dispatch({ type: 'add', tab });
+    openInBar(tab.id);
     setShowHistory(false);
     setShowSettings(false);
     setShowHome(false);
-  }, [state.tabs, handleSelectTab]);
+  }, [state.tabs, handleSelectTab, openInBar]);
 
   // Command palette — Ctrl/Cmd+Shift+P from anywhere. Capture phase so it fires
   // before the focused xterm swallows the key; Shift+P (not Ctrl+K) to avoid
@@ -427,16 +466,22 @@ export default function App() {
     [],
   );
 
+  /** Imports a transcript file a colleague exported from another machine into
+   *  `dir`, then opens it as a resumed tab — see docs/features/session-transfer.md.
+   *  The tab starts unnamed (the sender's name lives in their workspace, not the
+   *  transcript); History shows the real preview and you can rename. */
+  const handleImportSession = useCallback(
+    async (dir: string) => {
+      const sessionId = await ipc.importSession(dir).catch((e) => { window.alert(String(e)); return null; });
+      if (sessionId) spawnTabAt(dir, 'claude', null, UNNAMED_TAB, sessionId);
+    },
+    [spawnTabAt],
+  );
+
   const activeTab = state.tabs.find((t) => t.id === state.activeTabId) ?? null;
   const activeReadable = !!activeTab && activeTab.kind === 'claude' && !!activeTab.resumeSessionId;
   const overlaysUp = showHistory || showSettings || readerTarget !== null;
   const fileUp = !!activeTab && activeTab.kind === 'file';
-  // The session/terminal you were last on, kept as a single tab up top (see
-  // tabBarTabs) so you can bounce between it and any open file tabs without
-  // detouring through the sidebar. Written during render (not an effect) so
-  // TabBar reads the current render's value instead of lagging a frame
-  // behind; overwriting with the same id on a re-render is harmless.
-  if (activeTab && activeTab.kind !== 'file') lastSessionTabIdRef.current = activeTab.id;
   // Home covers the terminal too, but unlike the overlays it *is* the resting
   // state when nothing is open, so it gets its own flag.
   const homeUp = showHome || state.tabs.length === 0;
@@ -591,20 +636,22 @@ export default function App() {
         onGoHome={() => { setShowHome((v) => !v); setShowHistory(false); setShowSettings(false); }}
         onAddProject={handleAddProject}
         onRemoveProject={handleRemoveProject}
+        onImportSession={handleImportSession}
         onReorderProject={handleReorderProject}
         onReorderTab={handleReorderTab}
         onToggleCollapse={() => setCollapsed((v) => !v)}
       />
       <main className="relative flex-1 min-w-0 flex flex-col" data-terminal-area>
-        {/* Open file tabs, plus a single slot for whichever session/terminal you
-            were last on — not every session (that's the sidebar's job), just a
-            "come back here" pointer so session <-> file needs no sidebar trip. */}
+        {/* The tabs you've actually gone into — sessions, shells and files —
+            in the order you opened them. Not every tab that exists: that's
+            the sidebar's list. */}
         {!overlaysUp && (
           <TabBar
-            tabs={tabBarTabs(state.tabs, lastSessionTabIdRef.current)}
+            tabs={tabBarTabs(state.tabs, barTabIds)}
             activeTabId={state.activeTabId}
             onSelectTab={handleSelectTab}
-            onCloseTab={handleCloseTab}
+            onCloseTab={handleCloseBarTab}
+            onReorderTab={handleReorderBarTab}
             trailing={canRead && activeTab ? (
               <SessionControls
                 mode={activeMode}
