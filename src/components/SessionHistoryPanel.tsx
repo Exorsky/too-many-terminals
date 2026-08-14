@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowRight, CalendarDays, FileText, History, Loader2, Search, Trash2, X } from 'lucide-react';
+import { ArrowRight, CalendarDays, FileText, History, Loader2, Search, Trash2, Upload, X } from 'lucide-react';
 import { projectHue, type SessionHistoryEntry } from '@/types';
 import { relativeTime } from '@/lib/relative-time';
 import { calendarMonths, dayKey, type CalendarMark } from '@/lib/stats';
@@ -484,6 +484,13 @@ export default function SessionHistoryPanel({ projects, sessionNames, onResume, 
                             onClick={(e) => { e.stopPropagation(); onRead(entry.projectDir, entry); }}
                           >
                             <FileText size={12} />
+                          </button>
+                          <button
+                            className="flex items-center justify-center w-5 h-5 rounded-sm bg-transparent border-none cursor-pointer text-muted-foreground/60 hover:text-foreground hover:bg-white/[0.07]"
+                            title="Export this session to a file (hand off to another machine)"
+                            onClick={(e) => { e.stopPropagation(); ipc.exportSession(entry.projectDir, entry.sessionId).catch(() => {}); }}
+                          >
+                            <Upload size={12} />
                           </button>
                           <button
                             className="flex items-center justify-center w-5 h-5 rounded-sm bg-transparent border-none cursor-pointer text-muted-foreground/60 hover:text-foreground hover:bg-white/[0.07]"

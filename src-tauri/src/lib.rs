@@ -10,6 +10,7 @@ mod namer;
 mod pty;
 mod session_history;
 mod session_stats;
+mod session_transfer;
 mod session_usage;
 mod settings;
 mod shell;
@@ -61,6 +62,8 @@ pub fn run() {
             commands::list_sessions,
             commands::delete_session,
             commands::read_transcript,
+            commands::export_session,
+            commands::import_session,
             commands::get_session_stats,
             commands::get_session_usage_stats,
             commands::load_workspace,

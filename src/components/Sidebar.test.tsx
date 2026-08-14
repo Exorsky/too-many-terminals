@@ -56,6 +56,7 @@ function renderSidebar(overrides: Partial<React.ComponentProps<typeof Sidebar>> 
     onGoHome: vi.fn(),
     onAddProject: vi.fn(),
     onRemoveProject: vi.fn(),
+    onImportSession: vi.fn(),
     onReorderProject: vi.fn(),
     onReorderTab: vi.fn(),
     onToggleCollapse: vi.fn(),

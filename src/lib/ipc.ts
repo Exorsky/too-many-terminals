@@ -7,7 +7,7 @@
 import { invoke, Channel } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { openUrl, openPath } from '@tauri-apps/plugin-opener';
-import { open as openDialog } from '@tauri-apps/plugin-dialog';
+import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog';
 import {
   isPermissionGranted,
   requestPermission,
@@ -114,6 +114,30 @@ export function deleteSession(projectDir: string, sessionId: string): Promise<vo
 /** Full transcript of a past session, parsed into ordered turns for reading. */
 export function readTranscript(projectDir: string, sessionId: string): Promise<TranscriptTurn[]> {
   return invoke('read_transcript', { projectDir, sessionId });
+}
+
+/** Exports a session's transcript to a file the user picks, to hand off to
+ *  another machine. Resolves false if they cancel the save dialog. See
+ *  docs/features/session-transfer.md. */
+export async function exportSession(projectDir: string, sessionId: string): Promise<boolean> {
+  const dest = await saveDialog({
+    defaultPath: `${sessionId}.jsonl`,
+    filters: [{ name: 'Session transcript', extensions: ['jsonl'] }],
+  });
+  if (!dest) return false;
+  await invoke('export_session', { projectDir, sessionId, dest });
+  return true;
+}
+
+/** Imports a transcript file received from another machine into `projectDir`,
+ *  returning the session id to resume — or null if the user cancels the picker. */
+export async function importSession(projectDir: string): Promise<string | null> {
+  const src = await openDialog({
+    multiple: false,
+    filters: [{ name: 'Session transcript', extensions: ['jsonl'] }],
+  });
+  if (typeof src !== 'string') return null;
+  return invoke('import_session', { projectDir, src });
 }
 
 /** Per-session aggregates for the Home dashboard (turns, tokens, commands,

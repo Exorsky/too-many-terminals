@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type MutableRefObject } from 'react';
 import {
-  CheckCircle2, ChevronRight, Circle, Code, File, Folder, FolderOpen, FolderPlus, History, KeyRound,
+  CheckCircle2, ChevronRight, Circle, Code, File, Folder, FolderInput, FolderOpen, FolderPlus, History, KeyRound,
   Loader2, MessageCircle, Moon, PanelLeftClose, PanelLeftOpen, Pencil, Pin, PinOff, Plus, Search, Settings, Sparkles,
-  TerminalSquare, X,
+  TerminalSquare, Upload, X,
 } from 'lucide-react';
 import * as ipc from '@/lib/ipc';
 import type { EnvReport, EnvSource } from '@/lib/ipc';
@@ -51,6 +51,7 @@ interface SidebarProps {
   onGoHome: () => void;
   onAddProject: () => void;
   onRemoveProject: (dir: string) => void;
+  onImportSession: (dir: string) => void;
   onReorderProject: (sourceDir: string, targetDir: string, position: DropPos) => void;
   onReorderTab: (tabId: string, targetId: string, position: DropPos) => void;
   onToggleCollapse: () => void;
@@ -534,10 +535,16 @@ function TabRow({
             <span>Open directory</span>
           </ContextMenuItem>
           {tab.kind === 'claude' && tab.resumeSessionId && (
-            <ContextMenuItem onSelect={() => onOpenInVscode(tab.id)}>
-              <Code size={13} />
-              <span>Open in VS Code</span>
-            </ContextMenuItem>
+            <>
+              <ContextMenuItem onSelect={() => onOpenInVscode(tab.id)}>
+                <Code size={13} />
+                <span>Open in VS Code</span>
+              </ContextMenuItem>
+              <ContextMenuItem onSelect={() => { ipc.exportSession(tab.cwd, tab.resumeSessionId!).catch(() => {}); }}>
+                <Upload size={13} />
+                <span>Export session…</span>
+              </ContextMenuItem>
+            </>
           )}
           <ContextMenuItem onSelect={() => onTogglePin(tab.id)}>
             {tab.pinned ? <PinOff size={13} /> : <Pin size={13} />}
@@ -611,7 +618,7 @@ const ACTIVE_FOLDER_TINT = { border: 'var(--border-hover)', bg: 'rgba(255,255,25
 function ProjectCard({
   dir, tabs, activeTabId, showHistory, shellOptions, dragRef, now,
   onSelectTab, onCloseTab, onRenameTab, onOpenDirectory, onOpenInVscode, onTogglePin, onNewClaudeTab, onNewShellTab,
-  onRemoveProject, onReorderProject, onReorderTab,
+  onRemoveProject, onImportSession, onReorderProject, onReorderTab,
 }: {
   dir: string;
   tabs: Tab[];
@@ -629,6 +636,7 @@ function ProjectCard({
   onNewClaudeTab: (dir: string) => void;
   onNewShellTab: (dir: string, shellId: string) => void;
   onRemoveProject: (dir: string) => void;
+  onImportSession: (dir: string) => void;
   onReorderProject: (sourceDir: string, targetDir: string, position: DropPos) => void;
   onReorderTab: (tabId: string, targetId: string, position: DropPos) => void;
 }) {
@@ -740,6 +748,11 @@ function ProjectCard({
             </ContextMenuItem>
           ))}
           <ContextMenuSeparator />
+          <ContextMenuItem onSelect={() => onImportSession(dir)}>
+            <FolderInput size={13} />
+            <span>Import session…</span>
+          </ContextMenuItem>
+          <ContextMenuSeparator />
           <ContextMenuItem variant="destructive" onSelect={() => onRemoveProject(dir)}>
             <X size={13} />
             <span>Remove folder</span>
@@ -776,7 +789,7 @@ export default function Sidebar({
   tabs, activeTabId, shellOptions, showHistory, showSettings, showHome, showFiles, projects, collapsed,
   onSelectTab, onCloseTab, onOpenDirectory, onOpenInVscode, onNewClaudeTab, onNewShellTab, onRenameTab, onTogglePin,
   onOpenSearch, onToggleHistory, onToggleSettings, onToggleFiles, onGoHome,
-  onAddProject, onRemoveProject, onReorderProject, onReorderTab, onToggleCollapse,
+  onAddProject, onRemoveProject, onImportSession, onReorderProject, onReorderTab, onToggleCollapse,
 }: SidebarProps) {
   const dragRef = useRef<DragItem | null>(null);
 
@@ -1002,6 +1015,7 @@ export default function Sidebar({
                 onNewClaudeTab={onNewClaudeTab}
                 onNewShellTab={onNewShellTab}
                 onRemoveProject={onRemoveProject}
+                onImportSession={onImportSession}
                 onReorderProject={onReorderProject}
                 onReorderTab={onReorderTab}
               />

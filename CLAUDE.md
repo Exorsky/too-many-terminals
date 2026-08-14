@@ -19,6 +19,7 @@ Feature and architecture docs live in `docs/` — **keep them updated when featu
 - [docs/features/notifications.md](docs/features/notifications.md) — desktop notifications when an unfocused session needs you
 - [docs/features/session-history.md](docs/features/session-history.md) — past-session browsing/resume
 - [docs/features/vscode-handoff.md](docs/features/vscode-handoff.md) — hand a live session off to the VS Code Claude Code extension
+- [docs/features/session-transfer.md](docs/features/session-transfer.md) — export/import a session to hand a shift to another machine
 - [docs/features/session-reader.md](docs/features/session-reader.md) — reading a past session as rendered Markdown
 - [docs/features/usage-meter.md](docs/features/usage-meter.md) — official 5h/7d rate-limit percentages
 - [docs/features/workspace-persistence.md](docs/features/workspace-persistence.md) — restoring folder/tabs across restarts

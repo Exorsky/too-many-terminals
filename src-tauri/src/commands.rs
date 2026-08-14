@@ -295,6 +295,27 @@ pub fn read_transcript(
     crate::session_history::read_transcript(&root, &project_dir, &session_id)
 }
 
+/// Copies a session's transcript out to `dest` so it can be handed to a
+/// colleague on another machine — see docs/features/session-transfer.md.
+#[tauri::command(async)]
+pub fn export_session(project_dir: String, session_id: String, dest: String) -> Result<(), String> {
+    let root = projects_root().ok_or("could not resolve home directory")?;
+    crate::session_transfer::export_session(
+        &root,
+        &project_dir,
+        &session_id,
+        std::path::Path::new(&dest),
+    )
+}
+
+/// Imports a received transcript file into `project_dir`'s store and returns the
+/// session id to resume — see docs/features/session-transfer.md.
+#[tauri::command(async)]
+pub fn import_session(project_dir: String, src: String) -> Result<String, String> {
+    let root = projects_root().ok_or("could not resolve home directory")?;
+    crate::session_transfer::import_session(&root, &project_dir, std::path::Path::new(&src))
+}
+
 #[tauri::command(async)]
 pub fn get_session_stats(
     project_dir: String,

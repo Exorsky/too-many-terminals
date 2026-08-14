@@ -162,7 +162,7 @@ pub fn list_sessions(root: &Path, project_dir: &str) -> Vec<SessionHistoryEntry>
         .collect()
 }
 
-fn valid_session_id(session_id: &str) -> bool {
+pub(crate) fn valid_session_id(session_id: &str) -> bool {
     !session_id.is_empty()
         && session_id
             .chars()
