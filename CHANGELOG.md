@@ -11,6 +11,46 @@ listed here; see `git log` for the full history.
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-09-04
+
+### Changed
+- **A new sidebar, built for a lot of sessions.** Folders are no longer
+  collapsible groups you scroll through — every session now sits in one flat
+  list, ordered by what it is doing: pinned first, then waiting on you, running,
+  idle, and finally everything asleep. Thirteen sessions are thirteen rows,
+  where before they cost nineteen.
+- **Folders became a filter.** Each open folder is a pill under the search box,
+  with its own color, session count and right-click menu. Click one to see just
+  that folder, click it again for all of them. The selected pill is painted in
+  the folder's own color, scrolls itself into view, and the line above the list
+  always names what you are looking at.
+- **Session names get the whole row.** The folder, what Claude is doing, and the
+  time moved to a smaller second line underneath, so names stop truncating to
+  "Commit to ma…". That second line only appears when it has something to say.
+- **Sessions show when they were last used** — "3d 4h ago", read from the
+  session's own transcript, so it is right even for one restored from a past
+  run.
+- **One row of chrome instead of three.** The title bar is gone; the search box
+  and the status counts share a single line, and Home, Files and the collapse
+  toggle moved into the footer next to the usage percentages. Search sessions
+  joined History and Settings in the footer menu.
+- The counts row (waiting / running / just finished / pinned) replaced the three
+  stacked strips that used to list those sessions a second time above the folder
+  list.
+
+### Fixed
+- A finished session no longer reads as asleep. Sessions that were idle but not
+  freshly-finished were sorted and colored as if nothing had happened, next to
+  their own row showing a green check.
+
+### Removed
+- **Show folder paths** setting — the breadcrumb it controlled lived on the
+  folder headings that no longer exist. Two folders with the same name now show
+  their parent automatically, which is what the setting was for.
+- Dragging sessions to reorder them. The list sorts itself by status now, so
+  there is no manual order to keep. Folders are still reorderable by dragging
+  their pills.
+
 ## [0.20.0] - 2026-08-14
 
 ### Changed
@@ -157,7 +197,8 @@ listed here; see `git log` for the full history.
 - The transcript reader now renders pipe tables, nested/checkbox lists,
   italics, autolinks, and horizontal rules.
 
-[Unreleased]: https://github.com/Exorsky/too-many-terminals/compare/v0.20.0...HEAD
+[Unreleased]: https://github.com/Exorsky/too-many-terminals/compare/v0.21.0...HEAD
+[0.21.0]: https://github.com/Exorsky/too-many-terminals/compare/v0.20.0...v0.21.0
 [0.20.0]: https://github.com/Exorsky/too-many-terminals/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/Exorsky/too-many-terminals/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/Exorsky/too-many-terminals/compare/v0.17.0...v0.18.0
