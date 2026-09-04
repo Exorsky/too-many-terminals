@@ -42,7 +42,8 @@ marking each session row would print one fact N times — and the session row
 (name, folder chip, two hover buttons) has no room left anyway.
 
 No glyph means no `.env` in that folder. Absence is the empty state, the same
-rule the Pinned strip follows by rendering nothing rather than a placeholder.
+rule the session ledger follows by dropping a chip whose count hits zero
+rather than showing an empty one.
 A glyph at half opacity means the file is there but unreadable.
 
 The glyph is deliberately drawn in `muted-foreground`, not in a status color:
@@ -117,7 +118,7 @@ Two of those are worth the ink:
 - `src-tauri/src/commands.rs` — `pty_spawn` applies the pairs and sends the
   receipt down the existing `on_data` channel before the process starts;
   `env_names(dir)` serves the sidebar the names alone.
-- `src/components/Sidebar.tsx` — `ProjectCard` reads `envNames` for its folder
+- `src/components/Sidebar.tsx` — `FolderPill` reads `envNames` for its folder
   and renders the glyph; `envTooltip` builds the hover text, shown via the
   shared `Tooltip` component (`src/components/ui/tooltip.tsx`) rather than a
   native `title`, so multi-line text gets real styling instead of the OS's

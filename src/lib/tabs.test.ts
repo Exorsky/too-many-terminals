@@ -182,32 +182,6 @@ describe('tabsReducer', () => {
     state = tabsReducer(state, { type: 'pin', tabId: 'a', pinned: false });
     expect(state.tabs[0].pinned).toBe(false);
   });
-
-  it('reorderTab drops before or after the target within its folder', () => {
-    let state = stateWith('a', 'b', 'c');
-    // "after c" lands a at the end — a plain insert-before couldn't reach it.
-    state = tabsReducer(state, { type: 'reorderTab', tabId: 'a', targetId: 'c', position: 'after' });
-    expect(state.tabs.map((t) => t.id)).toEqual(['b', 'c', 'a']);
-
-    state = tabsReducer(state, { type: 'reorderTab', tabId: 'a', targetId: 'b', position: 'before' });
-    expect(state.tabs.map((t) => t.id)).toEqual(['a', 'b', 'c']);
-  });
-
-  it('reorderTab is a no-op onto itself or unknown ids', () => {
-    const state = stateWith('a', 'b');
-    expect(tabsReducer(state, { type: 'reorderTab', tabId: 'a', targetId: 'a', position: 'before' })).toBe(state);
-    expect(tabsReducer(state, { type: 'reorderTab', tabId: 'a', targetId: 'nope', position: 'after' })).toBe(state);
-  });
-
-  it('reorderTab never moves a tab across folders', () => {
-    let state = initialTabsState;
-    state = tabsReducer(state, { type: 'add', tab: makeTab('a', { cwd: '/one' }) });
-    state = tabsReducer(state, { type: 'add', tab: makeTab('b', { cwd: '/two' }) });
-    // Dropping a (/one) onto b (/two) is refused — order is unchanged.
-    const next = tabsReducer(state, { type: 'reorderTab', tabId: 'a', targetId: 'b', position: 'before' });
-    expect(next).toBe(state);
-    expect(next.tabs.map((t) => t.id)).toEqual(['a', 'b']);
-  });
 });
 
 describe('tabBarTabs', () => {

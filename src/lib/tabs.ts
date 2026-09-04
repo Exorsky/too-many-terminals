@@ -64,8 +64,7 @@ export type TabsAction =
   | { type: 'wake'; tabId: string }
   | { type: 'sleep'; tabId: string }
   | { type: 'dirty'; tabId: string; dirty: boolean }
-  | { type: 'pin'; tabId: string; pinned: boolean }
-  | { type: 'reorderTab'; tabId: string; targetId: string; position: 'before' | 'after' };
+  | { type: 'pin'; tabId: string; pinned: boolean };
 
 export function tabsReducer(state: TabsState, action: TabsAction): TabsState {
   switch (action.type) {
@@ -192,20 +191,5 @@ export function tabsReducer(state: TabsState, action: TabsAction): TabsState {
           t.id === action.tabId ? { ...t, pinned: action.pinned } : t,
         ),
       };
-
-    case 'reorderTab': {
-      if (action.tabId === action.targetId) return state;
-      const from = state.tabs.findIndex((t) => t.id === action.tabId);
-      const to = state.tabs.findIndex((t) => t.id === action.targetId);
-      if (from === -1 || to === -1) return state;
-      // Reordering is scoped to a single folder — sessions can't move between
-      // projects, so a drop onto a tab in another folder is a no-op.
-      if (state.tabs[from].cwd !== state.tabs[to].cwd) return state;
-      const tabs = [...state.tabs];
-      const [moved] = tabs.splice(from, 1);
-      const at = tabs.findIndex((t) => t.id === action.targetId);
-      tabs.splice(action.position === 'after' ? at + 1 : at, 0, moved);
-      return { ...state, tabs };
-    }
   }
 }

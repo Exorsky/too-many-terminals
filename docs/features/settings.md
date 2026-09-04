@@ -19,10 +19,6 @@ Two switches, both default `true` (opt-out) and persisted in `settings.json`:
 - **Show Markdown Preview** (`showMarkdownToggle`) — gates
   [`SessionControls`](session-reader.md#session-controls), the Preview/Split
   controls docked to the tab strip.
-- **Show folder paths** (`showFolderPaths`) — gates the nearest-ancestor
-  breadcrumb before each project's name in the sidebar (see
-  [terminals.md](terminals.md#folder-paths)).
-
 ## Notifications
 
 One switch — **Notify when a session needs you** (`notificationsEnabled`,
@@ -60,8 +56,12 @@ in-memory mirror of `AppSettings` with `loadSettings` (once), `patchSettings`
 - `src/lib/settings-store.ts` (+ tests) — shared settings state
 - Wiring: `App.tsx` (`showSettings` state, mutual exclusion with `showHistory`;
   reads `showMarkdownToggle`/`autoSleepMinutes` via `useSettings`),
-  `Sidebar.tsx` (`showSettings`/`onToggleSettings` props, collapsed-rail button; also
-  reads `showFolderPaths` directly via `useSettings` for the folder breadcrumb) and
+  `Sidebar.tsx` (`showSettings`/`onToggleSettings` props, collapsed-rail button) and
   `SidebarFooter.tsx` (the expanded footer's menu item)
+
+  A **Show folder paths** toggle used to live here, gating a breadcrumb on the
+  folder-group header. That header is gone with the folder tree, and folder pills
+  disambiguate two same-named folders on their own (`pillLabel`), so the setting
+  was removed rather than left as a switch that changed nothing.
 - `src-tauri/src/settings.rs` — persisted `AppSettings` (incl. `auto_sleep_minutes`,
   `usage_refresh_seconds`)

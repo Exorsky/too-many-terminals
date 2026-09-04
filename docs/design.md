@@ -102,22 +102,39 @@ common radius in the codebase (32 uses vs. 21 `rounded-md`, 24 `rounded-full`,
 - **`rounded-full`** — dots (status, folder hue, pin count), badges, switches.
 - **`rounded-lg` (4px)** — rare, a couple of larger containers.
 
-A folder or session row is **never** wrapped in its own tinted, bordered
-card by default — that was the pre-redesign look (a colored box per folder)
-and reads as busy once more than three or four are open. Color marks identity
-as one small dot (or, since the folder header's own identity dot was dropped
-in favor of a neutral glyph, nowhere at all in the header — see
-[terminals.md](features/terminals.md#project-folders)); the row itself stays
-borderless and flat, differing from its neighbors only by a hover/active
-background tint (`hover:bg-white/4`, `bg-white/6`–`bg-white/8` for
-active/selected). The one sanctioned exception is **activity, not identity**:
-a folder with a live `working`/`requires_response` session inside earns a
-soft border + background tint (`folderActivity()`, `ProjectCard` in
-`Sidebar.tsx`) — gated on state that changes on its own, same test the
-[status vocabulary](#status-vocabulary) below already applies, and it reverts
-to flat the moment nothing inside it is active. A permanent per-folder card
-would still be the rejected pre-redesign look; a card that only exists while
-it's true is a status signal wearing the same shape.
+A session row is **never** wrapped in its own tinted, bordered card — that was
+the pre-redesign look (a colored box per folder) and read as busy once more than
+three or four were open. A row stays borderless and flat, differing from its
+neighbours only by a hover/active background tint (`hover:bg-white/4`,
+`bg-white/6`–`bg-white/8` for active/selected).
+
+Two passes were spent learning where a status *may* spend shape. The first gave
+a folder holding a live session a soft status-colored border and tint, on the
+grounds that a card which only exists while it's true is a status signal wearing
+the same shape. The reasoning held; the shape didn't scale — a dozen folders
+meant a dozen boxes appearing and vanishing, and the tint said only *that*
+something was live, never how much. The second replaced it with a per-folder
+ribbon of segments. That went too when the folder groups themselves did (see
+[terminals.md](features/terminals.md#the-session-list)). What survived is the
+thinnest mark of the three:
+
+- **A row's [spine](features/terminals.md#row-spine)** — a 2px bar on the left
+  edge, drawn only for `requires_response` and `working`, so live sessions form
+  one column of color down an otherwise flat list. Quiet rows have no spine,
+  which is what makes the ones that do have one worth looking at.
+
+It follows the same rule the tint did — gated on state that changes on its own —
+without introducing a shape that competes with the rows it sits among. The
+lesson worth keeping: when a status wants to be visible, spend **one thin mark
+inside the existing row**, not a container around it.
+
+**Identity gets color, not shape.** A folder's hue (`projectHue(index)`) marks
+it as a dot on a row's second line and as the border-and-tint of its
+[selected pill](features/terminals.md#folders-are-a-filter-not-a-heading). The
+pill is the one place identity is allowed a filled shape, and only while
+selected — a neutral white tint there was invisible against unselected pills
+that all carry the same bright dot, and the hue was already doing this exact job
+two pixels away.
 
 ## Iconography
 
@@ -179,45 +196,74 @@ came down to what kind of content is involved, not taste:
 - **One thing that's always glanceable plus a couple of rarely-used
   actions** → collapse the actions behind a **single trigger + menu**, keep
   the glanceable part always visible. `SidebarFooter` is the model: both
-  usage percentages sit in the open, History/Settings live behind one "⋯"
-  (see [usage-meter.md](features/usage-meter.md)) — two separately hoverable
-  icons would cost the same information for more permanent chrome. Files
-  used to live in this menu too, but it isn't a rarely-used action — it's a
-  workspace-wide panel that defaults to open — so it moved to its own button
-  in the sidebar header, next to Search, where it stays reachable no matter
-  what else is open.
+  usage percentages sit in the open, Search/History/Settings live behind one
+  "⋯" (see [usage-meter.md](features/usage-meter.md)) — two separately
+  hoverable icons would cost the same information for more permanent chrome.
+  Home, Files and the collapse toggle sit beside it as always-visible squares:
+  those are destinations you bounce between while working, not detours. The
+  footer is where all of it ended up once both rows at the top of the sidebar
+  were spent on the list itself — app chrome at the bottom, the list at the
+  top, one question per row.
 - **An action that applies to one specific item, only sometimes** → the
   item's own **right-click context menu**, not a new always-visible hover
   icon. Pin/unpin went through several drafts (a hover pin icon, a corner
   badge) before landing here, next to Rename/Open directory/Close — one menu
   to check instead of a growing row of hover-only icon buttons.
-- **A cross-cutting collection that isn't a folder** → a **strip** above the
-  regular list. See below.
+- **A cross-cutting collection that isn't a folder** → a **count that filters
+  the one list**, not a second copy of it above the first. See below.
+- **A grouping the user thinks in but doesn't read top-to-bottom** → a **row
+  of filter pills**, not nested groups. Folders went from collapsible
+  headings to pills for exactly this: a heading costs a row (plus its own
+  "New session" row) whether or not you are looking inside it, while a pill
+  costs a fifth of one and answers "which folders are open" at a glance. Use
+  a heading only when the group's contents are read as a set.
 
-## The "strip" pattern
+## The ledger pattern
 
-Pinned and "Waiting on you" ([attention-inbox.md](features/attention-inbox.md))
-are the same shape on purpose:
+Pinned, "Waiting on you" and "Just finished" were each a **strip**: a one-line
+header with an icon, a label and a live count badge; a list capped at a max
+height; `shrink-0` so it never scrolled away; and `return null` when empty, so
+the empty state *was* the strip's absence. The rule for a fourth strip was to
+keep asking who filled it — a person (→ `primary`) or the app (→ whichever
+reserved status color matched what it was reporting).
 
-- A one-line header: icon, label, a live count badge.
-- A scrollable list capped at a max height, so a long queue never pushes the
-  folder list off-screen.
-- Returns `null` (zero height, zero cost) when empty — the empty state *is*
-  the strip's absence, never a "nothing here" placeholder.
-- `shrink-0`, fixed between the header and the scrolling folder list, so it
-  never scrolls away.
+That rule was right and the shape was wrong, and it took three strips to see
+why: **every session in a strip also rendered in its folder below.** n sessions
+cost up to 2n rows, the folder list got whatever three capped strips left over,
+and the fix each time a strip felt cramped was to raise its `max-h`, which took
+the space from the list it was already duplicating. The pattern got worse with
+exactly the thing it was meant to help with.
 
-The only difference is who fills it and what color that implies: **Pinned**
-is user-controlled and rendered in `primary` blue; **Waiting on you** fills
-itself from live session state and is rendered in `attention` orange.
-**"Just finished"** ([attention-inbox.md](features/attention-inbox.md)) is the
-predicted third strip, now shipped, and it followed the same rule rather than
-inventing a color: it's app-noticed like Waiting-on-you, but it's reporting
-the `idle`/success outcome rather than something blocking you, so it takes
-`success` green — the color already reserved for that exact meaning — instead
-of a new hue. A fourth strip later should keep asking the same question: did
-a person ask for this (→ `primary`), or did the app notice it (→ whichever
-reserved status color actually matches what it's reporting)?
+The replacement keeps the diagnosis and drops the duplication. A cross-cutting
+collection becomes **one chip in a lens row** — icon, live count, the color its
+status already owns — and clicking it *filters* the single list instead of
+prepending a copy of part of it (`SidebarLens` in `Sidebar.tsx`, see
+[attention-inbox.md](features/attention-inbox.md)). What survives from the strip
+pattern:
+
+- **A live count, always visible, never scrolling.** Above the scroll
+  container, `shrink-0` — same as the strip headers were.
+- **The empty state is absence.** A chip renders only while its count is
+  non-zero, exactly as a strip returned `null`.
+- **The color question is unchanged.** Did a person ask for this
+  (→ `primary`, as `pinned` is), or did the app notice it (→ the reserved
+  status color that matches — `attention`, `warning`, `success`)?
+
+What's new is that adding a fifth collection now costs one chip and no vertical
+space at all, and that the filtered view gets the *whole* sidebar rather than a
+38vh box. The one thing genuinely lost is seeing two collections at once; in
+practice the ledger's counts already answer "is there anything in the other
+one", which is what glancing at two strips was for.
+
+A filtered view is a **momentary lens**, so none of the three filters persist —
+chip, query, or selected folder. Anything a person arranges deliberately —
+pinning, which folders are open and in what order — does. That split is the same
+`primary`-vs-status question asked about state instead of color.
+
+The lens does have to **say what it is**, though. Three filters that compose can
+leave a list quietly shorter for a reason that has scrolled out of view, so
+whatever is active reads out in one line above the list, and clearing is one
+button that clears all three.
 
 ## Discoverability
 
@@ -261,8 +307,8 @@ shipped shape.
 - `src/globals.css`, `src/lib/themes.ts` — token mechanics (see
   [themes.md](features/themes.md))
 - `src/components/Sidebar.tsx` — `TabIndicator` (status vocabulary),
-  `PinnedStrip`/`AttentionStrip` (the strip pattern), folder-group rows
-  (shape rules)
+  `bucketsOf`/`SidebarLens` (the ledger pattern), `FolderBar`/`FolderPill`
+  (grouping as a filter), `spineClass` and `RowMeta` (shape rules)
 - `src/components/SidebarFooter.tsx` — the menu-over-persistent-chrome pattern
 - `src/components/SettingsView.tsx` — the left-rail pattern
 - `src/types.ts` — `PROJECT_COLORS`, `projectHue`

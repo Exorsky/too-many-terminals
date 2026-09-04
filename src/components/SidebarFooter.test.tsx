@@ -27,8 +27,14 @@ function mockStats(stats: SessionUsageStats) {
 
 function renderFooter(overrides: Partial<React.ComponentProps<typeof SidebarFooter>> = {}) {
   const props = {
+    showHome: false,
+    showFiles: false,
     showHistory: false,
     showSettings: false,
+    onGoHome: vi.fn(),
+    onToggleFiles: vi.fn(),
+    onToggleCollapse: vi.fn(),
+    onOpenSearch: vi.fn(),
     onToggleHistory: vi.fn(),
     onToggleSettings: vi.fn(),
     ...overrides,
@@ -37,7 +43,7 @@ function renderFooter(overrides: Partial<React.ComponentProps<typeof SidebarFoot
   return props;
 }
 
-const trigger = () => screen.getByRole('button', { name: 'History, settings' });
+const trigger = () => screen.getByRole('button', { name: 'Search, history, settings' });
 
 afterEach(cleanup);
 

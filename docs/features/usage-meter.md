@@ -8,7 +8,7 @@ Opening it reveals the detail and the rest of the footer's navigation:
 1. **Session** — the 5-hour window: percent used, a progress bar, a live
    countdown to reset.
 2. **This week** — the same, for the 7-day window.
-3. **History / Files / Settings** — the same three destinations the footer
+3. **Search / History / Settings** — the occasional destinations the footer
    always had, now menu items instead of a mismatched row (one wide label
    button next to two bare icon squares). A check mark shows whichever one is
    currently open.

@@ -21,7 +21,7 @@ describe('settings-store', () => {
 
   it('loads exactly once even if called concurrently', async () => {
     vi.mocked(ipc.loadSettings).mockResolvedValue({
-      selectedThemeId: 'default', customThemes: [], showMarkdownToggle: true, showFolderPaths: true, notificationsEnabled: true, autoSleepMinutes: 15, usageRefreshSeconds: 60,
+      selectedThemeId: 'default', customThemes: [], showMarkdownToggle: true, notificationsEnabled: true, autoSleepMinutes: 15, usageRefreshSeconds: 60,
     });
     await Promise.all([loadSettings(), loadSettings(), loadSettings()]);
     expect(ipc.loadSettings).toHaveBeenCalledOnce();

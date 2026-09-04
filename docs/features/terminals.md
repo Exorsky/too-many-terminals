@@ -1,147 +1,169 @@
 # Terminals
 
-## Project folders
+## The session list
 
-Any number of folders can be open at once (`App.tsx` `projects: string[]`), each rendered
-as a flat group in the sidebar: a `Folder` glyph plus the folder name and its session count,
-tab list as its collapsible body. The header glyph is neutral (`text-muted-foreground`), not
-per-folder colored — a folder's hue (`projectHue(index)`, assigned sequentially in the order
-folders were added) still marks it elsewhere, in the Pinned/Attention strips' cross-folder
-chips (see [Pinning a session](#pinning-a-session) below), where a colored dot is doing real
-work disambiguating which folder a listed session belongs to; in the folder's own header,
-that job is already done by the name sitting right there; a second color badge would be
-decoration, not information. A folder isn't boxed in a tinted, bordered card by default
-either — that was the pre-redesign look — but see [Folder activity](#folder-activity) below
-for the one case that now earns one back. Click a folder's header to expand/collapse just
-that folder's tabs; right-click it for **New Claude session** / a shell per `ShellOption`,
-or **Remove folder** (kills its open tabs, no confirmation — closing tabs isn't destructive,
-transcripts stay on disk) — the same three actions the in-body **"New session"** row and
-header hover-X used to split across two places, now one menu that works whether the folder
-is expanded or collapsed. Removal (and now spawning) lives in the context menu rather than a
-permanent header icon so the header row isn't carrying rarely-used actions at all times — the
-same reasoning behind every other per-item action in this sidebar (rename, pin, tab close).
-"Add folder…" (button below the list, or the folder-plus icon in the collapsed rail) opens
-the native picker (`@tauri-apps/plugin-dialog`, `ipc.pickFolder`) and appends a new project;
-picking an already-open folder is a no-op. Each project's expanded body also keeps its own
-**"New session"** row — every tab spawns with its owning folder as `cwd`, from either path.
+Every open session — Claude and shell alike — lives in **one flat list**, sorted by what it's
+doing rather than by which folder it came from. There are no folder groups, no accordions and
+no nesting: thirteen sessions are thirteen rows.
 
-### Folder activity
+That's a deliberate reversal. Sessions used to sit inside collapsible per-folder groups, which
+cost a header row and a "New session" row per folder before a single session appeared, and
+buried a running session three folders down. The flat list trades away per-folder ordering for
+the thing the sidebar is actually for: seeing what needs you.
 
-A folder with a live Claude session inside it is doing something *right now*, which the flat
-row list otherwise treats identically to an idle one. `folderActivity()` (`Sidebar.tsx`) reads
-the worst of a folder's own tab statuses — `requires_response` outranks `working` outranks
-nothing worth flagging — and:
+### Order
 
-- Tints the folder's own container with a soft border + background, reusing the matching
-  reserved status color (`attention` orange or `warning` amber) at low alpha — the same
-  technique the Attention strip's own border already uses, not a new color. This holds
-  whether the folder is expanded or collapsed.
-- While the folder is *collapsed*, also shows a small `MessageCircle`/`Loader2` glyph next to
-  the chevron. Expanded, each row already shows its own `TabIndicator`, so a second copy at
-  the header would just repeat it; collapsed, it's the only surviving signal that something
-  in there needs a look, since collapsing hides every child row's own status dot.
+`sortRank()` (`Sidebar.tsx`) ranks every row, and `sort` is stable so equal ranks keep the
+order you opened them in:
 
-Dormant and exited tabs are excluded — a session with no live process behind it can't be
-"doing something right now" regardless of its last known status.
+1. **Pinned**, whatever it's doing — you put it there on purpose.
+2. **Waiting on you** (`requires_response`).
+3. **Running** (`working`).
+4. **Idle** — alive, finished, nothing pending.
+5. **Quiet** — dormant, `new`, exited, and every shell.
 
-A folder holding the *currently selected* tab gets the same border-and-tint treatment, but
-neutral (`var(--border-hover)`, no status color) — a quiet "you are here" rather than a claim
-that something's happening on its own. Real activity still wins: a folder that's both the
-active one and has a working/waiting session inside shows the status color, not the neutral
-one, since ACTIVITY_TINT is checked first.
+There is no manual ordering to preserve, so dragging a session no longer does anything;
+`tabsReducer`'s `reorderTab` action was removed with the folder groups that gave it meaning.
 
-A working row also gets a second line under it — `ActivityCaption`, from the PreToolUse hook's
-own activity summary (`Tab.statusDetail`, e.g. "editing Sidebar.tsx"). See
-[tab-status-and-naming.md](tab-status-and-naming.md#the-activity-caption) for where that string
-comes from and how it's split into a muted verb and a highlighted target.
+The rank comes from `segOf()`, which mirrors `TabIndicator`'s
+[status vocabulary](../design.md#status-vocabulary) one-for-one. It is deliberately **not**
+derived from `bucketsOf()`: buckets answer "show me what just finished", `segOf` answers
+"what is this session doing". Deriving one from the other is what once ranked a plain `idle`
+session down with the sleepers — `done` requires `justFinished`, so a finished-and-seen
+session fell into no bucket at all while its own row showed a green check.
 
-### Folder paths
+### A row is two lines
 
-When two open folders share a name (or you just can't remember which drive/client a
-project lives under), the name alone doesn't say where it is — the full path was always
-in the row's `title` tooltip, but that means hovering every row to check. `parentPath()`
-(`src/lib/utils.ts`) prefixes the name with its ancestor folders, muted and smaller — the
-sidebar calls it with `levels = 1`, so just the *one* folder nearest the project:
-`… / prog / too-many-terminals`, not a fixed root. An ellipsis marks that there's more above;
-nothing is added when a folder has no ancestor at all (one sitting right off a drive root).
-Gated by **Show folder paths** (`showFolderPaths`, default on — see [settings.md](settings.md)).
-`parentPath` itself still supports showing more (`levels` defaults to 2, and tests cover
-arbitrary counts) — the sidebar just doesn't ask for more than one.
+The name gets the whole first line. Everything else — folder, activity, time — goes on a
+second, smaller line beneath it (`RowMeta`). Cramming the folder chip onto the same line as
+the name left names reading "Commit to ma…" at 260px, which is no name at all.
 
-Two ancestors was the original design, dropped to one after two rounds of truncation bugs: a
-missing shrink priority let the *name* get cut before the path did (fixed by giving the name
-`shrink-0`), and then a `dir="rtl"` trick meant to truncate the path from its *start* instead
-of its end turned out to reorder the path's separate words instead — `unicode-bidi` reorders
-multiple space-separated LTR runs inside an RTL container as blocks, not just flip which edge
-truncates, so the "…" marker visually jumped next to the folder name instead of staying at the
-far end. One ancestor is short enough to make truncation a non-issue in the first place, which
-sidesteps the whole problem rather than trying to solve it with another CSS trick.
+The second line renders **only when it has something to say**, so with one folder open and
+nothing happening, rows stay one line tall. It can carry:
 
-The breadcrumb and the folder name share one line and don't always both fit — the name wins
-that fight regardless: the breadcrumb span is the only one that shrinks (`min-w-0 shrink
-truncate`), the name is `shrink-0`, so it always renders in full. The full path is still
-there in the row's tooltip either way.
+- **The folder** — hue dot plus name, shown only when the visible rows can actually come from
+  different folders (more than one folder open *and* no folder filter active).
+- **What Claude is doing right now** — `Tab.statusDetail` from the PreToolUse hook, split by
+  `splitActivityDetail` into a muted verb and a `warning`-colored target ("editing
+  **Sidebar.tsx**"). See
+  [tab-status-and-naming.md](tab-status-and-naming.md#the-activity-caption).
+- **Time**, right-aligned: how long a `requires_response` session has been waiting, or
+  otherwise **last used**.
+
+### Last used
+
+A tab carries no date of its own — one restored from a past run comes back with nothing but a
+session id — so `useLastUsed()` reads the same transcript mtimes History reads
+(`ipc.listSessions`, one call per open folder, re-read when the session count changes) and
+keys them by session id. The row shows whichever clock is fresher: a status transition this
+run (`statusChangedAt`) or that mtime, formatted with `SidebarFooter`'s `formatDuration`
+("3d 4h ago"). A session mid-turn shows nothing — it was last used *now*, and the activity
+summary already says so.
+
+### Row spine
+
+A 2px bar down a row's left edge, drawn only for `requires_response` (`attention`) and
+`working` (`warning`), so live sessions form one readable column of color down an otherwise
+flat list. Quiet rows have no spine, which is what makes the ones that do have one worth
+looking at. `spineClass()` gives the bar to a live status ahead of the selected row's own
+`primary` bar: the row you're looking at is already obvious from its background tint, whereas
+a session that needs you is exactly what the column exists to surface.
+
+## Folders are a filter, not a heading
+
+Any number of folders can be open at once (`App.tsx` `projects: string[]`). Each is a **pill**
+in a row under the [lens](attention-inbox.md): its accent hue as a dot, its name, its session
+count, and the [credentials glyph](env-loading.md) when it has any. Click one to narrow the
+list to that folder; click it again, or the leading **All** pill, to go back.
+
+The selected pill is drawn in the folder's **own hue** — border and tint — rather than a
+neutral highlight. A white-on-white tint at 10.5px was invisible next to unselected pills that
+all carry the same bright dot, and the hue is already the color spent on identifying this
+folder everywhere else. Two more things guard against "which one did I click": the selected
+pill scrolls itself into view (the row wraps, so a pill can sit below the fold), and the
+folder's name always appears in the lens line above the list.
+
+Pills **wrap** onto a second and third line rather than scrolling sideways — a horizontal
+scroller hides folders behind a gesture a mouse is bad at, and "which folders do I have open"
+is exactly what this row is for. Past three lines it scrolls.
+
+### Naming a pill
+
+`pillLabel()` shows just the folder name until two open folders share one, at which point
+**both** grow their nearest ancestor (`one/api`, `two/api`) and nothing else does. This
+replaces the old **Show folder paths** preference: the breadcrumb it gated lived on the
+folder-group header, which no longer exists, and telling two identically-named folders apart
+is correctness rather than taste — not something to leave off behind a toggle.
+
+### A folder's context menu
+
+Right-click a pill for **New Claude session** / a shell per `ShellOption`, **Open directory**,
+**Import session…**, or **Remove folder** (kills its open tabs, no confirmation — closing tabs
+isn't destructive, transcripts stay on disk). These live in a context menu rather than
+permanent icons so the pill row isn't carrying rarely-used actions at all times.
+
+### Starting something
+
+One **`+`** button at the end of the pill row, and it adapts to what you're looking at:
+
+- A folder is selected (or only one is open) → a flat menu of **Claude** plus each shell,
+  landing in that folder.
+- Several folders open and none selected → one submenu per folder, each with the same items.
+- Always, at the bottom: **Add folder…**, which opens the native picker
+  (`@tauri-apps/plugin-dialog`, `ipc.pickFolder`) and appends a new project; picking an
+  already-open folder is a no-op.
+
+This replaces the per-folder "New session" row that used to sit under every folder group —
+one row per folder, permanently, to offer something you use a few times a day.
 
 ## Pinning a session
 
 Any session can be pinned from its right-click menu (**Pin session** / **Unpin**,
-`Tab.pinned`) so it doesn't need a scroll through unrelated folders to reach. A pinned
-session floats into a **Pinned** strip above the folder list — same visual family as the
-["Waiting on you"](attention-inbox.md) strip below it (primary blue for what you asked for,
-attention orange for what's blocking you), with a live count and a trailing folder-name chip
-since it spans every folder at once. The session still shows in its own folder too; pinning
-doesn't move or hide it. Unpin from either place — the strip and the folder row share the
-same context menu (`Sidebar.tsx` `TabRow`, now taking an optional `showFolder`/`hue` pair
-for cross-folder display). Pin state persists like the rest of the workspace (see
-[workspace persistence](workspace-persistence.md)).
+`Tab.pinned`) so it doesn't need a scroll to reach. A pinned session sorts above everything
+else and carries a small `primary` pin glyph on its row; it also gets a **pinned** chip in the
+[session ledger](attention-inbox.md), which filters the list to just those. Pin state persists
+like the rest of the workspace (see [workspace persistence](workspace-persistence.md)).
 
 ## Searching sessions
 
-A search icon button sits in the sidebar header, next to the collapse toggle — the same
-jump-to behavior [Ctrl+Shift+P](command-palette.md) already had, now with a visible,
-mouse-reachable entry point instead of only a keyboard shortcut. It used to be its own
-full-width row below the header; folding it into the header icon row saves a block of
-vertical chrome before the folder list starts.
+A **Search sessions** item sits in the sidebar footer's "more" menu — the same command palette
+Ctrl+Shift+P opens (see [command-palette.md](command-palette.md)). For narrowing the list
+while you keep looking at it, use the filter field in the lens row instead; the palette is
+modal and closes.
 
-## Reordering (drag & drop)
+## Reordering folders (drag & drop)
 
-Both folder groups and sessions can be reordered by dragging (native HTML5 DnD; Tauri's
-own file-drop handler is turned off via `dragDropEnabled: false` in `tauri.conf.json` so
-the webview receives the drag events). Two things stay put:
+Folder pills can be reordered by dragging (native HTML5 DnD; Tauri's own file-drop handler is
+turned off via `dragDropEnabled: false` in `tauri.conf.json` so the webview receives the drag
+events). Grab a pill, drop it onto another — `App.tsx` `handleReorderProject` splices the
+`projects` array, the new order persists with the rest of the workspace, and the pills re-hue
+by their new index.
 
-- **Folders reorder among folders.** Grab a card by its header and drop it onto another
-  card — `App.tsx` `handleReorderProject` splices the `projects` array (the new order
-  persists like the rest of the workspace, and re-hues the cards by their new index).
-- **Sessions reorder within their own folder.** Drag a `TabRow` onto another row in the
-  same card — `tabsReducer`'s `reorderTab` action moves it. A session **cannot** move into
-  another folder and a folder **cannot** nest inside another: a drop is only accepted when
-  the drag item and target match kind (and, for sessions, share the same `cwd`). The check
-  is synchronous during `dragover` via a shared `dragRef` in `Sidebar`, so cross-folder
-  targets show no indicator at all; the reducer refuses a cross-`cwd` move as a second guard.
+Sessions are **not** draggable: the list derives its own order from status, so there is
+nothing to rearrange.
 
 ### The drop indicator
 
-The valid drop target renders a `DropLine` — a glowing 2px accent bar (`bg-primary`) with a
-leading cap, sitting in the gap the item will fall into rather than outlining the whole row
-(an outline can't say *before* vs *after*). Which side is decided by `dropSide()`: cursor
-above the target's vertical midpoint → `before`, below → `after`, so the line follows the
-pointer between rows. That `'before' | 'after'` position flows all the way through
-`onReorderTab`/`onReorderProject` into the reducer/array splice — which is why a drop can
-land *after* the last row, something a plain insert-before couldn't reach. Each target
-stores its own `dropPos` state and sets it only when the side changes (React bails out of
-identical-value updates), so the line never flickers. Folder groups use `DropLine`'s
-`flush` variant (tucked to the group's own edge); rows let it sit in the `my-0.5` margin
-between them.
+The valid drop target renders a `DropLine` — a glowing 2px accent bar (`bg-primary`) sitting
+in the gap the pill will fall into rather than outlining it (an outline can't say *before* vs
+*after*). The pill row runs across rather than down, so the line is **vertical** and the side
+is decided by `dropSideX()`: cursor left of the pill's horizontal midpoint → `before`, right →
+`after`. That `'before' | 'after'` flows through `onReorderProject` into the array splice —
+which is why a drop can land *after* the last pill, something a plain insert-before couldn't
+reach. Each pill stores its own `dropPos` and sets it only when the side changes (React bails
+out of identical-value updates), so the line never flickers.
 
 ## Sidebar collapse
 
 The sidebar can be hidden to an 11px icon rail (`PanelLeftClose`/`PanelLeftOpen` toggle,
 `App.tsx` `collapsed` state) — tabs render as icon-only buttons (flat across all projects),
-History and "Add folder" stay reachable. Matches the original Electron app's collapse
+under a stacked copy of the [ledger counts](attention-inbox.md#collapsed-rail). The rail has
+no footer, so it keeps its own Home / History / Files / Add folder / Settings squares —
+otherwise collapsing the sidebar would cut that navigation off entirely. Matches the original Electron app's collapse
 behavior, including the width transition (`transition-[width]` on a single shared root
 element — swapping between two early-return roots would remount instead of animating).
 
-The sidebar's "New session" menu opens terminal tabs of two kinds:
+The "+" menu opens terminal tabs of two kinds:
 
 - **Claude** — runs the `claude` CLI (Claude Code) in a pty.
 - **OS shells** — provided by `src-tauri/src/shell.rs` per platform:
@@ -194,7 +216,9 @@ does nothing — the terminal's old copy-on-select/paste-on-right-click is gone.
 
 ## Files
 
-- `src/App.tsx`, `src/components/Sidebar.tsx`, `src/components/Terminal.tsx`,
+- `src/App.tsx`, `src/components/Sidebar.tsx` (`SidebarLens`, `FolderBar`/`FolderPill`,
+  `NewMenu`, `TabRow`/`RowMeta`, `sortRank`/`segOf`, `useLastUsed`, `pillLabel`),
+  `src/components/SidebarFooter.tsx` (app navigation), `src/components/Terminal.tsx`,
   `src/components/terminalCache.ts`, `src/components/ui/context-menu.tsx` (tab right-click menu),
   `src/lib/tabs.ts`, `src/lib/utils.ts` (`folderName`, `parentPath`),
   `src/main.tsx` (global contextmenu suppression)
@@ -202,17 +226,19 @@ does nothing — the terminal's old copy-on-select/paste-on-right-click is gone.
 
 ## Tests
 
-- `src/lib/tabs.test.ts` — tab state transitions, including `rename`, `pin`, and
-  `reorderTab` (same-folder move, no-op guards, cross-folder refusal)
+- `src/lib/tabs.test.ts` — tab state transitions, including `rename` and `pin`
 - `src/lib/utils.test.ts` — `parentPath` (nearest-two-ancestors, ellipsis, fewer-than-two,
   root-level, forward-slash paths, custom level count)
-- `src/components/Sidebar.test.tsx` — tab rows, per-project shell menu, folder
-  expand/collapse, add/remove/spawn via a folder's context menu (collapsed or not),
-  multiple simultaneous folders, empty state, sidebar collapse, double-click rename
-  (commit/cancel/empty-name-discard), drag-to-reorder folders and sessions (and refusal to
-  move a session across folders), the Pinned strip (cross-folder listing, count, exited
-  exclusion, pin/unpin via context menu), the header search button, the folder-paths
-  breadcrumb (shown by default, hidden via settings), and a working folder's activity tint
+- `src/components/Sidebar.test.tsx` — session rows and the flat list's order (pinned →
+  waiting → running → idle → asleep, stable among equals, and a live idle session ranking
+  above a dormant one), the two-line row (folder on its own line, second line dropped when
+  it would say nothing, activity target highlighted, elapsed and last-used), the session
+  ledger and filter field (see [attention-inbox.md](attention-inbox.md)), folder pills
+  (counts, narrowing, the lens naming the selection, pressed state, per-row folder line
+  dropped once one folder deep, falling back to All when the selected folder is removed,
+  the context menu, drag-reorder), the "+" menu in all three shapes, footer and rail
+  navigation, double-click rename (commit/cancel/empty-name-discard), `bucketsOf`,
+  `pillLabel` and `matchesQuery`
 - `cargo test shell::` / `claude::` — per-platform shell lists and claude command shape
 - `cargo test workspace::` — includes the `pinned` field round-tripping and loading as
   unpinned from a workspace file saved before the field existed

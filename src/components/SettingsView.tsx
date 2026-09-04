@@ -161,12 +161,6 @@ function InterfaceCategory() {
         checked={settings.showMarkdownToggle}
         onChange={(v) => patchSettings({ showMarkdownToggle: v })}
       />
-      <SettingRow
-        title="Show folder paths"
-        description="Up to two parent folders before each project's name in the sidebar, so folders that share a name stay easy to tell apart."
-        checked={settings.showFolderPaths}
-        onChange={(v) => patchSettings({ showFolderPaths: v })}
-      />
     </div>
   );
 }

@@ -10,7 +10,7 @@ vi.mock('@/lib/ipc');
 beforeEach(() => {
   resetSettingsForTest();
   vi.mocked(ipc.loadSettings).mockResolvedValue({
-    selectedThemeId: 'default', customThemes: [], showMarkdownToggle: true, showFolderPaths: true, notificationsEnabled: true, autoSleepMinutes: 15, usageRefreshSeconds: 60,
+    selectedThemeId: 'default', customThemes: [], showMarkdownToggle: true, notificationsEnabled: true, autoSleepMinutes: 15, usageRefreshSeconds: 60,
   });
   vi.mocked(ipc.saveSettings).mockResolvedValue(undefined);
 });
@@ -30,13 +30,6 @@ describe('SettingsView', () => {
     render(<SettingsView />);
     await userEvent.click(screen.getByRole('switch', { name: 'Show Markdown Preview' }));
     expect(ipc.saveSettings).toHaveBeenCalledWith(expect.objectContaining({ showMarkdownToggle: false }));
-  });
-
-  it('shows and toggles the folder-paths preference', async () => {
-    render(<SettingsView />);
-    expect(screen.getByText('Show folder paths')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('switch', { name: 'Show folder paths' }));
-    expect(ipc.saveSettings).toHaveBeenCalledWith(expect.objectContaining({ showFolderPaths: false }));
   });
 
   it('toggles the notification preference from the Notifications category', async () => {

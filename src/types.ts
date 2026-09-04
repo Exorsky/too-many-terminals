@@ -168,8 +168,6 @@ export interface AppSettings {
   customThemes: unknown[];
   /** Show the Markdown Preview / Split controls docked to the tab strip. */
   showMarkdownToggle: boolean;
-  /** Show up to two parent folder levels before each project's name in the sidebar. */
-  showFolderPaths: boolean;
   /** Fire a desktop notification when an unfocused session needs input or finishes. */
   notificationsEnabled: boolean;
   /** Minutes an idle, off-screen Claude session may stay running before it's

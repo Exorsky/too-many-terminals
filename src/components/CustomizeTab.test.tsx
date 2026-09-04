@@ -10,7 +10,7 @@ vi.mock('@/lib/ipc');
 beforeEach(() => {
   resetSettingsForTest();
   vi.mocked(ipc.loadSettings).mockResolvedValue({
-    selectedThemeId: 'default', customThemes: [], showMarkdownToggle: true, showFolderPaths: true, notificationsEnabled: true, autoSleepMinutes: 15, usageRefreshSeconds: 60,
+    selectedThemeId: 'default', customThemes: [], showMarkdownToggle: true, notificationsEnabled: true, autoSleepMinutes: 15, usageRefreshSeconds: 60,
   });
   vi.mocked(ipc.saveSettings).mockResolvedValue(undefined);
 });
@@ -33,7 +33,7 @@ describe('CustomizeTab', () => {
     vi.mocked(ipc.loadSettings).mockResolvedValue({
       selectedThemeId: 'my-theme',
       customThemes: [{ id: 'my-theme', name: 'My Theme', colors: {} }],
-      showMarkdownToggle: true, showFolderPaths: true, notificationsEnabled: true, autoSleepMinutes: 15, usageRefreshSeconds: 60,
+      showMarkdownToggle: true, notificationsEnabled: true, autoSleepMinutes: 15, usageRefreshSeconds: 60,
     });
     render(<CustomizeTab />);
     expect(await screen.findByText('My Theme')).toBeInTheDocument();
@@ -82,7 +82,7 @@ describe('CustomizeTab', () => {
     vi.mocked(ipc.loadSettings).mockResolvedValue({
       selectedThemeId: 'my-theme',
       customThemes: [{ id: 'my-theme', name: 'My Theme', colors: {} }],
-      showMarkdownToggle: true, showFolderPaths: true, notificationsEnabled: true, autoSleepMinutes: 15, usageRefreshSeconds: 60,
+      showMarkdownToggle: true, notificationsEnabled: true, autoSleepMinutes: 15, usageRefreshSeconds: 60,
     });
     render(<CustomizeTab />);
     await userEvent.click(await screen.findByLabelText('Delete My Theme'));

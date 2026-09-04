@@ -114,10 +114,6 @@ export default function App() {
     });
   }, []);
 
-  const handleReorderTab = useCallback((tabId: string, targetId: string, position: 'before' | 'after') => {
-    dispatch({ type: 'reorderTab', tabId, targetId, position });
-  }, []);
-
   // Tabs whose pty we intentionally killed to put them to sleep — their
   // incoming pty-exit is expected and must not mark the tab as exited.
   const sleepingRef = useRef<Set<string>>(new Set());
@@ -638,7 +634,6 @@ export default function App() {
         onRemoveProject={handleRemoveProject}
         onImportSession={handleImportSession}
         onReorderProject={handleReorderProject}
-        onReorderTab={handleReorderTab}
         onToggleCollapse={() => setCollapsed((v) => !v)}
       />
       <main className="relative flex-1 min-w-0 flex flex-col" data-terminal-area>

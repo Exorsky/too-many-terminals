@@ -16,9 +16,6 @@ pub struct AppSettings {
     /// Missing in older settings files → filled from `Default` (true), so
     /// it's opt-out, not opt-in.
     pub show_markdown_toggle: bool,
-    /// Show up to two parent folder levels before each project's name in the
-    /// sidebar. Defaults to true.
-    pub show_folder_paths: bool,
     /// Fire a desktop notification when an unfocused Claude session needs input
     /// or finishes. Defaults to true (opt-out) so it works out of the box.
     pub notifications_enabled: bool,
@@ -35,7 +32,6 @@ impl Default for AppSettings {
             selected_theme_id: "default".to_string(),
             custom_themes: Vec::new(),
             show_markdown_toggle: true,
-            show_folder_paths: true,
             notifications_enabled: true,
             auto_sleep_minutes: 15,
             usage_refresh_seconds: 300,
@@ -92,7 +88,6 @@ mod tests {
                 "colors": { "background": "#101010", "primary": "#ffcc00" }
             })],
             show_markdown_toggle: true,
-            show_folder_paths: false,
             notifications_enabled: false,
             auto_sleep_minutes: 30,
             usage_refresh_seconds: 15,
@@ -109,7 +104,6 @@ mod tests {
         let settings = load_settings(tmp.path());
         assert_eq!(settings.selected_theme_id, "amber");
         assert!(settings.show_markdown_toggle);
-        assert!(settings.show_folder_paths);
         assert!(settings.notifications_enabled);
         assert_eq!(settings.auto_sleep_minutes, 15);
         assert_eq!(settings.usage_refresh_seconds, 300);
