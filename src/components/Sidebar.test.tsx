@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, createEvent, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ShellOption, Tab } from '@/types';
@@ -64,6 +64,26 @@ function renderSidebar(overrides: Partial<React.ComponentProps<typeof Sidebar>> 
   };
   const { container } = render(<Sidebar {...props} />);
   return { ...props, container };
+}
+
+/** A fresh mock DataTransfer per drag — the handlers set effectAllowed and
+ *  dropEffect and call setData, none of which jsdom's synthetic drag events
+ *  provide on their own; without it they throw past the assertions. */
+const dt = () => ({ setData: vi.fn(), getData: vi.fn(), effectAllowed: '', dropEffect: '' });
+
+/** Drops on `el` at a given X. jsdom's DragEvent silently ignores `clientX`
+ *  from the event init, so it has to be pinned onto the event itself — and the
+ *  pill row decides its drop side on X, which is the whole point here. */
+function dropAt(el: HTMLElement, clientX: number, dataTransfer: object) {
+  const event = createEvent.drop(el, { dataTransfer });
+  Object.defineProperty(event, 'clientX', { value: clientX });
+  fireEvent(el, event);
+}
+
+/** A 100px-wide pill starting at x=0, so its midpoint is a round 50. */
+function stubWidth(el: HTMLElement) {
+  el.getBoundingClientRect = () =>
+    ({ left: 0, width: 100, top: 0, height: 20, right: 100, bottom: 20 }) as DOMRect;
 }
 
 /** The session list, scoped away from the pill row above it — both hold text
@@ -481,14 +501,41 @@ describe('Sidebar', () => {
       const props = renderSidebar({ projects: [PROJECT, OTHER], tabs: [] });
       const first = screen.getByRole('button', { name: 'project, 0 sessions' });
       const second = screen.getByRole('button', { name: 'other, 0 sessions' });
+      const dataTransfer = dt();
+      stubWidth(second);
 
-      fireEvent.dragStart(first);
-      const rect = { left: 0, width: 100, top: 0, height: 20, right: 100, bottom: 20 };
-      second.getBoundingClientRect = () => rect as DOMRect;
-      fireEvent.dragOver(second, { clientX: 90 });
-      fireEvent.drop(second, { clientX: 90 });
+      fireEvent.dragStart(first, { dataTransfer });
+      fireEvent.dragOver(second, { dataTransfer });
+      dropAt(second, 90, dataTransfer);
 
+      // Past the midpoint, so it lands after the pill it was dropped on —
+      // something a plain insert-before could never reach for the last pill.
       expect(props.onReorderProject).toHaveBeenCalledWith(PROJECT, OTHER, 'after');
+    });
+
+    it('drops a folder before the one it lands on the left half of', () => {
+      const props = renderSidebar({ projects: [PROJECT, OTHER], tabs: [] });
+      const first = screen.getByRole('button', { name: 'project, 0 sessions' });
+      const second = screen.getByRole('button', { name: 'other, 0 sessions' });
+      const dataTransfer = dt();
+      stubWidth(second);
+
+      fireEvent.dragStart(first, { dataTransfer });
+      dropAt(second, 10, dataTransfer);
+
+      expect(props.onReorderProject).toHaveBeenCalledWith(PROJECT, OTHER, 'before');
+    });
+
+    it('refuses a folder dropped onto itself', () => {
+      const props = renderSidebar({ projects: [PROJECT, OTHER], tabs: [] });
+      const pill = screen.getByRole('button', { name: 'project, 0 sessions' });
+      const dataTransfer = dt();
+      stubWidth(pill);
+
+      fireEvent.dragStart(pill, { dataTransfer });
+      dropAt(pill, 10, dataTransfer);
+
+      expect(props.onReorderProject).not.toHaveBeenCalled();
     });
   });
 
