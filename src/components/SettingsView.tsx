@@ -161,6 +161,12 @@ function InterfaceCategory() {
         checked={settings.showMarkdownToggle}
         onChange={(v) => patchSettings({ showMarkdownToggle: v })}
       />
+      <SettingRow
+        title="Compact session list"
+        description="Drop the sidebar's search field and status chips. A 4px spectrum above the list keeps the proportion of waiting, running and sleeping sessions; filter from the command palette instead."
+        checked={settings.compactList}
+        onChange={(v) => patchSettings({ compactList: v })}
+      />
     </div>
   );
 }

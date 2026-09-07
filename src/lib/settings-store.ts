@@ -19,6 +19,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   notificationsEnabled: true,
   autoSleepMinutes: 15,
   usageRefreshSeconds: 300,
+  compactList: false,
 };
 
 let current: AppSettings = { ...DEFAULT_SETTINGS };

@@ -69,42 +69,69 @@ looking at. `spineClass()` gives the bar to a live status ahead of the selected 
 `primary` bar: the row you're looking at is already obvious from its background tint, whereas
 a session that needs you is exactly what the column exists to surface.
 
-## Folders are a filter, not a heading
+## The rail: folders and navigation
 
-Any number of folders can be open at once (`App.tsx` `projects: string[]`). Each is a **pill**
-in a row under the [lens](attention-inbox.md): its accent hue as a dot, its name, its session
-count, and the [credentials glyph](env-loading.md) when it has any. Click one to narrow the
-list to that folder; click it again, or the leading **All** pill, to go back.
+The expanded sidebar is **two columns**: a 44px rail, then the 236px list column. Everything
+in the rail is something the list can't answer — which folder to look at, where to navigate —
+so the column beside it holds only bands that narrow the list, the list itself, and the
+[usage meter](usage-meter.md).
 
-The selected pill is drawn in the folder's **own hue** — border and tint — rather than a
-neutral highlight. A white-on-white tint at 10.5px was invisible next to unselected pills that
-all carry the same bright dot, and the hue is already the color spent on identifying this
-folder everywhere else. Two more things guard against "which one did I click": the selected
-pill scrolls itself into view (the row wraps, so a pill can sit below the fold), and the
-folder's name always appears in the lens line above the list.
+Top of the rail, an **All** square carrying the total session count, then one **square per
+open folder** (`App.tsx` `projects: string[]`), then a dashed **`+`** that adds a folder.
+Below a hairline, the app's destinations: **Home**, **Search sessions**, **History**,
+**File explorer**, **Settings**, **Hide sidebar**.
 
-Pills **wrap** onto a second and third line rather than scrolling sideways — a horizontal
-scroller hides folders behind a gesture a mouse is bad at, and "which folders do I have open"
-is exactly what this row is for. Past three lines it scrolls.
+### Why a column and not a row
 
-### Naming a pill
+Folders used to be pills in a row that **wrapped**: 34px of chrome with three folders open,
+90px with eight, and the first session pushed further down the screen every time you opened a
+project. Vertical space beside the list was empty anyway, so the squares grow into it and the
+bands above the list stop moving. The folder area scrolls on its own once it runs out of room;
+the navigation under it never does.
+
+A square is 28px, which is room for exactly one thing: the folder's **initial**
+(`squareInitial`, the name's own first letter — `one/api` and `two/api` are both "A"). Identity
+is carried by the **hue**, as it is everywhere else; the count rides the top-right corner and
+the [credentials glyph](env-loading.md) the bottom-left. The name is in the tooltip and the
+accessible label.
+
+Clicking a square narrows the list to that folder; clicking it again, or the **All** square,
+goes back. Four things answer "which one did I click": the selected square is drawn in the
+folder's **own hue** at full strength against the others' 30%, **every other square fades to
+35% opacity**, the selected one scrolls itself into view, and the folder's name appears in the
+lens line above the list.
+
+The fade is opacity, not a hide, and hover brings a dimmed square straight back to full — the
+rail still has to answer "which folders are open" while you're filtered into one of them, and
+reaching for a different folder should never mean aiming at something greyed out.
+
+### Naming a square
 
 `pillLabel()` shows just the folder name until two open folders share one, at which point
-**both** grow their nearest ancestor (`one/api`, `two/api`) and nothing else does. This
-replaces the old **Show folder paths** preference: the breadcrumb it gated lived on the
-folder-group header, which no longer exists, and telling two identically-named folders apart
-is correctness rather than taste — not something to leave off behind a toggle.
+**both** grow their nearest ancestor (`one/api`, `two/api`) and nothing else does. It feeds the
+tooltip and the accessible name; `squareInitial` strips that ancestor back off for the glyph.
+This replaced the old **Show folder paths** preference: telling two identically-named folders
+apart is correctness rather than taste — not something to leave off behind a toggle.
 
 ### A folder's context menu
 
-Right-click a pill for **New Claude session** / a shell per `ShellOption`, **Open directory**,
-**Import session…**, or **Remove folder** (kills its open tabs, no confirmation — closing tabs
-isn't destructive, transcripts stay on disk). These live in a context menu rather than
-permanent icons so the pill row isn't carrying rarely-used actions at all times.
+Right-click a square for **New Claude session** / a shell per `ShellOption`, **Open
+directory**, **Import session…**, or **Remove folder** (kills its open tabs, no confirmation —
+closing tabs isn't destructive, transcripts stay on disk). These live in a context menu rather
+than permanent icons so a 44px rail isn't carrying rarely-used actions at all times.
 
-### Starting something
+## Starting a session
 
-One **`+`** button at the end of the pill row, and it adapts to what you're looking at:
+A **New session** row sits directly above the list, in the list's own rhythm: same width, same
+26px height, a dashed border instead of a fill. It's the one control in the panel that
+*creates* rather than narrows, which is why it gets a row of its own rather than an icon in a
+corner.
+
+The row **names its destination** — "New session · api" — so clicking it is never a guess
+about where the session lands. That folder is the one selected in the rail, or the only open
+one; with several open and none selected the row says nothing and the menu asks.
+
+Opening it (`NewMenu`):
 
 - A folder is selected (or only one is open) → a flat menu of **Claude** plus each shell,
   landing in that folder.
@@ -113,8 +140,10 @@ One **`+`** button at the end of the pill row, and it adapts to what you're look
   (`@tauri-apps/plugin-dialog`, `ipc.pickFolder`) and appends a new project; picking an
   already-open folder is a no-op.
 
-This replaces the per-folder "New session" row that used to sit under every folder group —
-one row per folder, permanently, to offer something you use a few times a day.
+This is **not** the per-folder "New session" row v0.21 removed. That one cost one row *per open
+folder*, forever, to offer something you use a few times a day; this is one row for the whole
+list. The rail's dashed **`+`** is a different button doing a different job — it adds a
+*folder* — and the two never compete because each sits against the thing it creates.
 
 ## Pinning a session
 
@@ -126,17 +155,16 @@ like the rest of the workspace (see [workspace persistence](workspace-persistenc
 
 ## Searching sessions
 
-A **Search sessions** item sits in the sidebar footer's "more" menu — the same command palette
-Ctrl+Shift+P opens (see [command-palette.md](command-palette.md)). For narrowing the list
-while you keep looking at it, use the filter field in the lens row instead; the palette is
-modal and closes.
+A **Search sessions** square sits in the rail — the same command palette Ctrl+Shift+P opens
+(see [command-palette.md](command-palette.md)). For narrowing the list while you keep looking
+at it, use the filter field above the list instead; the palette is modal and closes.
 
 ## Reordering folders (drag & drop)
 
-Folder pills can be reordered by dragging (native HTML5 DnD; Tauri's own file-drop handler is
+Folder squares can be reordered by dragging (native HTML5 DnD; Tauri's own file-drop handler is
 turned off via `dragDropEnabled: false` in `tauri.conf.json` so the webview receives the drag
-events). Grab a pill, drop it onto another — `App.tsx` `handleReorderProject` splices the
-`projects` array, the new order persists with the rest of the workspace, and the pills re-hue
+events). Grab a square, drop it onto another — `App.tsx` `handleReorderProject` splices the
+`projects` array, the new order persists with the rest of the workspace, and the squares re-hue
 by their new index.
 
 Sessions are **not** draggable: the list derives its own order from status, so there is
@@ -145,23 +173,30 @@ nothing to rearrange.
 ### The drop indicator
 
 The valid drop target renders a `DropLine` — a glowing 2px accent bar (`bg-primary`) sitting
-in the gap the pill will fall into rather than outlining it (an outline can't say *before* vs
-*after*). The pill row runs across rather than down, so the line is **vertical** and the side
-is decided by `dropSideX()`: cursor left of the pill's horizontal midpoint → `before`, right →
+in the gap the square will fall into rather than outlining it (an outline can't say *before* vs
+*after*). The rail runs down rather than across, so the line is **horizontal** and the side is
+decided by `dropSideY()`: cursor above the square's vertical midpoint → `before`, below →
 `after`. That `'before' | 'after'` flows through `onReorderProject` into the array splice —
-which is why a drop can land *after* the last pill, something a plain insert-before couldn't
-reach. Each pill stores its own `dropPos` and sets it only when the side changes (React bails
+which is why a drop can land *after* the last square, something a plain insert-before couldn't
+reach. Each square stores its own `dropPos` and sets it only when the side changes (React bails
 out of identical-value updates), so the line never flickers.
 
 ## Sidebar collapse
 
-The sidebar can be hidden to an 11px icon rail (`PanelLeftClose`/`PanelLeftOpen` toggle,
-`App.tsx` `collapsed` state) — tabs render as icon-only buttons (flat across all projects),
-under a stacked copy of the [ledger counts](attention-inbox.md#collapsed-rail). The rail has
-no footer, so it keeps its own Home / History / Files / Add folder / Settings squares —
-otherwise collapsing the sidebar would cut that navigation off entirely. Matches the original Electron app's collapse
-behavior, including the width transition (`transition-[width]` on a single shared root
-element — swapping between two early-return roots would remount instead of animating).
+Collapsing (`PanelLeftClose`/`PanelLeftOpen` toggle, `App.tsx` `collapsed` state) drops the
+list column and leaves a 44px rail: sessions as icon-only buttons (flat across all projects),
+under a stacked copy of the [ledger counts](attention-inbox.md#collapsed-rail). That rail is
+still its own component rather than the expanded one narrowed — it shows *sessions* where the
+expanded rail shows folders — so it carries its own Home / Search / History / Files / Add
+folder / Settings squares. The width transition rides a single shared root element
+(`transition-[width]`); swapping between two early-return roots would remount instead of
+animating.
+
+**The toggle itself doesn't move.** Both rails end with the same 28px square 6px off the
+bottom, so collapse and expand happen under the cursor. It briefly didn't: the collapsed rail
+kept its toggle in a header at the top while the expanded rail kept it at the foot, which
+threw the button the full height of the sidebar on every click and made you go find it again.
+A control that toggles a state has to sit in the same place in both states.
 
 The "+" menu opens terminal tabs of two kinds:
 

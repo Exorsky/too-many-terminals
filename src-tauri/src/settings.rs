@@ -24,6 +24,10 @@ pub struct AppSettings {
     pub auto_sleep_minutes: u32,
     /// How often the sidebar re-reads token usage from disk. Defaults to 60.
     pub usage_refresh_seconds: u32,
+    /// Hide the sidebar's search field and status chips, leaving the session
+    /// list and a 4px spectrum. Defaults to false — the full list is the one
+    /// a new workspace should get.
+    pub compact_list: bool,
 }
 
 impl Default for AppSettings {
@@ -35,6 +39,7 @@ impl Default for AppSettings {
             notifications_enabled: true,
             auto_sleep_minutes: 15,
             usage_refresh_seconds: 300,
+            compact_list: false,
         }
     }
 }
@@ -91,6 +96,7 @@ mod tests {
             notifications_enabled: false,
             auto_sleep_minutes: 30,
             usage_refresh_seconds: 15,
+            compact_list: true,
         };
 
         save_settings(tmp.path(), &settings).unwrap();

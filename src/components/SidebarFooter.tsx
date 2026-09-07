@@ -1,19 +1,8 @@
 import { useEffect, useState } from 'react';
-import {
-  CalendarClock, Check, Folder, History, MoreHorizontal, PanelLeftClose, Search, Settings, TerminalSquare, Zap,
-  type LucideIcon,
-} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import * as ipc from '@/lib/ipc';
 import { useSettings } from '@/lib/settings-store';
 import type { SessionUsageStats, UsageWindow } from '@/types';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 
 export function formatDuration(totalSeconds: number): string {
   const s = Math.max(0, Math.round(totalSeconds));
@@ -31,90 +20,79 @@ function barColor(percent: number): string {
   return 'bg-usage';
 }
 
-/** Marks whichever of History/Settings is currently open. */
-function ActiveCheck() {
-  return <span title="Currently open" className="ml-auto flex"><Check size={13} className="text-primary" /></span>;
+/** The two official rate-limit windows, in seconds. Fixed lengths, which is
+ *  what makes the pace mark below computable without a second API field. */
+const WINDOW_SECONDS = { session: 5 * 3600, week: 7 * 86400 } as const;
+
+/** How far the clock has moved through the window, 0–1. `UsageWindow` reports
+ *  only a percentage and a reset time, but the window's length is fixed — so
+ *  its start is the reset minus that length, and "how much of the window is
+ *  gone" needs no backend change. Clamped, because a cached reset time can sit
+ *  slightly in the past. */
+export function paceFraction(resetsAtIso: string, windowSeconds: number, now: number): number {
+  const resetsAt = new Date(resetsAtIso).getTime();
+  if (Number.isNaN(resetsAt)) return 0;
+  const secondsLeft = (resetsAt - now) / 1000;
+  return Math.min(1, Math.max(0, 1 - secondsLeft / windowSeconds));
 }
 
-/** One rate-limit window inside the menu: the official percentage, a progress
- *  bar, and a countdown to reset that ticks locally every second. */
-function UsageRow({ label, icon: Icon, window: w, now }: { label: string; icon: LucideIcon; window: UsageWindow; now: number }) {
+/** One rate-limit window on one line: which window, a bar carrying the pace
+ *  mark, the percentage, and the countdown to reset.
+ *
+ *  The pace mark — a hairline at the clock's position in the window — is the
+ *  point of the row. A bare percentage answers "how much is gone", but the
+ *  question that changes behavior is whether you're burning faster than the
+ *  clock: 42% an hour into a five-hour window and 42% four hours in are
+ *  "slow down" and "you're fine", and the number is the same either way. Fill
+ *  past the mark means the limit runs out before the window does.
+ *
+ *  The mark deliberately doesn't recolor anything. Color stays on the 70/90
+ *  thresholds `barColor` already owns: a threshold warns, the mark informs,
+ *  and folding two signals into one color makes neither readable. */
+function UsageRow({ label, window: w, windowSeconds, now }: {
+  label: string;
+  window: UsageWindow;
+  windowSeconds: number;
+  now: number;
+}) {
   const secondsLeft = (new Date(w.resetsAtIso).getTime() - now) / 1000;
+  const pace = paceFraction(w.resetsAtIso, windowSeconds, now);
+  const ahead = w.percent / 100 > pace;
 
   return (
-    <div className="flex flex-col gap-1.5 px-2 py-1.5">
-      <div className="flex items-center gap-1.5 text-[11px]">
-        <Icon size={11} className="shrink-0 text-primary" />
-        <span className="text-foreground">{label}</span>
-        <span className="tabular-nums text-foreground">{w.percent}%</span>
-        <span className="ml-auto tabular-nums text-muted-foreground shrink-0">resets in {formatDuration(secondsLeft)}</span>
-      </div>
+    <div className="flex items-center gap-1.5 h-[15px] text-[9.5px]">
+      <span className="w-9 shrink-0 text-muted-foreground">{label}</span>
       <div
-        className="h-1 rounded-full bg-border-hover overflow-hidden"
+        className="relative flex-1 min-w-0 h-[3px] rounded-full bg-border-hover"
         role="progressbar"
         aria-label={`${label} usage`}
         aria-valuenow={w.percent}
         aria-valuemin={0}
         aria-valuemax={100}
       >
-        <div className={cn('h-full rounded-full transition-[width] duration-300', barColor(w.percent))} style={{ width: `${w.percent}%` }} />
+        <div className={cn('h-full rounded-full', barColor(w.percent))} style={{ width: `${w.percent}%` }} />
+        <span
+          className="absolute -top-[3px] -bottom-[3px] w-px bg-foreground/55"
+          style={{ left: `${pace * 100}%` }}
+          title={ahead ? 'Burning faster than the clock' : 'Behind the clock — the window outlasts the limit'}
+        />
       </div>
+      <span className="w-6 shrink-0 text-right tabular-nums text-foreground">{w.percent}%</span>
+      <span className="w-11 shrink-0 text-right tabular-nums text-muted-foreground" title="Resets in">
+        {formatDuration(secondsLeft)}
+      </span>
     </div>
   );
 }
 
-interface SidebarFooterProps {
-  showHome: boolean;
-  showFiles: boolean;
-  showHistory: boolean;
-  showSettings: boolean;
-  onGoHome: () => void;
-  onToggleFiles: () => void;
-  onToggleCollapse: () => void;
-  onOpenSearch: () => void;
-  onToggleHistory: () => void;
-  onToggleSettings: () => void;
-}
-
-/** One always-visible navigation square. Home and Files are destinations you
- *  bounce between while working, so they stay in the open rather than behind
- *  the menu — the same call docs/design.md already made for Files. */
-function NavButton({ icon: Icon, label, active, onClick }: {
-  icon: LucideIcon;
-  label: string;
-  active?: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      data-active={active}
-      aria-label={label}
-      title={label}
-      className={cn(
-        'flex items-center justify-center w-6 h-6 rounded-sm shrink-0 border-none cursor-pointer bg-transparent',
-        active ? 'text-foreground bg-white/8' : 'text-muted-foreground hover:text-foreground hover:bg-white/8',
-      )}
-      onClick={onClick}
-    >
-      <Icon size={13} />
-    </button>
-  );
-}
-
-/** The sidebar's bottom row, and now the only place app chrome lives. Both
- *  rows at the top of the sidebar answer a question about *the list* — what to
- *  show, and from where — so navigation moved down here rather than claiming a
- *  third row above it: Home, Files and the collapse toggle as always-visible
- *  squares, both usage percentages glanceable next to them, and the occasional
- *  detours (Search, History, Settings) plus the reset countdowns behind one
- *  "more" menu. History/Settings stay reachable even when usage stats fail to
- *  load — they're navigation, not usage display.
+/** The sidebar's bottom band, and the only thing left in it: how much of each
+ *  rate-limit window is gone. Navigation moved to the rail — it's about the
+ *  app, not about the list — which left this free to spell out in two labeled
+ *  rows what used to be two unnamed numbers behind a lightning bolt and a
+ *  calendar. Nothing renders at all when neither window is available, rather
+ *  than an empty 38px bar.
  *  See docs/features/usage-meter.md. */
-export default function SidebarFooter({
-  showHome, showFiles, showHistory, showSettings,
-  onGoHome, onToggleFiles, onToggleCollapse, onOpenSearch, onToggleHistory, onToggleSettings,
-}: SidebarFooterProps) {
+export default function SidebarFooter() {
   const settings = useSettings();
   const [stats, setStats] = useState<SessionUsageStats | null>(null);
   const [now, setNow] = useState(() => Date.now());
@@ -135,59 +113,25 @@ export default function SidebarFooter({
     return () => clearInterval(timer);
   }, []);
 
+  if (!stats?.session && !stats?.week) return null;
+
   // A live fetch is current by definition. A cached fallback is only as fresh
   // as the last time Claude Code rendered usage itself — which can be hours —
   // so age it rather than passing a stale percentage off as live.
-  const staleMinutes = stats?.fromCache && stats.fetchedAtMs ? Math.floor((now - stats.fetchedAtMs) / 60_000) : 0;
+  const staleMinutes = stats.fromCache && stats.fetchedAtMs ? Math.floor((now - stats.fetchedAtMs) / 60_000) : 0;
 
   return (
-    <div className="flex items-center gap-0.5 h-8 px-1.5 shrink-0 border-t border-border">
-      <NavButton icon={TerminalSquare} label="Home" active={showHome} onClick={onGoHome} />
-      <NavButton icon={Folder} label="File explorer" active={showFiles} onClick={onToggleFiles} />
-      <NavButton icon={PanelLeftClose} label="Hide sidebar" onClick={onToggleCollapse} />
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button
-            type="button"
-            aria-label="Search, history, settings"
-            className="flex items-center gap-2.5 ml-auto h-6 px-1.5 rounded-sm shrink-0 text-[10.5px] text-muted-foreground hover:text-foreground hover:bg-white/8 cursor-pointer bg-transparent border-none font-inherit"
-          >
-            {stats?.session && (
-              <span className="flex items-center gap-1 tabular-nums">
-                <Zap size={11} className="text-primary shrink-0" />{stats.session.percent}%
-              </span>
-            )}
-            {stats?.week && (
-              <span className="flex items-center gap-1 tabular-nums">
-                <CalendarClock size={11} className="text-primary shrink-0" />{stats.week.percent}%
-              </span>
-            )}
-            <MoreHorizontal size={14} className="shrink-0" />
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent side="top" align="end" sideOffset={6} className="w-56">
-          {stats?.session && <UsageRow label="Session" icon={Zap} window={stats.session} now={now} />}
-          {stats?.week && <UsageRow label="This week" icon={CalendarClock} window={stats.week} now={now} />}
-          {staleMinutes >= 5 && (
-            <div className="px-2 pb-1 text-[10px] text-muted-foreground/60 tabular-nums">cached — as of {formatDuration(staleMinutes * 60)} ago</div>
-          )}
-          {(stats?.session || stats?.week) && <DropdownMenuSeparator />}
-          <DropdownMenuItem onClick={onOpenSearch}>
-            <Search size={13} />
-            <span>Search sessions</span>
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={onToggleHistory}>
-            <History size={13} />
-            <span>History</span>
-            {showHistory && <ActiveCheck />}
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={onToggleSettings}>
-            <Settings size={13} />
-            <span>Settings</span>
-            {showSettings && <ActiveCheck />}
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+    <div
+      data-testid="usage-meter"
+      className="flex flex-col gap-0.5 px-2 py-[3px] shrink-0 border-t border-border"
+      title={staleMinutes >= 5 ? `cached — as of ${formatDuration(staleMinutes * 60)} ago` : undefined}
+    >
+      {stats.session && (
+        <UsageRow label="Session" window={stats.session} windowSeconds={WINDOW_SECONDS.session} now={now} />
+      )}
+      {stats.week && (
+        <UsageRow label="Week" window={stats.week} windowSeconds={WINDOW_SECONDS.week} now={now} />
+      )}
     </div>
   );
 }

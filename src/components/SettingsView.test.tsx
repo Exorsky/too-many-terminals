@@ -10,7 +10,7 @@ vi.mock('@/lib/ipc');
 beforeEach(() => {
   resetSettingsForTest();
   vi.mocked(ipc.loadSettings).mockResolvedValue({
-    selectedThemeId: 'default', customThemes: [], showMarkdownToggle: true, notificationsEnabled: true, autoSleepMinutes: 15, usageRefreshSeconds: 60,
+    selectedThemeId: 'default', customThemes: [], showMarkdownToggle: true, notificationsEnabled: true, autoSleepMinutes: 15, usageRefreshSeconds: 60, compactList: false,
   });
   vi.mocked(ipc.saveSettings).mockResolvedValue(undefined);
 });

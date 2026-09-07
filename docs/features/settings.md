@@ -14,11 +14,15 @@ theme system (see [themes.md](themes.md)).
 
 ## Interface
 
-Two switches, both default `true` (opt-out) and persisted in `settings.json`:
+Two switches, persisted in `settings.json`:
 
-- **Show Markdown Preview** (`showMarkdownToggle`) — gates
-  [`SessionControls`](session-reader.md#session-controls), the Preview/Split
-  controls docked to the tab strip.
+- **Show Markdown Preview** (`showMarkdownToggle`, default `true`, opt-out) —
+  gates [`SessionControls`](session-reader.md#session-controls), the
+  Preview/Split controls docked to the tab strip.
+- **Compact session list** (`compactList`, default `false`) — drops the
+  sidebar's search field and status chips, leaving the session list under a 4px
+  [spectrum](attention-inbox.md#the-compact-list). Not a second sidebar: it is
+  the same layout with `SidebarSearch` and `LedgerStrip` simply not rendered.
 ## Notifications
 
 One switch — **Notify when a session needs you** (`notificationsEnabled`,
@@ -56,8 +60,8 @@ in-memory mirror of `AppSettings` with `loadSettings` (once), `patchSettings`
 - `src/lib/settings-store.ts` (+ tests) — shared settings state
 - Wiring: `App.tsx` (`showSettings` state, mutual exclusion with `showHistory`;
   reads `showMarkdownToggle`/`autoSleepMinutes` via `useSettings`),
-  `Sidebar.tsx` (`showSettings`/`onToggleSettings` props, collapsed-rail button) and
-  `SidebarFooter.tsx` (the expanded footer's menu item)
+  `Sidebar.tsx` (`showSettings`/`onToggleSettings` props, the rail's Settings
+  square, and `compactList` via `useSettings`)
 
   A **Show folder paths** toggle used to live here, gating a breadcrumb on the
   folder-group header. That header is gone with the folder tree, and folder pills

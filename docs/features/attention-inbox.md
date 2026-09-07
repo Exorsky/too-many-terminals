@@ -6,10 +6,16 @@ collection that isn't empty: **waiting on you**, **running**, **just finished**,
 rendering a single session row, and clicking one filters the list instead of
 duplicating it.
 
-They share that row with the filter field (`SidebarLens`), because both do the
-same job to the same list — narrow it. Which folder to show is the *other*
-question, and lives in its own row of [folder pills](terminals.md#folders-are-a-filter-not-a-heading)
-below.
+The chips have their own 22px band (`LedgerStrip`), under the full-width filter
+field (`SidebarSearch`). Both narrow the same list, which is why they sit
+together above it — but they stopped *sharing a line*: four chips and a search
+box in one 32px row left the field 92px wide, which is not enough for one word
+of a query. The whole band is gone when every count is zero, so a quiet
+workspace pays nothing for it.
+
+Which folder to show is the *other* question, and lives in the
+[rail](terminals.md#the-rail-folders-and-navigation) beside the list rather than
+in a band above it.
 
 The ledger is the payoff of a simple idea: the app already knows each Claude
 tab's live state from Claude Code's hooks (see
@@ -114,3 +120,20 @@ invisible until you opened the sidebar back up.
   exited/dormant/shell exclusions, a chip narrows the list and clicking it again
   restores it, a filter composes with an active bucket, the lens line names the
   selected folder, and the collapsed rail's stacked counts.
+
+## The compact list
+
+With **Compact session list** on (see [settings.md](settings.md#interface)),
+the search field and the chips are both gone and a 4px **spectrum** takes their
+place: one segment per live state, its width the share of sessions in it —
+`attention` waiting, `warning` running, `success` idle, a flat `border-hover`
+for everything asleep.
+
+It answers "how much of this is asleep" without a word or a number, which is the
+only question 4px can answer. It is deliberately **read-only**: a segment too
+thin to see is also too thin to click, and filtering in compact mode goes
+through the [command palette](command-palette.md) instead.
+
+The spectrum is partitioned by `segOf`, not `bucketsOf` — a proportion bar needs
+every session in exactly one segment, and a tab can sit in two buckets at once
+(pinned *and* waiting on you).

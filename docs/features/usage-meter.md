@@ -1,23 +1,46 @@
 # Usage meter
 
-The sidebar's bottom row is a single always-on strip: both rate-limit
-percentages Anthropic actually enforces, with the **official** numbers —
-the same figures `/usage` prints inside Claude Code — plus a "more" trigger.
-Opening it reveals the detail and the rest of the footer's navigation:
+The sidebar's bottom band is **two labeled rows**, one per rate-limit window
+Anthropic actually enforces, carrying the **official** numbers — the same
+figures `/usage` prints inside Claude Code:
 
-1. **Session** — the 5-hour window: percent used, a progress bar, a live
-   countdown to reset.
-2. **This week** — the same, for the 7-day window.
-3. **Search / History / Settings** — the occasional destinations the footer
-   always had, now menu items instead of a mismatched row (one wide label
-   button next to two bare icon squares). A check mark shows whichever one is
-   currently open.
+```
+Session  ▬▬▬▬│▬▬▬▬▬▬▬▬   42%   3h 45m
+Week     ▬▬│▬▬▬▬▬▬▬▬▬▬   18%   4d 6h
+```
 
-A window the API doesn't return (e.g. no weekly limit on your plan) is
-omitted from both the trigger and the menu, rather than faked. If usage is
-unavailable entirely, the trigger just drops its percentage chips — History,
-Files, and Settings stay reachable regardless, since they're navigation, not
-usage display.
+Which window, a bar, the percentage, and the countdown to reset. Nothing is
+behind a menu any more, because there is no longer a menu: navigation moved to
+the [rail](terminals.md#the-rail-folders-and-navigation), which left the band
+free to spell out what it was compressing.
+
+It was compressing badly. The old strip showed `⚡ 42%  📅 18%` — two numbers
+you had to learn a lightning bolt and a calendar to tell apart, with the labels,
+bars and countdowns hidden in a "more" menu next to Search/History/Settings.
+Two unnamed numbers save 20px and read as neither.
+
+A window the API doesn't return (e.g. no weekly limit on your plan) is omitted
+rather than faked; if neither is available the band renders **nothing at all**,
+rather than an empty 38px bar.
+
+## The pace mark
+
+The hairline crossing each bar is where the **clock** stands in that window —
+fill past it means the limit runs out before the window does.
+
+That mark is the reason the row exists in this shape. A bare percentage answers
+"how much is gone", but the question that changes what you do is whether you're
+burning faster than the clock: 42% one hour into a five-hour window and 42% four
+hours in are "slow down" and "you're fine", and the number is identical.
+
+`paceFraction()` computes it with no backend change. Both windows have a fixed
+length (5 hours, 7 days) and `UsageWindow` already carries `resetsAtIso`, so the
+window's start is the reset minus that length. It clamps to 0–1, because a
+cached reset time can sit slightly in the past.
+
+The mark deliberately **recolors nothing**. Color stays on the 70/90 thresholds
+`barColor` already owns (`usage` → `warning` → `destructive`): a threshold warns,
+the mark informs, and folding two signals into one color makes neither readable.
 
 ## Where the numbers come from
 

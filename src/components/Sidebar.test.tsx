@@ -6,8 +6,8 @@ import type { ShellOption, Tab } from '@/types';
 vi.mock('@/lib/ipc');
 
 import * as ipc from '@/lib/ipc';
-import { resetSettingsForTest } from '@/lib/settings-store';
-import Sidebar, { bucketsOf, matchesQuery, pillLabel } from './Sidebar';
+import { patchSettings, resetSettingsForTest } from '@/lib/settings-store';
+import Sidebar, { bucketsOf, matchesQuery, pillLabel, squareInitial } from './Sidebar';
 
 const SHELLS: ShellOption[] = [
   { id: 'powershell', label: 'PowerShell', command: 'powershell.exe' },
@@ -71,23 +71,24 @@ function renderSidebar(overrides: Partial<React.ComponentProps<typeof Sidebar>> 
  *  provide on their own; without it they throw past the assertions. */
 const dt = () => ({ setData: vi.fn(), getData: vi.fn(), effectAllowed: '', dropEffect: '' });
 
-/** Drops on `el` at a given X. jsdom's DragEvent silently ignores `clientX`
+/** Drops on `el` at a given Y. jsdom's DragEvent silently ignores `clientY`
  *  from the event init, so it has to be pinned onto the event itself — and the
- *  pill row decides its drop side on X, which is the whole point here. */
-function dropAt(el: HTMLElement, clientX: number, dataTransfer: object) {
+ *  rail decides its drop side on Y, which is the whole point here. */
+function dropAt(el: HTMLElement, clientY: number, dataTransfer: object) {
   const event = createEvent.drop(el, { dataTransfer });
-  Object.defineProperty(event, 'clientX', { value: clientX });
+  Object.defineProperty(event, 'clientY', { value: clientY });
   fireEvent(el, event);
 }
 
-/** A 100px-wide pill starting at x=0, so its midpoint is a round 50. */
-function stubWidth(el: HTMLElement) {
+/** A 28px-tall square starting at y=0, so its midpoint is a round 14. */
+function stubRect(el: HTMLElement) {
   el.getBoundingClientRect = () =>
-    ({ left: 0, width: 100, top: 0, height: 20, right: 100, bottom: 20 }) as DOMRect;
+    ({ left: 0, width: 28, top: 0, height: 28, right: 28, bottom: 28 }) as DOMRect;
 }
 
-/** The session list, scoped away from the pill row above it — both hold text
- *  like "project", so an unscoped `getByText` is ambiguous. */
+/** The session list, scoped away from the rail and the new-session row —
+ *  several of them hold text like "project", so an unscoped `getByText` is
+ *  ambiguous. */
 const list = () => screen.getByTestId('session-list');
 
 beforeEach(() => {
@@ -412,8 +413,8 @@ describe('Sidebar', () => {
     });
   });
 
-  describe('folder pills', () => {
-    it('offers All plus one pill per open folder, each with its own count', () => {
+  describe('folder rail', () => {
+    it('offers All plus one square per open folder, each with its own count', () => {
       renderSidebar({
         projects: [PROJECT, OTHER],
         tabs: [makeTab('a'), makeTab('b'), makeTab('c', { cwd: OTHER })],
@@ -438,7 +439,24 @@ describe('Sidebar', () => {
       expect(screen.getByTestId('lens')).toHaveTextContent('other');
     });
 
-    it('marks the selected pill as pressed, and unselects on a second click', async () => {
+    it('fades the folders you did not pick, so the chosen one stands out', async () => {
+      renderSidebar({ projects: [PROJECT, OTHER], tabs: [] });
+      const picked = screen.getByRole('button', { name: 'project, 0 sessions' });
+      const other = screen.getByRole('button', { name: 'other, 0 sessions' });
+
+      // Nothing picked: every folder reads at full strength.
+      expect(picked).not.toHaveAttribute('data-dimmed');
+      expect(other).not.toHaveAttribute('data-dimmed');
+
+      await userEvent.click(picked);
+      expect(picked).not.toHaveAttribute('data-dimmed');
+      expect(other).toHaveAttribute('data-dimmed', 'true');
+
+      await userEvent.click(picked);
+      expect(other).not.toHaveAttribute('data-dimmed');
+    });
+
+    it('marks the selected square as pressed, and unselects on a second click', async () => {
       renderSidebar({ projects: [PROJECT, OTHER], tabs: [makeTab('a')] });
       const pill = screen.getByRole('button', { name: 'project, 1 session' });
 
@@ -474,7 +492,7 @@ describe('Sidebar', () => {
       expect(within(list()).getByText('a')).toBeInTheDocument();
     });
 
-    it('spawns a session from a folder pill\u2019s right-click menu', async () => {
+    it('spawns a session from a folder square\u2019s right-click menu', async () => {
       const props = renderSidebar({ tabs: [] });
       fireEvent.contextMenu(screen.getByRole('button', { name: 'project, 0 sessions' }));
 
@@ -482,7 +500,7 @@ describe('Sidebar', () => {
       expect(props.onNewShellTab).toHaveBeenCalledWith(PROJECT, 'powershell');
     });
 
-    it('removes a folder from its pill\u2019s right-click menu without touching the dialog', async () => {
+    it('removes a folder from its square\u2019s right-click menu without touching the dialog', async () => {
       const props = renderSidebar();
       fireEvent.contextMenu(screen.getByRole('button', { name: 'project, 2 sessions' }));
       await userEvent.click(await screen.findByText('Remove folder'));
@@ -490,38 +508,38 @@ describe('Sidebar', () => {
       expect(props.onAddProject).not.toHaveBeenCalled();
     });
 
-    it('imports a session from a folder pill\u2019s right-click menu', async () => {
+    it('imports a session from a folder square\u2019s right-click menu', async () => {
       const props = renderSidebar();
       fireEvent.contextMenu(screen.getByRole('button', { name: 'project, 2 sessions' }));
       await userEvent.click(await screen.findByText('Import session…'));
       expect(props.onImportSession).toHaveBeenCalledWith(PROJECT);
     });
 
-    it('reorders folders by dragging one pill onto another', () => {
+    it('reorders folders by dragging one square onto another', () => {
       const props = renderSidebar({ projects: [PROJECT, OTHER], tabs: [] });
       const first = screen.getByRole('button', { name: 'project, 0 sessions' });
       const second = screen.getByRole('button', { name: 'other, 0 sessions' });
       const dataTransfer = dt();
-      stubWidth(second);
+      stubRect(second);
 
       fireEvent.dragStart(first, { dataTransfer });
       fireEvent.dragOver(second, { dataTransfer });
-      dropAt(second, 90, dataTransfer);
+      dropAt(second, 24, dataTransfer);
 
-      // Past the midpoint, so it lands after the pill it was dropped on —
-      // something a plain insert-before could never reach for the last pill.
+      // Past the midpoint, so it lands after the square it was dropped on —
+      // something a plain insert-before could never reach for the last one.
       expect(props.onReorderProject).toHaveBeenCalledWith(PROJECT, OTHER, 'after');
     });
 
-    it('drops a folder before the one it lands on the left half of', () => {
+    it('drops a folder above the one it lands on the top half of', () => {
       const props = renderSidebar({ projects: [PROJECT, OTHER], tabs: [] });
       const first = screen.getByRole('button', { name: 'project, 0 sessions' });
       const second = screen.getByRole('button', { name: 'other, 0 sessions' });
       const dataTransfer = dt();
-      stubWidth(second);
+      stubRect(second);
 
       fireEvent.dragStart(first, { dataTransfer });
-      dropAt(second, 10, dataTransfer);
+      dropAt(second, 4, dataTransfer);
 
       expect(props.onReorderProject).toHaveBeenCalledWith(PROJECT, OTHER, 'before');
     });
@@ -530,10 +548,10 @@ describe('Sidebar', () => {
       const props = renderSidebar({ projects: [PROJECT, OTHER], tabs: [] });
       const pill = screen.getByRole('button', { name: 'project, 0 sessions' });
       const dataTransfer = dt();
-      stubWidth(pill);
+      stubRect(pill);
 
       fireEvent.dragStart(pill, { dataTransfer });
-      dropAt(pill, 10, dataTransfer);
+      dropAt(pill, 4, dataTransfer);
 
       expect(props.onReorderProject).not.toHaveBeenCalled();
     });
@@ -581,8 +599,8 @@ describe('Sidebar', () => {
     });
   });
 
-  describe('footer navigation', () => {
-    it('goes Home, opens Files and collapses from the footer', async () => {
+  describe('rail navigation', () => {
+    it('goes Home, opens Files and collapses from the rail', async () => {
       const props = renderSidebar();
       await userEvent.click(screen.getByRole('button', { name: 'Home' }));
       expect(props.onGoHome).toHaveBeenCalled();
@@ -594,16 +612,82 @@ describe('Sidebar', () => {
       expect(props.onToggleCollapse).toHaveBeenCalled();
     });
 
-    it('opens the command palette, history and settings from the footer menu', async () => {
+    it('opens the command palette, history and settings from the rail', async () => {
       const props = renderSidebar();
-      await userEvent.click(screen.getByRole('button', { name: 'Search, history, settings' }));
-
-      await userEvent.click(await screen.findByText('Search sessions'));
+      await userEvent.click(screen.getByRole('button', { name: 'Search sessions' }));
       expect(props.onOpenSearch).toHaveBeenCalled();
 
-      await userEvent.click(screen.getByRole('button', { name: 'Search, history, settings' }));
-      await userEvent.click(await screen.findByText('History'));
+      await userEvent.click(screen.getByRole('button', { name: 'Browse past sessions' }));
       expect(props.onToggleHistory).toHaveBeenCalled();
+
+      await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
+      expect(props.onToggleSettings).toHaveBeenCalled();
+    });
+
+    it('adds a folder from the rail, next to the folders it adds one to', async () => {
+      const props = renderSidebar();
+      await userEvent.click(screen.getByRole('button', { name: 'Add folder' }));
+      expect(props.onAddProject).toHaveBeenCalled();
+    });
+  });
+
+  describe('new session row', () => {
+    it('says which folder the session will land in', () => {
+      renderSidebar({ tabs: [] });
+      const row = screen.getByLabelText('New session');
+      expect(row).toHaveTextContent('New session');
+      expect(row).toHaveTextContent('· project');
+    });
+
+    it('names no folder while several are open and none is picked', () => {
+      renderSidebar({ projects: [PROJECT, OTHER], tabs: [] });
+      const row = screen.getByLabelText('New session');
+      expect(row).toHaveTextContent('New session');
+      expect(row).not.toHaveTextContent('·');
+    });
+
+    it('follows the folder you pick in the rail', async () => {
+      renderSidebar({ projects: [PROJECT, OTHER], tabs: [] });
+      await userEvent.click(screen.getByRole('button', { name: 'other, 0 sessions' }));
+      expect(screen.getByLabelText('New session')).toHaveTextContent('· other');
+    });
+
+    it('sits above the list, not inside it', () => {
+      renderSidebar();
+      expect(within(list()).queryByLabelText('New session')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('compact list', () => {
+    it('drops the filter field and the status chips', () => {
+      patchSettings({ compactList: true });
+      renderSidebar({ tabs: [makeTab('a', { status: 'requires_response' })] });
+
+      expect(screen.queryByLabelText('Filter sessions')).not.toBeInTheDocument();
+      // The spectrum's own name mentions the state, so this has to ask for the
+      // chip rather than for the words.
+      expect(screen.queryByRole('button', { name: /waiting on you/ })).not.toBeInTheDocument();
+      expect(within(list()).getByText('a')).toBeInTheDocument();
+    });
+
+    it('keeps the proportions as a spectrum instead', () => {
+      patchSettings({ compactList: true });
+      renderSidebar({
+        tabs: [
+          makeTab('waits', { status: 'requires_response' }),
+          makeTab('busy', { status: 'working' }),
+          makeTab('asleep', { status: 'new' }),
+          makeTab('gone', { status: 'new' }),
+        ],
+      });
+
+      expect(screen.getByTestId('spectrum')).toHaveAccessibleName('1 waiting on you, 1 running, 2 asleep');
+    });
+
+    it('shows the filter field and chips again when it is off', () => {
+      renderSidebar({ tabs: [makeTab('a', { status: 'requires_response' })] });
+      expect(screen.getByLabelText('Filter sessions')).toBeInTheDocument();
+      expect(screen.queryByTestId('spectrum')).not.toBeInTheDocument();
     });
   });
 
@@ -613,6 +697,23 @@ describe('Sidebar', () => {
       expect(screen.queryByLabelText('New session')).not.toBeInTheDocument();
       await userEvent.click(screen.getByTitle('Show sidebar'));
       expect(props.onToggleCollapse).toHaveBeenCalled();
+    });
+
+    it('leaves the collapse toggle in the same place on both sides of the click', () => {
+      // It used to sit in a header at the top when collapsed and at the foot
+      // of the rail when expanded, so clicking it threw the button the whole
+      // height of the sidebar and you had to go find it again.
+      const lastRailButton = () => {
+        const buttons = within(screen.getByTestId('rail')).getAllByRole('button');
+        return buttons[buttons.length - 1];
+      };
+
+      renderSidebar();
+      expect(lastRailButton()).toHaveAccessibleName('Hide sidebar');
+
+      cleanup();
+      renderSidebar({ collapsed: true });
+      expect(lastRailButton()).toHaveAccessibleName('Show sidebar');
     });
 
     it('stacks the ledger counts on the rail', () => {
@@ -686,6 +787,19 @@ describe('pillLabel', () => {
 
   it('stays the bare name for a folder sitting at a drive root', () => {
     expect(pillLabel('C:\\api', ['C:\\api'])).toBe('api');
+  });
+});
+
+describe('squareInitial', () => {
+  it('is the folder\u2019s own initial, in caps', () => {
+    expect(squareInitial('api')).toBe('A');
+    expect(squareInitial('too-many-terminals')).toBe('T');
+  });
+
+  it('ignores the ancestor pillLabel prefixes onto a colliding name', () => {
+    // `one/api` and `two/api` are both "A" — the hue is what tells them apart.
+    expect(squareInitial('one/api')).toBe('A');
+    expect(squareInitial('two/api')).toBe('A');
   });
 });
 

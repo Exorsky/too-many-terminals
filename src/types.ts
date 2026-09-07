@@ -176,4 +176,8 @@ export interface AppSettings {
   autoSleepMinutes: number;
   /** How often the sidebar re-reads token usage from disk, in seconds. */
   usageRefreshSeconds: number;
+  /** Hide the sidebar's search field and status chips, leaving the session
+   *  list and a 4px spectrum of what everything is doing. For someone who
+   *  knows their sessions by name and filters from the command palette. */
+  compactList: boolean;
 }

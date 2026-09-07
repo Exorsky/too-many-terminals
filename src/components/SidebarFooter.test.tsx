@@ -1,12 +1,11 @@
 import { cleanup, render, screen, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SessionUsageStats } from '@/types';
 
 vi.mock('@/lib/ipc');
 
 import * as ipc from '@/lib/ipc';
-import SidebarFooter, { formatDuration } from './SidebarFooter';
+import SidebarFooter, { formatDuration, paceFraction } from './SidebarFooter';
 
 const IN_2H = new Date(Date.now() + 2 * 60 * 60 * 1000 + 60 * 1000).toISOString();
 // +5h of slack so a slow test run can't round this down to "2d 23h" —
@@ -25,26 +24,6 @@ function mockStats(stats: SessionUsageStats) {
   vi.mocked(ipc.getSessionUsageStats).mockResolvedValue(stats);
 }
 
-function renderFooter(overrides: Partial<React.ComponentProps<typeof SidebarFooter>> = {}) {
-  const props = {
-    showHome: false,
-    showFiles: false,
-    showHistory: false,
-    showSettings: false,
-    onGoHome: vi.fn(),
-    onToggleFiles: vi.fn(),
-    onToggleCollapse: vi.fn(),
-    onOpenSearch: vi.fn(),
-    onToggleHistory: vi.fn(),
-    onToggleSettings: vi.fn(),
-    ...overrides,
-  };
-  render(<SidebarFooter {...props} />);
-  return props;
-}
-
-const trigger = () => screen.getByRole('button', { name: 'Search, history, settings' });
-
 afterEach(cleanup);
 
 describe('formatDuration', () => {
@@ -56,61 +35,79 @@ describe('formatDuration', () => {
   });
 });
 
+describe('paceFraction', () => {
+  const now = Date.parse('2026-01-01T12:00:00Z');
+  const FIVE_HOURS = 5 * 3600;
+  const at = (hoursAhead: number) => new Date(now + hoursAhead * 3600 * 1000).toISOString();
+
+  it('is how much of the window the clock has already spent', () => {
+    // Resets in 3h45m, so 1h15m of a 5h window is gone.
+    expect(paceFraction(at(3.75), FIVE_HOURS, now)).toBeCloseTo(0.25, 5);
+    expect(paceFraction(at(2.5), FIVE_HOURS, now)).toBeCloseTo(0.5, 5);
+  });
+
+  it('clamps rather than running off the bar', () => {
+    // A cached reset time can sit in the past, or further out than the window.
+    expect(paceFraction(at(-1), FIVE_HOURS, now)).toBe(1);
+    expect(paceFraction(at(9), FIVE_HOURS, now)).toBe(0);
+  });
+
+  it('reads an unparseable time as the start of the window', () => {
+    expect(paceFraction('not a date', FIVE_HOURS, now)).toBe(0);
+  });
+});
+
 describe('SidebarFooter', () => {
-  it('keeps History/Settings reachable even when usage is unavailable', async () => {
-    mockStats({ available: false, session: null, week: null, fetchedAtMs: null, fromCache: false });
-    const props = renderFooter();
-    await vi.waitFor(() => expect(ipc.getSessionUsageStats).toHaveBeenCalled());
-
-    expect(screen.queryByText(/%/)).not.toBeInTheDocument();
-    await userEvent.click(trigger());
-    await userEvent.click(await screen.findByText('History'));
-    expect(props.onToggleHistory).toHaveBeenCalled();
-  });
-
-  it('shows both percentages on the trigger without opening the menu', async () => {
+  it('names each window rather than leaving two bare numbers', async () => {
     mockStats(STATS);
-    renderFooter();
-    expect(await screen.findByText('14%')).toBeInTheDocument();
+    render(<SidebarFooter />);
+
+    expect(await screen.findByText('Session')).toBeInTheDocument();
+    expect(screen.getByText('Week')).toBeInTheDocument();
+    expect(screen.getByText('14%')).toBeInTheDocument();
     expect(screen.getByText('16%')).toBeInTheDocument();
-    expect(screen.queryByText(/resets in/)).not.toBeInTheDocument();
   });
 
-  it('reveals reset countdowns and bars inside the menu', async () => {
+  it('shows the countdown to reset on the row itself, not behind a menu', async () => {
     mockStats(STATS);
-    renderFooter();
-    await screen.findByText('14%');
-    await userEvent.click(trigger());
-    expect(await screen.findByText(/resets in 2h/)).toBeInTheDocument();
-    expect(screen.getByText(/resets in 3d/)).toBeInTheDocument();
+    render(<SidebarFooter />);
+
+    expect(await screen.findByText(/^2h/)).toBeInTheDocument();
+    expect(screen.getByText(/^3d/)).toBeInTheDocument();
     expect(screen.getByRole('progressbar', { name: 'Session usage' })).toHaveAttribute('aria-valuenow', '14');
+  });
+
+  it('renders nothing at all when neither window is available', async () => {
+    mockStats({ available: false, session: null, week: null, fetchedAtMs: null, fromCache: false });
+    render(<SidebarFooter />);
+
+    await vi.waitFor(() => expect(ipc.getSessionUsageStats).toHaveBeenCalled());
+    expect(screen.queryByTestId('usage-meter')).not.toBeInTheDocument();
   });
 
   it('omits a window the API did not report', async () => {
     mockStats({ ...STATS, week: null });
-    renderFooter();
-    await screen.findByText('14%');
-    expect(screen.queryByText('16%')).not.toBeInTheDocument();
-    await userEvent.click(trigger());
-    expect(screen.queryByText('This week')).not.toBeInTheDocument();
+    render(<SidebarFooter />);
+
+    expect(await screen.findByText('Session')).toBeInTheDocument();
+    expect(screen.queryByText('Week')).not.toBeInTheDocument();
   });
 
   it('flags a stale cached fallback rather than presenting it as live', async () => {
     mockStats({ ...STATS, fromCache: true, fetchedAtMs: Date.now() - 90 * 60 * 1000 });
-    renderFooter();
-    await screen.findByText('14%');
-    await userEvent.click(trigger());
-    expect(await screen.findByText('cached — as of 1h 30m ago')).toBeInTheDocument();
+    render(<SidebarFooter />);
+
+    await screen.findByText('Session');
+    expect(screen.getByTestId('usage-meter')).toHaveAttribute('title', 'cached — as of 1h 30m ago');
   });
 
-  it('checkmarks whichever of History/Settings is currently open', async () => {
+  it('marks where the clock stands, so fill past it reads as burning fast', async () => {
     mockStats(STATS);
-    renderFooter({ showHistory: true });
-    await screen.findByText('14%');
-    await userEvent.click(trigger());
-    const historyItem = (await screen.findByText('History')).closest('[role="menuitem"]') as HTMLElement;
-    expect(within(historyItem).getByTitle('Currently open')).toBeInTheDocument();
-    const settingsItem = screen.getByText('Settings').closest('[role="menuitem"]') as HTMLElement;
-    expect(within(settingsItem).queryByTitle('Currently open')).not.toBeInTheDocument();
+    render(<SidebarFooter />);
+
+    await screen.findByText('Session');
+    // 2h1m left of a 5h window: ~60% of the window gone against 14% used.
+    const bar = screen.getByRole('progressbar', { name: 'Session usage' });
+    expect(within(bar).getByTitle(/Behind the clock/)).toBeInTheDocument();
   });
 });

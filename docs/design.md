@@ -193,17 +193,26 @@ came down to what kind of content is involved, not taste:
 - **Peers the user actively switches between while working** → a **tab
   strip**, not a rail. Open terminal/file tabs are equals you bounce between
   mid-task; a rail would frame them as categories, which they aren't.
-- **One thing that's always glanceable plus a couple of rarely-used
-  actions** → collapse the actions behind a **single trigger + menu**, keep
-  the glanceable part always visible. `SidebarFooter` is the model: both
-  usage percentages sit in the open, Search/History/Settings live behind one
-  "⋯" (see [usage-meter.md](features/usage-meter.md)) — two separately
-  hoverable icons would cost the same information for more permanent chrome.
-  Home, Files and the collapse toggle sit beside it as always-visible squares:
-  those are destinations you bounce between while working, not detours. The
-  footer is where all of it ended up once both rows at the top of the sidebar
-  were spent on the list itself — app chrome at the bottom, the list at the
-  top, one question per row.
+- **App-level destinations, next to a screen that isn't about them** → a
+  **vertical rail** beside the content, not a band above or below it. The
+  sidebar's Home / Search / History / Files / Settings / collapse squares live
+  in a 44px rail (see
+  [terminals.md](features/terminals.md#the-rail-folders-and-navigation)) for
+  one reason: none of them is a question about *the session list*, so none
+  should cost the list a row. The same rail holds the open folders, which was
+  the bigger win — as a wrapping row of pills their band was 34px tall with
+  three folders and 90px with eight, so the list jumped every time a project
+  was opened. A column grows into space that was already empty.
+- **A measurement worth glancing at** → give it **words**, or don't show it.
+  `SidebarFooter` spent a round as `⚡ 42%  📅 18%` with the labels, bars and
+  countdowns folded into a "⋯" menu; that saved 20px and produced two numbers
+  nobody could tell apart. It is now two labeled rows — window, bar,
+  percentage, countdown (see [usage-meter.md](features/usage-meter.md)). A
+  meter you have to decode is not a meter.
+- **A second signal on the same mark** → a **different channel**, never a
+  second meaning for the color. The usage bar's pace mark (where the clock
+  stands in the window) is a hairline, not a recolor: color already carries
+  the 70/90 thresholds, and a threshold warns while a mark informs.
 - **An action that applies to one specific item, only sometimes** → the
   item's own **right-click context menu**, not a new always-visible hover
   icon. Pin/unpin went through several drafts (a hover pin icon, a corner
@@ -211,12 +220,20 @@ came down to what kind of content is involved, not taste:
   to check instead of a growing row of hover-only icon buttons.
 - **A cross-cutting collection that isn't a folder** → a **count that filters
   the one list**, not a second copy of it above the first. See below.
-- **A grouping the user thinks in but doesn't read top-to-bottom** → a **row
-  of filter pills**, not nested groups. Folders went from collapsible
-  headings to pills for exactly this: a heading costs a row (plus its own
-  "New session" row) whether or not you are looking inside it, while a pill
-  costs a fifth of one and answers "which folders are open" at a glance. Use
-  a heading only when the group's contents are read as a set.
+- **A grouping the user thinks in but doesn't read top-to-bottom** → a
+  **filter control**, not nested groups. Folders went from collapsible
+  headings to pills to rail squares for exactly this: a heading costs a row
+  (plus its own "New session" row) whether or not you are looking inside it,
+  while a filter costs a fraction of one and answers "which folders are open"
+  at a glance. Use a heading only when the group's contents are read as a set.
+- **The one control that creates rather than narrows** → give it a **row in
+  the list's own rhythm**, and make it name what it will create. The sidebar's
+  "New session · api" row sits directly on the list, same width and height as
+  a session, dashed instead of filled. Everything else above the list narrows
+  it; this is the exception, so it looks like the thing it makes rather than
+  like the chrome around it. Two creating controls never share a corner —
+  "add folder" is a square in the rail against the folders, "new session" is
+  a row against the sessions.
 
 ## The ledger pattern
 
