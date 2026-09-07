@@ -11,6 +11,50 @@ listed here; see `git log` for the full history.
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-09-07
+
+### Added
+
+- **A "New session" row above the list.** The one control in the sidebar that
+  creates rather than filters now gets its own row, in the list's own rhythm,
+  and it names where the session will land — "New session · api" — so clicking
+  it is never a guess. The old `+` at the end of the folder row is gone; the
+  rail's dashed `+` still adds a folder.
+- **Compact session list** (Settings → Interface). Drops the search field and
+  the status chips, leaving the sessions under a 4px spectrum: one segment per
+  live state, its width the share of sessions in it. For when you know your
+  sessions by name and filter from the command palette.
+
+### Changed
+
+- **Picking a folder fades the others.** The unselected squares in the rail
+  drop to 35% opacity so the one you filtered to is unmistakable; hovering
+  any of them brings it straight back, so switching folders never means
+  aiming at something greyed out.
+- **Folders and navigation moved to a rail.** The sidebar is now two columns:
+  a 44px rail on the left holding every open folder as a colored square, plus
+  Home, Search, History, Files, Settings and the collapse toggle — and the
+  session list beside it. Folder pills used to wrap, so the chrome above the
+  list grew every time you opened another project and the list jumped down the
+  screen. A column doesn't wrap.
+- **The search field got the whole width.** It used to share 32px with four
+  status chips, which left 92px — not enough for one word. Search and the
+  chips now have a band each, and the chips' band disappears entirely when
+  nothing is running, waiting or pinned.
+- **Usage says what it is measuring.** The footer's `⚡ 42%  📅 18%` is now two
+  labeled rows — Session and Week, each with a bar, its percentage and the
+  countdown to reset, all in the open instead of behind a "⋯" menu. Each bar
+  carries a mark for where the clock stands in that window: fill past the mark
+  means you're burning the limit faster than the window is passing. When
+  neither window is available the band renders nothing at all.
+
+### Fixed
+
+- **The collapse toggle stopped jumping.** It sat at the bottom of the rail
+  when the sidebar was open and at the top when it was collapsed, so every
+  click threw the button the full height of the sidebar. Both are at the
+  bottom now — collapse and expand happen under the cursor.
+
 ## [0.21.0] - 2026-09-04
 
 ### Changed
@@ -197,7 +241,8 @@ listed here; see `git log` for the full history.
 - The transcript reader now renders pipe tables, nested/checkbox lists,
   italics, autolinks, and horizontal rules.
 
-[Unreleased]: https://github.com/Exorsky/too-many-terminals/compare/v0.21.0...HEAD
+[Unreleased]: https://github.com/Exorsky/too-many-terminals/compare/v0.22.0...HEAD
+[0.22.0]: https://github.com/Exorsky/too-many-terminals/compare/v0.21.0...v0.22.0
 [0.21.0]: https://github.com/Exorsky/too-many-terminals/compare/v0.20.0...v0.21.0
 [0.20.0]: https://github.com/Exorsky/too-many-terminals/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/Exorsky/too-many-terminals/compare/v0.18.0...v0.19.0
