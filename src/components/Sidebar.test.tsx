@@ -1,4 +1,4 @@
-import { cleanup, createEvent, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, createEvent, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ShellOption, Tab } from '@/types';
@@ -7,7 +7,7 @@ vi.mock('@/lib/ipc');
 
 import * as ipc from '@/lib/ipc';
 import { patchSettings, resetSettingsForTest } from '@/lib/settings-store';
-import Sidebar, { bucketsOf, matchesQuery, pillLabel, squareInitial } from './Sidebar';
+import Sidebar, { bucketsOf, matchesQuery, pillLabel, railWorthy, squareInitial } from './Sidebar';
 
 const SHELLS: ShellOption[] = [
   { id: 'powershell', label: 'PowerShell', command: 'powershell.exe' },
@@ -62,8 +62,16 @@ function renderSidebar(overrides: Partial<React.ComponentProps<typeof Sidebar>> 
     onToggleCollapse: vi.fn(),
     ...overrides,
   };
-  const { container } = render(<Sidebar {...props} />);
-  return { ...props, container };
+  const { container, rerender } = render(<Sidebar {...props} />);
+  return {
+    ...props,
+    container,
+    /** Re-renders the *same* Sidebar with a prop changed, so its internal
+     *  filter state survives — which is the whole point when the thing under
+     *  test is "collapsing keeps the filter you set". */
+    setProps: (over: Partial<React.ComponentProps<typeof Sidebar>>) =>
+      rerender(<Sidebar {...props} {...over} />),
+  };
 }
 
 /** A fresh mock DataTransfer per drag — the handlers set effectAllowed and
@@ -588,7 +596,9 @@ describe('Sidebar', () => {
     it('always offers Add folder…', async () => {
       const props = renderSidebar({ tabs: [] });
       await userEvent.click(screen.getByLabelText('New session'));
-      await userEvent.click(await screen.findByText('Add folder…'));
+      // The rail's name panel offers one too, so this has to ask the menu.
+      const menu = await screen.findByRole('menu');
+      await userEvent.click(within(menu).getByText('Add folder…'));
       expect(props.onAddProject).toHaveBeenCalled();
     });
 
@@ -628,6 +638,83 @@ describe('Sidebar', () => {
       const props = renderSidebar();
       await userEvent.click(screen.getByRole('button', { name: 'Add folder' }));
       expect(props.onAddProject).toHaveBeenCalled();
+    });
+  });
+
+  describe('folder name panel', () => {
+    const panel = () => screen.getByTestId('folder-names');
+
+    it('stays out of the way until the rail is asked', () => {
+      renderSidebar({ projects: [PROJECT, OTHER] });
+      expect(panel()).toHaveAttribute('aria-hidden', 'true');
+    });
+
+    it('spells out every open folder, not one at a time', () => {
+      // The whole point: `clients/api` and `internal/api` are both "A", and a
+      // per-square tooltip can never put them side by side.
+      renderSidebar({ projects: ['/w/clients/api', '/w/internal/api'], tabs: [] });
+      fireEvent.focus(screen.getByRole('button', { name: 'clients/api, 0 sessions' }));
+
+      expect(panel()).toHaveAttribute('aria-hidden', 'false');
+      expect(within(panel()).getByText('clients/')).toBeInTheDocument();
+      expect(within(panel()).getByText('internal/')).toBeInTheDocument();
+      expect(within(panel()).getAllByText('api')).toHaveLength(2);
+    });
+
+    it('opens on focus without the pointer’s grace period', () => {
+      renderSidebar({ projects: [PROJECT, OTHER] });
+      fireEvent.focus(screen.getByRole('button', { name: 'project, 2 sessions' }));
+      expect(panel()).toHaveAttribute('aria-hidden', 'false');
+    });
+
+    it('waits out the hover delay before opening', () => {
+      vi.useFakeTimers();
+      try {
+        renderSidebar({ projects: [PROJECT, OTHER] });
+        // A pointer crossing the rail on its way to the list hasn't asked.
+        fireEvent.mouseEnter(screen.getByRole('button', { name: 'project, 2 sessions' }).parentElement!.parentElement!);
+        expect(panel()).toHaveAttribute('aria-hidden', 'true');
+        act(() => { vi.advanceTimersByTime(300); });
+        expect(panel()).toHaveAttribute('aria-hidden', 'false');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('picks a folder by name, the same as clicking its square', async () => {
+      renderSidebar({ projects: [PROJECT, OTHER], tabs: [makeTab('here'), makeTab('there', { cwd: OTHER })] });
+      fireEvent.focus(screen.getByRole('button', { name: 'project, 1 session' }));
+
+      await userEvent.click(within(panel()).getByText('other'));
+      expect(within(list()).getByText('there')).toBeInTheDocument();
+      expect(within(list()).queryByText('here')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'other, 1 session' })).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    it('adds a folder from the panel too', async () => {
+      const props = renderSidebar({ projects: [PROJECT] });
+      fireEvent.focus(screen.getByRole('button', { name: 'project, 2 sessions' }));
+      await userEvent.click(within(panel()).getByText('Add folder…'));
+      expect(props.onAddProject).toHaveBeenCalled();
+    });
+
+    it('lights the square when its row is hovered, so the letter gets learned', async () => {
+      renderSidebar({ projects: [PROJECT, OTHER], tabs: [] });
+      fireEvent.focus(screen.getByRole('button', { name: 'project, 0 sessions' }));
+      const square = screen.getByRole('button', { name: 'other, 0 sessions' });
+
+      await userEvent.hover(within(panel()).getByText('other'));
+      expect(square.className).toContain('bg-white/5');
+    });
+
+    it('keeps a dimmed folder from staying faded under the cursor', async () => {
+      renderSidebar({ projects: [PROJECT, OTHER], tabs: [] });
+      await userEvent.click(screen.getByRole('button', { name: 'project, 0 sessions' }));
+      const other = screen.getByRole('button', { name: 'other, 0 sessions' });
+      expect(other).toHaveAttribute('data-dimmed', 'true');
+
+      await userEvent.hover(within(panel()).getByText('other'));
+      expect(other).not.toHaveAttribute('data-dimmed');
     });
   });
 
@@ -700,20 +787,19 @@ describe('Sidebar', () => {
     });
 
     it('leaves the collapse toggle in the same place on both sides of the click', () => {
-      // It used to sit in a header at the top when collapsed and at the foot
-      // of the rail when expanded, so clicking it threw the button the whole
-      // height of the sidebar and you had to go find it again.
-      const lastRailButton = () => {
-        const buttons = within(screen.getByTestId('rail')).getAllByRole('button');
-        return buttons[buttons.length - 1];
-      };
+      // It used to sit in a header at the top when collapsed and at the foot of
+      // the rail when expanded, so clicking it threw the button the whole
+      // height of the sidebar and you had to go find it again. Which end it
+      // lives at matters less than that both ends agree.
+      const firstRailButton = () =>
+        within(screen.getByTestId('rail')).getAllByRole('button')[0];
 
       renderSidebar();
-      expect(lastRailButton()).toHaveAccessibleName('Hide sidebar');
+      expect(firstRailButton()).toHaveAccessibleName('Hide sidebar');
 
       cleanup();
       renderSidebar({ collapsed: true });
-      expect(lastRailButton()).toHaveAccessibleName('Show sidebar');
+      expect(firstRailButton()).toHaveAccessibleName('Show sidebar');
     });
 
     it('stacks the ledger counts on the rail', () => {
@@ -733,6 +819,78 @@ describe('Sidebar', () => {
       renderSidebar({ collapsed: true, tabs: [makeTab('a', { status: 'idle' })] });
       expect(screen.queryByTitle(/waiting on you/)).not.toBeInTheDocument();
       expect(screen.queryByTitle(/just finished/)).not.toBeInTheDocument();
+    });
+
+    const squareNames = () => screen.getAllByRole('button')
+      .filter((b) => b.hasAttribute('data-session-square'))
+      .map((b) => b.getAttribute('aria-label'));
+
+    it('orders squares by status, not by the order tabs were opened', () => {
+      renderSidebar({
+        projects: [PROJECT, OTHER],
+        collapsed: true,
+        tabs: [
+          makeTab('quiet-here', { status: 'new' }),
+          makeTab('needs-there', { status: 'requires_response', cwd: OTHER }),
+          makeTab('busy-here', { status: 'working' }),
+        ],
+      });
+      expect(squareNames()).toEqual([
+        'needs-there, other', 'busy-here, project', 'quiet-here, project',
+      ]);
+    });
+
+    it('keeps the folder you filtered to when the sidebar folds away', async () => {
+      // Collapsing narrows the sidebar; it must not hand back a different one.
+      // The filter can only be set while expanded, so it has to survive the
+      // fold — hence a rerender rather than a fresh mount.
+      const { setProps } = renderSidebar({
+        projects: [PROJECT, OTHER],
+        tabs: [makeTab('here'), makeTab('there', { cwd: OTHER })],
+      });
+      await userEvent.click(screen.getByRole('button', { name: 'other, 1 session' }));
+      expect(within(list()).queryByText('here')).not.toBeInTheDocument();
+
+      setProps({ collapsed: true });
+      expect(squareNames()).toEqual(['there, other']);
+    });
+
+    it('leaves out sessions that were auto-slept', () => {
+      renderSidebar({
+        collapsed: true,
+        tabs: [
+          makeTab('awake', { status: 'idle' }),
+          makeTab('asleep', { status: 'idle', dormant: true }),
+          makeTab('dead', { status: 'idle', exited: true }),
+        ],
+      });
+      const names = squareNames();
+
+      expect(names).toContain('awake, project');
+      // Exited keeps its square — the process is gone, the scrollback isn't.
+      expect(names).toContain('dead, project');
+      expect(names).not.toContain('asleep, project');
+    });
+
+    it('keeps the session you are looking at, even once it falls asleep', () => {
+      renderSidebar({
+        collapsed: true,
+        activeTabId: 'napping',
+        tabs: [makeTab('awake'), makeTab('napping', { dormant: true })],
+      });
+      expect(squareNames()).toContain('napping, project');
+    });
+
+    it('counts the filtered list, not every session ever opened', async () => {
+      renderSidebar({
+        projects: [PROJECT, OTHER],
+        collapsed: true,
+        tabs: [
+          makeTab('needs-here', { status: 'requires_response' }),
+          makeTab('needs-there', { status: 'requires_response', cwd: OTHER }),
+        ],
+      });
+      expect(screen.getByTitle('2 waiting on you')).toBeInTheDocument();
     });
 
     it('keeps its own navigation, since it has no footer', async () => {
@@ -787,6 +945,20 @@ describe('pillLabel', () => {
 
   it('stays the bare name for a folder sitting at a drive root', () => {
     expect(pillLabel('C:\\api', ['C:\\api'])).toBe('api');
+  });
+});
+
+describe('railWorthy', () => {
+  it('drops a sleeping session and keeps everything else alive', () => {
+    expect(railWorthy(makeTab('a', { status: 'working' }), null)).toBe(true);
+    expect(railWorthy(makeTab('a', { kind: 'shell' }), null)).toBe(true);
+    // Exited stays: its output is still there to read.
+    expect(railWorthy(makeTab('a', { exited: true }), null)).toBe(true);
+    expect(railWorthy(makeTab('a', { dormant: true }), null)).toBe(false);
+  });
+
+  it('never drops the session being looked at', () => {
+    expect(railWorthy(makeTab('a', { dormant: true }), 'a')).toBe(true);
   });
 });
 

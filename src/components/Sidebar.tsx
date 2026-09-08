@@ -276,6 +276,26 @@ function sortRank(tab: Tab): number {
   return (tab.pinned && !tab.exited ? 0 : 10) + SEG_RANK[segOf(tab)];
 }
 
+/** Whether a session is worth one of the collapsed rail's squares.
+ *
+ *  Only **auto-slept** sessions are left out. At 44px a session is one status
+ *  glyph and nothing else — no name, no folder, no time — so a column of them
+ *  reads as a bar chart with no labels, and a dormant session is the one kind
+ *  that is guaranteed to have nothing to report: its process is freed and it
+ *  is waiting to be resumed.
+ *
+ *  Everything else keeps its square. Shells have no Claude status but can
+ *  perfectly well be running a build. **Exited** sessions stay too: the
+ *  process is gone but its scrollback isn't, and reading what a command
+ *  printed before it died is a normal reason to click one.
+ *
+ *  The session you are looking at is always kept, asleep or not — dropping the
+ *  square under the cursor would leave the rail without the one thing it is
+ *  definitely about. */
+export function railWorthy(tab: Tab, activeTabId: string | null): boolean {
+  return tab.id === activeTabId || !tab.dormant;
+}
+
 /** Chip order in the ledger, and the status colors each one borrows. No new
  *  hues — every entry reuses the color its status already owns (see
  *  docs/design.md, Status vocabulary), including the spin/pulse treatment, so
@@ -462,8 +482,8 @@ function Spectrum({ tabs }: { tabs: Tab[] }) {
  *  the list jumped every time you opened a project. A column of squares grows
  *  into space that was empty anyway, and the bands above the list stop moving. */
 function FolderSquare({
-  dir, index, label, count, selected, dimmed, dragRef, shellOptions,
-  onSelect, onNewClaudeTab, onNewShellTab, onOpenDirectory, onImportSession, onRemoveProject, onReorderProject,
+  dir, index, label, count, selected, dimmed, hot, dragRef, shellOptions,
+  onSelect, onHot, onNewClaudeTab, onNewShellTab, onOpenDirectory, onImportSession, onRemoveProject, onReorderProject,
 }: {
   dir: string;
   index: number;
@@ -475,9 +495,13 @@ function FolderSquare({
    *  just stops competing with the one you picked. Hover brings it back, so
    *  reaching for another folder never means aiming at something greyed out. */
   dimmed: boolean;
+  /** The name panel's matching row is under the cursor. Lighting both halves
+   *  is the only thing that teaches which letter belongs to which name. */
+  hot: boolean;
   dragRef: MutableRefObject<string | null>;
   shellOptions: ShellOption[];
   onSelect: () => void;
+  onHot: (dir: string | null) => void;
   onNewClaudeTab: (dir: string) => void;
   onNewShellTab: (dir: string, shellId: string) => void;
   onOpenDirectory: (dir: string) => void;
@@ -518,13 +542,16 @@ function FolderSquare({
           aria-pressed={selected}
           aria-label={pillAria(label, count)}
           title={dir}
-          data-dimmed={dimmed || undefined}
+          data-dimmed={dimmed && !hot || undefined}
           className={cn(
             'relative flex items-center justify-center w-7 h-7 shrink-0 rounded-sm cursor-pointer font-inherit',
             'text-[11px] font-semibold border transition-[opacity,background-color,border-color] duration-100',
             !selected && 'hover:bg-white/5',
-            dimmed && 'opacity-35 hover:opacity-100',
+            hot && !selected && 'bg-white/5',
+            dimmed && !hot && 'opacity-35 hover:opacity-100',
           )}
+          onMouseEnter={() => onHot(dir)}
+          onMouseLeave={() => onHot(null)}
           // Drawn in the folder's own hue — the color already spent on
           // identifying this folder everywhere else. A neutral tint said
           // nothing at all next to seven other squares carrying the same one.
@@ -606,6 +633,120 @@ function FolderSquare({
   );
 }
 
+/** A folder's label with its disambiguating ancestor muted, so `one/api` and
+ *  `two/api` read as two APIs rather than two paths. */
+function NameLabel({ label }: { label: string }) {
+  const cut = label.lastIndexOf('/');
+  if (cut === -1) return <>{label}</>;
+  return (
+    <>
+      <span className="text-muted-foreground/60">{label.slice(0, cut + 1)}</span>
+      {label.slice(cut + 1)}
+    </>
+  );
+}
+
+/** The rail's squares, spelled out. One letter identifies a folder right up
+ *  until two folders share it — `clients/api` and `internal/api` are both "A",
+ *  and the per-square tooltip is no help there because it shows one name at a
+ *  time, which is exactly what makes them impossible to *compare*.
+ *
+ *  The panel doesn't move or widen the rail. It butts against its right edge,
+ *  one row per square at the same 32px pitch, so row `i` sits beside square
+ *  `i` and the square works as that row's icon — which is why no hue dot is
+ *  repeated here, and no credentials glyph either: both are already on the
+ *  square six pixels to the left, and saying it twice on one line is noise.
+ *
+ *  Rows are the same filter the squares are, so this is also how you pick a
+ *  folder by name when you can't remember its letter.
+ *
+ *  ponytail: rows align to the rail's unscrolled position. The folder column
+ *  only scrolls past ~12 open folders; if that ever becomes normal, mirror its
+ *  scrollTop onto the panel. */
+function FolderNames({
+  projects, tabs, selected, hot, open, onSelect, onHot, onAddProject,
+}: {
+  projects: string[];
+  tabs: Tab[];
+  selected: string | null;
+  hot: string | null;
+  open: boolean;
+  onSelect: (dir: string | null) => void;
+  onHot: (dir: string | null) => void;
+  onAddProject: () => void;
+}) {
+  const row = 'flex items-center gap-2 w-full h-7 px-2 shrink-0 rounded-sm border-none cursor-pointer'
+    + ' bg-transparent font-inherit text-[11px] text-left transition-colors duration-100';
+
+  return (
+    <div
+      data-testid="folder-names"
+      role="group"
+      aria-label="Open folders"
+      aria-hidden={!open}
+      // -top-1.5 cancels the rail's own padding so the first row lands on the
+      // first square; left-full puts the panel flush against the rail, which
+      // is what keeps the pointer from ever crossing a gap on its way over.
+      className={cn(
+        'absolute left-full -top-1.5 z-20 w-[196px] flex flex-col gap-1 px-1.5 py-[5px]',
+        'bg-card border border-l-0 border-border rounded-r-sm shadow-[14px_0_28px_-14px_rgba(0,0,0,0.85)]',
+        'transition-[opacity,transform] duration-100 motion-reduce:transition-none',
+        open ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-1.5 pointer-events-none',
+      )}
+    >
+      <button
+        type="button"
+        tabIndex={open ? 0 : -1}
+        className={cn(row, selected === null
+          ? 'bg-white/8 text-foreground'
+          : 'text-muted-foreground hover:text-foreground hover:bg-white/5')}
+        onClick={() => onSelect(null)}
+      >
+        <span className="flex-1 min-w-0 truncate">All folders</span>
+        <span className="shrink-0 text-[9.5px] tabular-nums text-muted-foreground">{tabs.length}</span>
+      </button>
+
+      {projects.map((dir) => {
+        const isSelected = selected === dir;
+        return (
+          <button
+            key={dir}
+            type="button"
+            tabIndex={open ? 0 : -1}
+            title={dir}
+            className={cn(row,
+              isSelected ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
+              !isSelected && hot === dir && 'bg-white/5 text-foreground',
+              !isSelected && 'hover:bg-white/5')}
+            style={isSelected
+              ? { backgroundColor: `hsl(${projectHue(projects.indexOf(dir))} 55% 50% / 0.16)` }
+              : undefined}
+            onClick={() => onSelect(isSelected ? null : dir)}
+            onMouseEnter={() => onHot(dir)}
+            onMouseLeave={() => onHot(null)}
+          >
+            <span className="flex-1 min-w-0 truncate">
+              <NameLabel label={pillLabel(dir, projects)} />
+            </span>
+            <span className="shrink-0 text-[9.5px] tabular-nums text-muted-foreground">
+              {tabs.filter((t) => t.cwd === dir).length}
+            </span>
+          </button>
+        );
+      })}
+
+      <button
+        type="button"
+        tabIndex={open ? 0 : -1}
+        className={cn(row, 'text-muted-foreground/70 hover:text-foreground hover:bg-white/5')}
+        onClick={onAddProject}
+      >
+        <span className="flex-1 min-w-0 truncate">Add folder…</span>
+      </button>
+    </div>
+  );
+}
+
 /** One always-visible navigation square in the rail. */
 function RailButton({ icon: Icon, label, active, onClick }: {
   icon: LucideIcon;
@@ -669,11 +810,54 @@ function SidebarRail({
 }) {
   const dragRef = useRef<string | null>(null);
 
+  // Which folder the cursor is over, on either side of the pairing.
+  const [hot, setHot] = useState<string | null>(null);
+  const [namesOpen, setNamesOpen] = useState(false);
+  const openTimer = useRef<number | null>(null);
+  const closeTimer = useRef<number | null>(null);
+
+  const clearTimers = () => {
+    if (openTimer.current !== null) { clearTimeout(openTimer.current); openTimer.current = null; }
+    if (closeTimer.current !== null) { clearTimeout(closeTimer.current); closeTimer.current = null; }
+  };
+  useEffect(() => clearTimers, []);
+
+  /** Hover waits, focus doesn't. The rail sits on the way to the list, so a
+   *  pointer crossing it hasn't asked for anything — 300ms is the floor
+   *  Baymard measured for hover-opened content, below which the flicker
+   *  starts. Moving focus onto a square is already deliberate, and making the
+   *  keyboard wait for a pointer's grace period would just read as broken. */
+  const openNames = (immediate = false) => {
+    clearTimers();
+    if (immediate) setNamesOpen(true);
+    else openTimer.current = window.setTimeout(() => setNamesOpen(true), 300);
+  };
+  const closeNames = () => {
+    clearTimers();
+    closeTimer.current = window.setTimeout(() => { setNamesOpen(false); setHot(null); }, 120);
+  };
+
   return (
-    <div data-testid="rail" className="flex flex-col items-center gap-1 w-11 shrink-0 py-1.5 bg-background border-r border-border">
+    <div data-testid="rail" className="relative z-10 flex flex-col items-center gap-1 w-11 shrink-0 py-1.5 bg-background border-r border-border">
+      {/* The collapse toggle is the rail's first square in both states, so it
+          sits at the same point on screen whichever way the sidebar is folded
+          and clicking it never throws the button somewhere else. */}
+      <RailButton icon={PanelLeftClose} label="Hide sidebar" onClick={onToggleCollapse} />
+      <div className="w-5 border-t border-border shrink-0" />
+
       {/* Clicking a selected folder again clears the filter, but that's a
           thing you have to already know — this is the way back that's visible
           without guessing. */}
+      {/* One region for the squares and their labels both. The panel is flush
+          against the rail, so the pointer never crosses a gap between them and
+          none of the usual safe-triangle machinery is needed. */}
+      <div
+        className="relative flex flex-col items-center gap-1 w-full min-h-0 flex-1"
+        onMouseEnter={() => openNames()}
+        onMouseLeave={closeNames}
+        onFocus={() => openNames(true)}
+        onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) closeNames(); }}
+      >
       <button
         type="button"
         aria-pressed={selected === null}
@@ -691,7 +875,7 @@ function SidebarRail({
         {tabs.length}
       </button>
 
-      <div className="flex flex-col items-center gap-1.5 w-full min-h-0 flex-1 overflow-y-auto overflow-x-hidden py-1 scrollbar-thin">
+      <div className="flex flex-col items-center gap-1 w-full min-h-0 flex-1 overflow-y-auto overflow-x-hidden scrollbar-thin">
         {projects.map((dir, index) => (
           <FolderSquare
             key={dir}
@@ -701,9 +885,11 @@ function SidebarRail({
             count={tabs.filter((t) => t.cwd === dir).length}
             selected={selected === dir}
             dimmed={selected !== null && selected !== dir}
+            hot={hot === dir}
             dragRef={dragRef}
             shellOptions={shellOptions}
             onSelect={() => onSelect(selected === dir ? null : dir)}
+            onHot={setHot}
             onNewClaudeTab={onNewClaudeTab}
             onNewShellTab={onNewShellTab}
             onOpenDirectory={onOpenDirectory}
@@ -726,6 +912,18 @@ function SidebarRail({
         </button>
       </div>
 
+        <FolderNames
+          projects={projects}
+          tabs={tabs}
+          selected={selected}
+          hot={hot}
+          open={namesOpen}
+          onSelect={onSelect}
+          onHot={setHot}
+          onAddProject={onAddProject}
+        />
+      </div>
+
       <div className="w-5 border-t border-border shrink-0" />
 
       <RailButton icon={TerminalSquare} label="Home" active={showHome} onClick={onGoHome} />
@@ -733,7 +931,6 @@ function SidebarRail({
       <RailButton icon={History} label="Browse past sessions" active={showHistory} onClick={onToggleHistory} />
       <RailButton icon={Folder} label="File explorer" active={showFiles} onClick={onToggleFiles} />
       <RailButton icon={Settings} label="Settings" active={showSettings} onClick={onToggleSettings} />
-      <RailButton icon={PanelLeftClose} label="Hide sidebar" onClick={onToggleCollapse} />
     </div>
   );
 }
@@ -1095,22 +1292,39 @@ export default function Sidebar({
     >
       {collapsed ? (
         <div data-testid="rail" className="flex flex-col items-center gap-1 w-11 shrink-0 py-1.5">
-          <CollapsedLedger tabs={sessions} />
+          {/* Same first square, same 6px from the top, as the expanded rail. */}
+          <RailButton icon={PanelLeftOpen} label="Show sidebar" onClick={onToggleCollapse} />
+          <div className="w-5 border-t border-border shrink-0" />
+
+          {/* Collapsing narrows the sidebar; it does not hand you a different
+              one. The rail reads the same `visible` the expanded list reads —
+              filtered by folder, status chip and query, ordered by `sortRank` —
+              so folding the panel away no longer silently drops the filter you
+              set and reshuffles what's left back into tab-open order. */}
+          <CollapsedLedger tabs={visible} />
 
           <div className="flex-1 overflow-y-auto overflow-x-hidden w-full py-2 flex flex-col items-center gap-1.5 scrollbar-thin">
-            {sessions.map((tab) => {
+            {visible.filter((tab) => railWorthy(tab, activeTabId)).map((tab) => {
               const isActive = !showHistory && tab.id === activeTabId;
+              const hue = projectHue(Math.max(0, projects.indexOf(tab.cwd)));
               return (
                 <button
                   key={tab.id}
+                  data-session-square
+                  aria-label={`${tab.name}, ${folderName(tab.cwd)}`}
                   className={cn(
-                    'relative flex items-center justify-center w-8 h-8 rounded-md border-none cursor-pointer bg-transparent',
+                    'relative flex items-center justify-center w-8 h-8 rounded-md border-none cursor-pointer',
                     'transition-colors duration-100',
-                    isActive ? 'bg-white/8 text-foreground' : 'text-muted-foreground hover:bg-white/5 hover:text-foreground',
+                    isActive ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
                     tab.exited && 'opacity-50',
                   )}
+                  // Two glyphs of the same status are otherwise identical here.
+                  // The folder's hue is the channel already spent on telling
+                  // sessions apart everywhere else, so it does that job here
+                  // too — behind the glyph, which keeps saying the status.
+                  style={{ backgroundColor: `hsl(${hue} 55% 50% / ${isActive ? 0.32 : 0.12})` }}
                   onClick={() => onSelectTab(tab.id)}
-                  title={tab.name}
+                  title={`${tab.name} · ${folderName(tab.cwd)}`}
                 >
                   {isActive && <span className="absolute left-0 top-1 bottom-1 w-0.5 rounded-full bg-primary" />}
                   {tab.kind === 'claude'
@@ -1122,11 +1336,9 @@ export default function Sidebar({
           </div>
 
           {/* The collapsed rail keeps its own copy of the navigation: there is
-              no expanded rail beside it to borrow one from. Same squares, same
-              order, same 6px off the bottom — so the collapse toggle sits at
-              exactly the same point on screen in both states. It used to live
-              in a header up top, which meant clicking it moved it the full
-              height of the sidebar and you had to go find it again. */}
+              no expanded rail beside it to borrow one from. Same squares in the
+              same order, so nothing shifts under the cursor when the sidebar
+              folds. */}
           <div className="w-5 border-t border-border shrink-0" />
 
           <RailButton icon={TerminalSquare} label="Home" active={showHome} onClick={onGoHome} />
@@ -1135,7 +1347,6 @@ export default function Sidebar({
           <RailButton icon={Folder} label="File explorer" active={showFiles} onClick={onToggleFiles} />
           <RailButton icon={FolderPlus} label="Add folder" onClick={onAddProject} />
           <RailButton icon={Settings} label="Settings" active={showSettings} onClick={onToggleSettings} />
-          <RailButton icon={PanelLeftOpen} label="Show sidebar" onClick={onToggleCollapse} />
         </div>
       ) : (
         <>

@@ -213,6 +213,19 @@ came down to what kind of content is involved, not taste:
   second meaning for the color. The usage bar's pace mark (where the clock
   stands in the window) is a hairline, not a recolor: color already carries
   the 70/90 thresholds, and a threshold warns while a mark informs.
+- **A set of things too small to label individually** → keep the small form and
+  add a **flush hover panel that labels the whole set at once**, not a tooltip
+  per item. The sidebar rail's folder names work this way (see
+  [terminals.md](features/terminals.md#the-name-panel)): a tooltip answers
+  "what is this one", but the question a rail of abbreviations actually raises
+  is "which of these two", and that needs them side by side. Three rules make
+  it behave: the panel is **flush** against what it labels, so the pointer never
+  crosses a gap (no safe-triangle hack); hover waits **300ms** while focus opens
+  it instantly; and its rows share the pitch of the things they label, so each
+  label lands beside its own item and the item serves as that row's icon. Note
+  what this pattern does *not* excuse — an item still has to be recognizable
+  without the gesture, so the panel is a supplement to a legible glyph, never a
+  substitute for one.
 - **An action that applies to one specific item, only sometimes** → the
   item's own **right-click context menu**, not a new always-visible hover
   icon. Pin/unpin went through several drafts (a hover pin icon, a corner

@@ -105,6 +105,43 @@ The fade is opacity, not a hide, and hover brings a dimmed square straight back 
 rail still has to answer "which folders are open" while you're filtered into one of them, and
 reaching for a different folder should never mean aiming at something greyed out.
 
+### The name panel
+
+One letter identifies a folder right up until two folders share it. `clients/api` and
+`internal/api` are both **A** — the hue tells them apart, the letter doesn't — and the
+per-square tooltip is no help there, because it shows one name at a time, which is exactly
+what makes two of them impossible to *compare*.
+
+So hovering the folder group opens a panel of **every open folder's full name**, butted
+against the rail's right edge: `All folders`, one row per folder, `Add folder…`. It doesn't
+move or widen the rail. Rows run at the same 32px pitch as the squares, so row *i* sits
+beside square *i* and **the square works as that row's icon** — which is why the panel
+repeats neither the hue dot nor the credentials glyph: both are already six pixels to the
+left, and saying it twice on one line is noise.
+
+Rows are the same filter the squares are, so the panel is also how you pick a folder by name
+when you can't remember its letter. Hovering a row lights its square and vice versa
+(`hot` state) — the only thing that teaches the letter-to-name pairing, after which the panel
+stops being needed.
+
+**Timing.** Hover waits **300ms**; focus opens it immediately. The rail sits on the way to
+the list, so a pointer crossing it hasn't asked for anything — 300ms is the floor
+[Baymard measured](https://baymard.com/blog/dropdown-menu-flickering-issue) for hover-opened
+content, below which the flicker starts. Moving focus onto a square is already deliberate, so
+making the keyboard serve a pointer's grace period would read as broken. Closing has a
+**120ms** grace so cutting the corner between two rows doesn't dismiss it.
+
+There is no "safe triangle" and no invisible bridge: the panel is **flush** against the rail
+(`left-full`), so the pointer never crosses a gap on its way over, which is the whole of the
+diagonal problem those hacks exist to patch.
+
+Everything in the rail shares one 32px rhythm — 28px squares, 4px gaps — because the panel's
+rows have to land on them. That replaced a mismatched 6px gap inside the folder column.
+
+`FolderNames` aligns to the rail's **unscrolled** position; the folder column only scrolls
+past roughly a dozen open folders, and a `ponytail:` note in the source says to mirror its
+`scrollTop` if that ever becomes normal.
+
 ### Naming a square
 
 `pillLabel()` shows just the folder name until two open folders share one, at which point
@@ -192,11 +229,35 @@ folder / Settings squares. The width transition rides a single shared root eleme
 (`transition-[width]`); swapping between two early-return roots would remount instead of
 animating.
 
-**The toggle itself doesn't move.** Both rails end with the same 28px square 6px off the
-bottom, so collapse and expand happen under the cursor. It briefly didn't: the collapsed rail
+### What the collapsed rail shows
+
+**The same list, narrowed the same way.** The rail reads `visible` — the folder
+filter, the status chip and the query already applied, ordered by `sortRank` —
+not the raw `sessions` array. It used to read the raw one, which meant folding
+the sidebar away silently dropped whatever filter you had set and reshuffled
+what was left back into the order the tabs happened to be opened in. Collapsing
+narrows the sidebar; it does not hand you a different one.
+
+**Minus the sleepers.** `railWorthy()` leaves out **auto-slept** sessions and
+nothing else. At 44px a session is one status glyph — no name, no folder, no
+time — so a column of them reads as a bar chart with no labels, and a dormant
+session is the one kind guaranteed to have nothing to report: its process is
+freed and it is waiting to be resumed. Shells keep their square (no Claude
+status, but perfectly capable of running a build), and so do **exited**
+sessions: the process is gone, its scrollback isn't, and reading what a command
+printed before it died is a normal reason to click one. The session you're
+looking at is always kept, asleep or not.
+
+**Told apart by hue.** Two sessions of the same status are otherwise identical
+squares, so each carries its folder's hue as a background tint while the glyph
+goes on saying the status — the same two-channel split the
+[name panel](#the-name-panel) uses, and no new colors.
+
+**The toggle itself doesn't move.** It is the **first** square in both rails, 6px from the
+top, so collapse and expand happen under the cursor. It briefly didn't: the collapsed rail
 kept its toggle in a header at the top while the expanded rail kept it at the foot, which
 threw the button the full height of the sidebar on every click and made you go find it again.
-A control that toggles a state has to sit in the same place in both states.
+Which end it lives at is taste; that both ends agree is not.
 
 The "+" menu opens terminal tabs of two kinds:
 
