@@ -11,6 +11,47 @@ listed here; see `git log` for the full history.
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-09-08
+
+### Added
+
+- **Files keeps up with the disk.** An open file tab and every expanded folder
+  now re-read themselves while they're on screen, so a file being written by a
+  session in the next pane updates in place instead of needing the tab closed
+  and reopened. Unsaved edits are never overwritten: the header says the file
+  changed on disk and offers to load it. Nothing polls while the window is
+  unfocused.
+- **Files can be peeked at instead of docked.** An 8px strip at the right edge
+  brings the panel up over the terminal — hover it, or click it — and it closes
+  on Escape, on a click outside, or by itself once you open a file. Pin it from
+  the panel header to dock it the old way. Peeking doesn't resize the terminal,
+  so it no longer rewraps every visible line each time you glance at your
+  files.
+- **The rail spells out its folders.** Hovering the folder squares (or tabbing
+  onto one) opens a panel of every open folder's full name, flush against the
+  rail: click a name to filter to that folder, or add a folder from the same
+  list. One letter stops being enough the moment two projects share it —
+  `clients/api` and `internal/api` are both "A" — and a tooltip can only ever
+  show one name at a time, which is exactly what makes two of them impossible
+  to compare. Hovering a name lights its square, and vice versa.
+
+### Changed
+
+- **The collapse toggle moved to the top of the rail**, in both the folded and
+  unfolded states. It was at the bottom of both; what matters is that the two
+  agree, so clicking it never moves it.
+
+### Fixed
+
+- **The collapsed sidebar obeys the filter.** Folding the sidebar away used to
+  drop whichever folder, status chip or search you had set and show every
+  session again, back in the order the tabs were opened. It now shows the same
+  list the expanded sidebar would, in the same order — minus sessions that have
+  been auto-slept, which at 44px are a glyph that has nothing to report. Shells
+  and exited sessions keep their square, and so does the session you're looking
+  at. Each square is tinted with its folder's color, so two sessions of the
+  same status are no longer identical dots.
+
 ## [0.22.0] - 2026-09-07
 
 ### Added
@@ -241,7 +282,8 @@ listed here; see `git log` for the full history.
 - The transcript reader now renders pipe tables, nested/checkbox lists,
   italics, autolinks, and horizontal rules.
 
-[Unreleased]: https://github.com/Exorsky/too-many-terminals/compare/v0.22.0...HEAD
+[Unreleased]: https://github.com/Exorsky/too-many-terminals/compare/v0.23.0...HEAD
+[0.23.0]: https://github.com/Exorsky/too-many-terminals/compare/v0.22.0...v0.23.0
 [0.22.0]: https://github.com/Exorsky/too-many-terminals/compare/v0.21.0...v0.22.0
 [0.21.0]: https://github.com/Exorsky/too-many-terminals/compare/v0.20.0...v0.21.0
 [0.20.0]: https://github.com/Exorsky/too-many-terminals/compare/v0.19.0...v0.20.0
