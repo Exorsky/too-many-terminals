@@ -1,7 +1,7 @@
 {
   "name": "too-many-terminals",
   "private": true,
-  "version": "0.23.0",
+  "version": "0.23.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -29,9 +29,12 @@
     "clsx": "^2.1.1",
     "codemirror": "^6.0.2",
     "lucide-react": "^1.24.0",
+    "mermaid": "^11.17.2",
     "radix-ui": "^1.6.2",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
     "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {

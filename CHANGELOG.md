@@ -11,6 +11,34 @@ listed here; see `git log` for the full history.
 
 ## [Unreleased]
 
+## [0.23.1] - 2026-09-08
+
+### Added
+
+- **A link in a Markdown preview opens the file it names.** Clicking
+  `docs/architecture.md` in a preview opens that file as a tab, resolved
+  against the file the link was written in — no more finding it by hand in the
+  explorer. `#anchor` links jump within the document; web links still go to the
+  browser.
+- **`mermaid` fences render as diagrams** in the preview. A diagram that
+  doesn't parse shows its own source instead of blanking, and `mermaid` only
+  loads the first time one actually appears.
+- **Ctrl/Cmd+F in the file preview**, the same find bar the session reader has,
+  and **Ctrl/Cmd+Shift+V** to flip Source/Preview.
+- **A copy button on every fenced code block.**
+
+### Changed
+
+- **Markdown now renders as full CommonMark + GitHub extensions.** Headings
+  past `###`, task lists, strikethrough, ordered lists that keep their start
+  number, and — the reason for the change — links that survive punctuation:
+  parentheses inside a URL, `]` inside link text, and `[a](x "title")` titles
+  all used to break the link or the line around it.
+- **The Markdown preview keeps its place.** It stays mounted across a
+  Source/Preview switch instead of scrolling back to the top, remembers which
+  half you were last on across restarts, and sits on a reading measure instead
+  of the full panel width.
+
 ## [0.23.0] - 2026-09-08
 
 ### Added
@@ -282,7 +310,8 @@ listed here; see `git log` for the full history.
 - The transcript reader now renders pipe tables, nested/checkbox lists,
   italics, autolinks, and horizontal rules.
 
-[Unreleased]: https://github.com/Exorsky/too-many-terminals/compare/v0.23.0...HEAD
+[Unreleased]: https://github.com/Exorsky/too-many-terminals/compare/v0.23.1...HEAD
+[0.23.1]: https://github.com/Exorsky/too-many-terminals/compare/v0.23.0...v0.23.1
 [0.23.0]: https://github.com/Exorsky/too-many-terminals/compare/v0.22.0...v0.23.0
 [0.22.0]: https://github.com/Exorsky/too-many-terminals/compare/v0.21.0...v0.22.0
 [0.21.0]: https://github.com/Exorsky/too-many-terminals/compare/v0.20.0...v0.21.0
