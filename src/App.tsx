@@ -718,6 +718,7 @@ export default function App() {
                     tab={tab}
                     isVisible={tab.id === state.activeTabId && !overlaysUp && !homeUp}
                     onDirtyChange={(tabId, dirty) => dispatch({ type: 'dirty', tabId, dirty })}
+                    onOpenFile={handleOpenFile}
                   />
                 ))}
                 {!overlaysUp && !mdReading && !fileUp && homeUp && (

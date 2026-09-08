@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AlignLeft, Braces, Check, TriangleAlert } from 'lucide-react';
 import * as ipc from '@/lib/ipc';
+import { resolveFrom, splitHref } from '@/lib/paths';
 import { usePollWhileFocused } from '@/lib/use-poll';
 import { cn } from '@/lib/utils';
 import type { Tab } from '@/types';
 import Editor, { type EditorHandle } from './Editor';
+import FindBar from './FindBar';
 import Markdown from './Markdown';
 
 // How long to wait after a keystroke before refreshing the Markdown preview —
@@ -12,10 +14,26 @@ import Markdown from './Markdown';
 // no reason to.
 const PREVIEW_DEBOUNCE_MS = 300;
 
+type MdView = 'source' | 'preview';
+
+// Which half you were last on, remembered across tabs and restarts: docs are
+// read far more often than they're edited, and re-clicking Preview for every
+// file was the whole complaint.
+const VIEW_KEY = 'md-view';
+function rememberedView(): MdView {
+  try {
+    return localStorage.getItem(VIEW_KEY) === 'preview' ? 'preview' : 'source';
+  } catch {
+    return 'source'; // storage disabled — the default is fine
+  }
+}
+
 interface FileViewerProps {
   tab: Tab;
   isVisible: boolean;
   onDirtyChange: (tabId: string, dirty: boolean) => void;
+  /** Opens a file the preview linked to, as a tab — same call the explorer makes. */
+  onOpenFile?: (dir: string, path: string) => void;
 }
 
 /** One file tab's content: loads once, then edits live in an `Editor`
@@ -24,7 +42,7 @@ interface FileViewerProps {
  *  a Source/Preview toggle; everything else is just the editor. Mirrors
  *  Terminal.tsx's "always mounted, display:none when hidden" pattern so
  *  per-tab state (undo history, cursor, dirty text) survives a tab switch. */
-export default function FileViewer({ tab, isVisible, onDirtyChange }: FileViewerProps) {
+export default function FileViewer({ tab, isVisible, onDirtyChange, onOpenFile }: FileViewerProps) {
   const path = tab.path!;
   const [content, setContent] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -35,11 +53,44 @@ export default function FileViewer({ tab, isVisible, onDirtyChange }: FileViewer
   /** Last text known to be on disk, so a poll can tell a real change from the
    *  same bytes read again — including the ones this tab just saved. */
   const onDisk = useRef<string | null>(null);
-  const [view, setView] = useState<'source' | 'preview'>('source');
+  const [view, setViewState] = useState<MdView>(rememberedView);
   const [previewText, setPreviewText] = useState('');
   const editorRef = useRef<EditorHandle>(null);
+  const previewScrollRef = useRef<HTMLDivElement>(null);
   const previewTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  /** Latest text typed into the editor, kept even while the preview is off
+   *  screen so switching to it doesn't show a stale document. */
+  const typed = useRef<string | null>(null);
   const isMd = /\.mdx?$/i.test(path);
+
+  const setView = useCallback((v: MdView) => {
+    setViewState(v);
+    // Edits made while the preview was off screen weren't rendered; catch up.
+    if (v === 'preview' && typed.current !== null) setPreviewText(typed.current);
+    try { localStorage.setItem(VIEW_KEY, v); } catch { /* storage disabled — this session only */ }
+  }, []);
+
+  // Ctrl/Cmd+Shift+V flips the two halves. Only bound while this file tab is
+  // the one on screen, so it never shadows the terminal's own paste chord.
+  useEffect(() => {
+    if (!isMd || !isVisible) return;
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'V' || e.key === 'v')) {
+        e.preventDefault();
+        setView(view === 'preview' ? 'source' : 'preview');
+      }
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [isMd, isVisible, view, setView]);
+
+  /** A link in the preview that names a file opens it as a tab, resolved
+   *  against the file the link was written in — the point being never to go
+   *  hunting for it in the explorer. */
+  const openLink = useCallback((href: string) => {
+    const { path: target } = splitHref(href);
+    if (target) onOpenFile?.(tab.cwd, resolveFrom(path, target));
+  }, [onOpenFile, tab.cwd, path]);
 
   useEffect(() => {
     let cancelled = false;
@@ -62,6 +113,7 @@ export default function FileViewer({ tab, isVisible, onDirtyChange }: FileViewer
     onDisk.current = text;
     setContent(text);
     setPreviewText(text);
+    typed.current = text;
     setStaleOnDisk(false);
     editorRef.current?.replaceText(text);
     onDirtyChange(tab.id, false);
@@ -79,6 +131,7 @@ export default function FileViewer({ tab, isVisible, onDirtyChange }: FileViewer
         if (tab.dirty) { setStaleOnDisk(true); return; }
         setContent(text);
         setPreviewText(text);
+        typed.current = text;
         editorRef.current?.replaceText(text);
       })
       .catch(() => {});
@@ -87,9 +140,11 @@ export default function FileViewer({ tab, isVisible, onDirtyChange }: FileViewer
   const handleChange = useCallback((text: string) => {
     onDirtyChange(tab.id, true);
     if (!isMd) return;
+    typed.current = text;
+    if (view === 'source') return; // nothing is looking at the preview — don't re-render it
     clearTimeout(previewTimer.current);
     previewTimer.current = setTimeout(() => setPreviewText(text), PREVIEW_DEBOUNCE_MS);
-  }, [tab.id, isMd, onDirtyChange]);
+  }, [tab.id, isMd, view, onDirtyChange]);
 
   const handleSave = useCallback((text: string) => {
     ipc.writeFile(path, tab.cwd, text)
@@ -161,9 +216,16 @@ export default function FileViewer({ tab, isVisible, onDirtyChange }: FileViewer
           <div className={cn('flex flex-col flex-1 min-h-0', isMd && view === 'preview' && 'hidden')}>
             <Editor ref={editorRef} path={path} initialText={content} onChange={handleChange} onSave={handleSave} />
           </div>
-          {isMd && view === 'preview' && (
-            <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin px-6 py-5">
-              <Markdown source={previewText} />
+          {/* Stays mounted once shown, so flipping back to Source and returning
+              lands where you were reading instead of at the top. */}
+          {isMd && (
+            <div className={cn('relative flex flex-col flex-1 min-h-0', view === 'source' && 'hidden')}>
+              {isVisible && view === 'preview' && <FindBar scrollRef={previewScrollRef} />}
+              <div ref={previewScrollRef} className="flex-1 min-h-0 overflow-y-auto scrollbar-thin px-6 py-5">
+                <div className="mx-auto max-w-[76ch]">
+                  <Markdown source={previewText} onOpenLink={openLink} />
+                </div>
+              </div>
             </div>
           )}
         </>

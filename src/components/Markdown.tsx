@@ -1,137 +1,202 @@
-import React, { useMemo } from 'react';
-import { parseMarkdown, type MdInline, type MdListItem } from '@/lib/markdown';
+import { Children, isValidElement, useRef, type ReactElement, type ReactNode } from 'react';
+import ReactMarkdown, { type Components, type ExtraProps } from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import * as ipc from '@/lib/ipc';
+import { isExternalHref } from '@/lib/paths';
+import { cn } from '@/lib/utils';
+import CodeBlock from './CodeBlock';
+import Mermaid from './Mermaid';
 
-function Inlines({ parts }: { parts: MdInline[] }): React.ReactNode {
-  return parts.map((p, i) => {
-    switch (p.t) {
-      case 'code':
-        return (
-          <code key={i} className="font-mono text-[0.85em] px-1 py-px rounded-[3px] bg-white/[0.05] border border-border text-[#c792ea]">
-            {p.v}
-          </code>
-        );
-      case 'strong':
-        return <strong key={i} className="font-semibold text-foreground">{p.v}</strong>;
-      case 'em':
-        return <em key={i} className="italic">{p.v}</em>;
-      case 'link':
-        return (
-          <a
-            key={i}
-            href={p.href}
-            className="text-primary underline decoration-primary/30 underline-offset-2 cursor-pointer"
-            onClick={(e) => {
-              e.preventDefault();
-              ipc.openExternal(p.href);
-            }}
-          >
-            {p.v}
-          </a>
-        );
-      default:
-        return <React.Fragment key={i}>{p.v}</React.Fragment>;
+interface MarkdownProps {
+  source: string;
+  /** Called for a link that points at a file rather than the web — the raw
+   *  href, resolved by whoever knows which file this text came from
+   *  (`FileViewer`). Without it such links do nothing, which is what a
+   *  transcript wants: it has no file to resolve against. */
+  onOpenLink?: (href: string) => void;
+}
+
+type HastNode = { value?: string; children?: HastNode[] };
+
+/** The text of a hast node, for turning a heading into an anchor id. */
+function hastText(node?: HastNode): string {
+  if (!node) return '';
+  if (typeof node.value === 'string') return node.value;
+  return (node.children ?? []).map(hastText).join('');
+}
+
+/** The id GitHub would give this heading, so a `#some-heading` link written
+ *  for GitHub lands in the right place here too. */
+export function slug(text: string): string {
+  return text.trim().toLowerCase().replace(/[^\p{L}\p{N}\s-]/gu, '').replace(/\s+/g, '-');
+}
+
+function textOf(node: ReactNode): string {
+  if (node == null || typeof node === 'boolean') return '';
+  if (typeof node === 'string' || typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(textOf).join('');
+  if (isValidElement<{ children?: ReactNode }>(node)) return textOf(node.props.children);
+  return '';
+}
+
+const HEADING_CLS: Record<number, string> = {
+  1: 'text-[16px]',
+  2: 'text-[14.5px]',
+  3: 'text-[13px]',
+  4: 'text-[12.5px]',
+  5: 'text-[12px] text-muted-foreground',
+  6: 'text-[12px] text-muted-foreground',
+};
+
+function heading(level: 1 | 2 | 3 | 4 | 5 | 6) {
+  const Tag = `h${level}` as const;
+  return function Heading({ node, children }: { children?: ReactNode } & ExtraProps) {
+    return (
+      <Tag
+        id={slug(hastText(node as HastNode | undefined))}
+        className={cn('font-semibold text-foreground mt-1 [text-wrap:balance] scroll-mt-4', HEADING_CLS[level])}
+      >
+        {children}
+      </Tag>
+    );
+  };
+}
+
+/** Renders Markdown as React elements — CommonMark plus GitHub extensions
+ *  (tables, task lists, strikethrough, autolinks) through `react-markdown`,
+ *  which builds real elements rather than HTML, so nothing is injected as raw
+ *  markup. Prose is proportional (the document voice); code stays monospace. */
+export default function Markdown({ source, onOpenLink }: MarkdownProps) {
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  /** A `#anchor` scrolls inside this document. Scoped to this instance first —
+   *  a transcript mounts one Markdown per turn, so ids repeat down the page
+   *  and the nearest one is the right one. */
+  const scrollToAnchor = (id: string) => {
+    let target: Element | null = null;
+    try {
+      target = rootRef.current?.querySelector(`[id="${CSS.escape(id)}"]`) ?? null;
+    } catch {
+      /* CSS.escape missing — fall through to the document lookup */
     }
-  });
-}
+    (target ?? rootRef.current?.ownerDocument.getElementById(id))?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start',
+    });
+  };
 
-/** Renders a list's items, recursing into a nested `sublist` and rendering a
- *  `- [ ]`/`- [x]` item as a disabled checkbox instead of a bullet. */
-function ListItems({ ordered, items }: { ordered: boolean; items: MdListItem[] }): React.ReactNode {
-  const items_ = items.map((item, j) => (
-    <li key={j} className={item.checked !== undefined ? 'list-none' : undefined}>
-      {item.checked !== undefined ? (
-        <label className="inline-flex items-start gap-1.5 cursor-default">
-          <input type="checkbox" checked={item.checked} readOnly disabled className="mt-1 accent-primary" />
-          <span className={item.checked ? 'line-through text-muted-foreground' : undefined}>
-            <Inlines parts={item.inlines} />
-          </span>
-        </label>
-      ) : (
-        <Inlines parts={item.inlines} />
-      )}
-      {item.sublist && (
-        <div className="mt-1">
-          <ListItems ordered={item.sublist.ordered} items={item.sublist.items} />
-        </div>
-      )}
-    </li>
-  ));
-  return ordered ? (
-    <ol className="list-decimal pl-5 flex flex-col gap-1 marker:text-primary">{items_}</ol>
-  ) : (
-    <ul className="list-disc pl-5 flex flex-col gap-1 marker:text-primary">{items_}</ul>
-  );
-}
+  const components: Components = {
+    h1: heading(1),
+    h2: heading(2),
+    h3: heading(3),
+    h4: heading(4),
+    h5: heading(5),
+    h6: heading(6),
 
-/** Renders Session Reader Markdown as React elements. Prose is proportional
- *  (the "document" voice); code stays monospace. */
-export default function Markdown({ source }: { source: string }) {
-  const blocks = useMemo(() => parseMarkdown(source), [source]);
+    a({ href, children }) {
+      const target = href ?? '';
+      return (
+        <a
+          href={target}
+          title={target}
+          className="text-primary underline decoration-primary/30 underline-offset-2 cursor-pointer"
+          onClick={(e) => {
+            e.preventDefault();
+            if (target.startsWith('#')) {
+              let id = target.slice(1);
+              try { id = decodeURIComponent(id); } catch { /* keep it as written */ }
+              scrollToAnchor(id);
+            } else if (isExternalHref(target)) {
+              ipc.openExternal(target);
+            } else if (target) {
+              onOpenLink?.(target);
+            }
+          }}
+        >
+          {children}
+        </a>
+      );
+    },
+
+    // A fenced block arrives as <pre><code class="language-x">…</code></pre>;
+    // taking it over here means the `code` component below only ever sees
+    // inline code.
+    pre({ children }) {
+      const child = Children.toArray(children).find(isValidElement) as
+        | ReactElement<{ className?: string; children?: ReactNode }>
+        | undefined;
+      const lang = /language-([\w+#-]+)/.exec(child?.props.className ?? '')?.[1] ?? '';
+      const code = textOf(child?.props.children ?? children).replace(/\n$/, '');
+      if (lang === 'mermaid') return <Mermaid chart={code} />;
+      return <CodeBlock lang={lang} code={code} />;
+    },
+
+    code: ({ children }) => (
+      <code className="font-mono text-[0.85em] px-1 py-px rounded-[3px] bg-white/[0.05] border border-border text-[#c792ea]">
+        {children}
+      </code>
+    ),
+
+    p: ({ children }) => <p className="m-0">{children}</p>,
+    strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+    em: ({ children }) => <em className="italic">{children}</em>,
+    del: ({ children }) => <del className="text-muted-foreground">{children}</del>,
+    hr: () => <hr className="border-border" />,
+    blockquote: ({ children }) => (
+      <blockquote className="border-l-2 border-border pl-3 text-muted-foreground flex flex-col gap-2">
+        {children}
+      </blockquote>
+    ),
+
+    ul: ({ children }) => <ul className="list-disc pl-5 flex flex-col gap-1 marker:text-primary">{children}</ul>,
+    ol: ({ children, start }) => (
+      <ol start={start} className="list-decimal pl-5 flex flex-col gap-1 marker:text-primary">
+        {children}
+      </ol>
+    ),
+    // A task-list item carries its own checkbox, so it drops the bullet and
+    // greys out once ticked.
+    li: ({ children, className }) => (
+      <li
+        className={cn(
+          '[&>ul]:mt-1 [&>ol]:mt-1',
+          className?.includes('task-list-item') &&
+            'list-none [&:has(>input:checked)]:line-through [&:has(>input:checked)]:text-muted-foreground',
+        )}
+      >
+        {children}
+      </li>
+    ),
+    input: (props) => <input {...props} readOnly className="mr-1.5 accent-primary align-[-1px]" />,
+
+    img: ({ src, alt }) => (
+      <img
+        src={typeof src === 'string' ? src : undefined}
+        alt={alt}
+        className="max-w-full rounded-md border border-border"
+      />
+    ),
+
+    table: ({ children }) => (
+      <div className="overflow-x-auto rounded-lg border border-border scrollbar-thin">
+        <table className="w-full border-collapse text-[13px]">{children}</table>
+      </div>
+    ),
+    thead: ({ children }) => <thead className="bg-white/[0.03]">{children}</thead>,
+    tr: ({ children }) => <tr className="border-b border-border last:border-b-0">{children}</tr>,
+    th: ({ children, style }) => (
+      <th style={style} className="px-3 py-1.5 font-semibold text-foreground whitespace-nowrap text-left">
+        {children}
+      </th>
+    ),
+    td: ({ children, style }) => <td style={style} className="px-3 py-1.5 align-top">{children}</td>,
+  };
 
   return (
-    <div className="flex flex-col gap-3 font-sans text-[14.5px] leading-[1.62] text-[#d7dae1]">
-      {blocks.map((block, i) => {
-        switch (block.t) {
-          case 'heading': {
-            const cls = 'font-semibold text-foreground mt-1 [text-wrap:balance] ' +
-              (block.level === 1 ? 'text-[16px]' : block.level === 2 ? 'text-[14.5px]' : 'text-[13px]');
-            if (block.level === 1) return <h1 key={i} className={cls}><Inlines parts={block.inlines} /></h1>;
-            if (block.level === 2) return <h2 key={i} className={cls}><Inlines parts={block.inlines} /></h2>;
-            return <h3 key={i} className={cls}><Inlines parts={block.inlines} /></h3>;
-          }
-          case 'code':
-            return (
-              <div key={i} className="rounded-lg border border-border bg-[#0a0b0e] overflow-x-auto scrollbar-thin">
-                {block.lang && (
-                  <div className="px-3 py-1.5 border-b border-border text-[10.5px] tracking-[0.04em] text-muted-foreground">
-                    {block.lang}
-                  </div>
-                )}
-                <pre className="m-0 p-3 font-mono text-[12.5px] leading-[1.6] text-foreground whitespace-pre">{block.code}</pre>
-              </div>
-            );
-          case 'list':
-            return <React.Fragment key={i}><ListItems ordered={block.ordered} items={block.items} /></React.Fragment>;
-          case 'hr':
-            return <hr key={i} className="border-border" />;
-          case 'quote':
-            return (
-              <blockquote key={i} className="border-l-2 border-border pl-3 text-muted-foreground">
-                <Inlines parts={block.inlines} />
-              </blockquote>
-            );
-          case 'table':
-            return (
-              <div key={i} className="overflow-x-auto rounded-lg border border-border scrollbar-thin">
-                <table className="w-full border-collapse text-[13px]">
-                  <thead>
-                    <tr className="bg-white/[0.03] border-b border-border">
-                      {block.header.map((cell, j) => (
-                        <th key={j} className="px-3 py-1.5 font-semibold text-foreground whitespace-nowrap" style={{ textAlign: block.align[j] ?? 'left' }}>
-                          <Inlines parts={cell} />
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {block.rows.map((row, r) => (
-                      <tr key={r} className="border-b border-border last:border-b-0">
-                        {row.map((cell, c) => (
-                          <td key={c} className="px-3 py-1.5 align-top" style={{ textAlign: block.align[c] ?? 'left' }}>
-                            <Inlines parts={cell} />
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            );
-          default:
-            return <p key={i} className="m-0"><Inlines parts={block.inlines} /></p>;
-        }
-      })}
+    <div ref={rootRef} className="flex flex-col gap-3 font-sans text-[14.5px] leading-[1.62] text-[#d7dae1]">
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+        {source}
+      </ReactMarkdown>
     </div>
   );
 }

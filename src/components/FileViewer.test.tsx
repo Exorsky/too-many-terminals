@@ -1,4 +1,5 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Tab } from '@/types';
 
@@ -7,7 +8,9 @@ vi.mock('@/lib/ipc');
 import * as ipc from '@/lib/ipc';
 import FileViewer from './FileViewer';
 
-afterEach(cleanup);
+// The Source/Preview choice is remembered in localStorage, so each test starts
+// from the default rather than from whatever the last one clicked.
+afterEach(() => { cleanup(); localStorage.clear(); });
 
 function makeTab(path: string, overrides: Partial<Tab> = {}): Tab {
   return {
@@ -58,6 +61,46 @@ describe('FileViewer', () => {
     render(<FileViewer tab={makeTab('/proj/notes.txt', { dirty: true })} isVisible onDirtyChange={vi.fn()} />);
 
     expect(await screen.findByText(/Unsaved changes/)).toBeInTheDocument();
+  });
+
+  it('opens a file the preview links to, resolved against the linking file', async () => {
+    const onOpenFile = vi.fn();
+    vi.mocked(ipc.readFile).mockResolvedValue('[arch](../architecture.md)');
+    render(
+      <FileViewer
+        tab={makeTab('/proj/docs/features/x.md')}
+        isVisible
+        onDirtyChange={vi.fn()}
+        onOpenFile={onOpenFile}
+      />,
+    );
+
+    await userEvent.click(await screen.findByText('Preview'));
+    await userEvent.click(screen.getByRole('link', { name: 'arch' }));
+
+    expect(onOpenFile).toHaveBeenCalledWith('/proj', '/proj/docs/architecture.md');
+  });
+
+  it('keeps the preview mounted across a switch, so it comes back where you left it', async () => {
+    vi.mocked(ipc.readFile).mockResolvedValue('# Title');
+    render(<FileViewer tab={makeTab('/proj/README.md')} isVisible onDirtyChange={vi.fn()} />);
+
+    await userEvent.click(await screen.findByText('Preview'));
+    expect(screen.getByRole('heading', { name: 'Title' })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByText('Source'));
+    expect(screen.getByRole('heading', { name: 'Title' })).toBeInTheDocument();
+  });
+
+  it('reopens on the half you were last reading', async () => {
+    vi.mocked(ipc.readFile).mockResolvedValue('# Title');
+    render(<FileViewer tab={makeTab('/proj/README.md')} isVisible onDirtyChange={vi.fn()} />);
+    await userEvent.click(await screen.findByText('Preview'));
+    cleanup();
+
+    render(<FileViewer tab={makeTab('/proj/other.md')} isVisible onDirtyChange={vi.fn()} />);
+    await screen.findByText('Saved');
+    expect(screen.getByRole('heading', { name: 'Title' }).closest('.hidden')).toBeNull();
   });
 
   it('is hidden (display:none) when not the visible tab', async () => {

@@ -111,7 +111,6 @@ filesystem, and turns are capped at `TRANSCRIPT_MAX_TURNS` as a guard.
 - `src-tauri/src/session_history.rs` — `read_transcript`, `message_blocks`,
   `summarize_tool_input`, `TranscriptTurn`/`TranscriptBlock` (+ unit tests).
   Command adapter in `commands.rs` (`read_transcript`), registered in `lib.rs`.
-- `src/lib/markdown.ts` (+ tests) — the small Markdown parser (data model only).
 - `src/lib/transcript.ts` (+ tests) — turns → Markdown for Raw view and copy.
 - `src/lib/use-transcript.ts` — the fetch/reload hook, shared by both surfaces.
 - `src/components/TranscriptDocument.tsx` — the shared rendered/raw reading body.
@@ -121,7 +120,10 @@ filesystem, and turns are capped at `TRANSCRIPT_MAX_TURNS` as a guard.
 - `src/components/FindBar.tsx` (+ tests) — Ctrl/Cmd+F find bar mounted in both
   readers.
 - `src/components/TranscriptStates.tsx` — shared loading/error/empty placeholders.
-- `src/components/Markdown.tsx` — Markdown → React elements.
+- `src/components/Markdown.tsx` (+ tests) — Markdown → React elements
+  (`react-markdown` + `remark-gfm`); see [markdown-preview.md](markdown-preview.md).
+- `src/components/CodeBlock.tsx`, `src/components/Mermaid.tsx` — fenced code and
+  `mermaid` diagrams.
 - `src/components/CopyButton.tsx` — copy-with-feedback button.
 - `src/components/SessionControls.tsx` (+ tests) — the Preview toggle and Split
   menu docked to `TabBar`.

@@ -162,8 +162,14 @@ excluded from the sidebar's per-project session list and from the command palett
   confirmation dialog in the app, reserved for the one action that can silently
   lose typed work.
 - **Markdown** (`.md`/`.mdx`) gets a small Source/Preview toggle in the header
-  strip; Preview renders through the same `Markdown.tsx` component the session
-  reader uses, refreshed ~300ms after you stop typing.
+  strip (or **Ctrl/Cmd+Shift+V**), refreshed ~300ms after you stop typing.
+  Preview renders through the same `Markdown.tsx` component the session reader
+  uses — where a link to another file **opens that file as a tab** instead of
+  sending you back to the tree, `#anchors` jump within the document, and
+  `mermaid` fences draw. The half you were last on is remembered across tabs
+  and restarts, the preview stays mounted so switching back keeps your place,
+  and Ctrl/Cmd+F searches it. See
+  [markdown-preview.md](markdown-preview.md).
 - Files over 4 MB or that aren't valid UTF-8 are refused (read *and* write)
   with a message instead of being opened.
 - **Panel width** is drag-resizable from its left edge (200–480px), the same
@@ -193,7 +199,10 @@ excluded from the sidebar's per-project session list and from the command palett
   per `path`, exposes an imperative `save()` handle, Ctrl+S keymap, async
   language loading.
 - `src/components/FileViewer.tsx` (+ test) — one per open file tab: load, dirty/
-  save state, the Source/Preview toggle, hides via `display:none` when inactive.
+  save state, the Source/Preview toggle, the preview's find bar and link →
+  open-a-tab wiring, hides via `display:none` when inactive.
+- `src/lib/paths.ts` (+ test) — resolving a preview link's target against the
+  file it was written in; see [markdown-preview.md](markdown-preview.md).
 - `src/types.ts` — `TabKind` gained `'file'`; `Tab` gained optional `path`/`dirty`.
 - `src/lib/tabs.ts` (+ test) — `dirty` reducer action.
 - Wiring in `App.tsx`: `showFiles` state (defaults `true`), the resize seam,
