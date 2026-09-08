@@ -12,10 +12,10 @@ binaries (~10–25 MB) for Windows, macOS and Linux.
 
 ## Preview
 
-<video src="https://raw.githubusercontent.com/Exorsky/too-many-terminals/main/docs/media/preview.mp4" controls muted loop playsinline width="900"></video>
+![Too Many Terminals](docs/media/preview.gif)
 
-▶ [Watch the preview](docs/media/preview.mp4) — sessions and their live status, the
-rendered transcript beside the terminal, and Markdown preview with mermaid.
+Sessions and their live status, the rendered transcript beside the terminal, and
+Markdown preview with mermaid — [full-quality video](docs/media/preview.mp4).
 
 ## Features
 
