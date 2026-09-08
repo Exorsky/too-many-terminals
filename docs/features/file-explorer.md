@@ -1,9 +1,87 @@
 # File explorer
 
-A file browser and editor docked to the right edge of the window, toggled from
-its own folder-tree button in the sidebar header (next to Search) — **open by
-default**. Browse every open project's files, open one as a tab, and edit it
-in place.
+A file browser and editor at the right edge of the window, opened from the
+**Files** square in the [sidebar rail](terminals.md#the-rail-folders-and-navigation).
+Browse every open project's files, open one as a tab, and edit it in place.
+
+## Three states, not two
+
+`App.tsx` holds `filesMode: 'hidden' | 'peek' | 'pinned'` (default `pinned`).
+
+| | what it is | opened by | closed by |
+|---|---|---|---|
+| **hidden** | an 8px strip at the right edge (`FilesEdge`) | — | — |
+| **peek** | the panel laid **over** the terminal | hovering the strip (300ms), clicking it, focusing it | Escape, a click outside, **opening a file** |
+| **pinned** | docked beside the terminal, with the resize seam | the pin in the panel header, the rail's Files square | the same two, explicitly |
+
+The rail's Files square still toggles **pinned ↔ hidden**, exactly as it did
+when this was a boolean, so the habit survives. Peeking is a separate gesture.
+
+### Why peek exists
+
+Not screen space — **the terminal's own reflow**. Docked, the panel is a flex
+sibling of `<main>`, so every open and every close narrows main, wakes the
+`ResizeObserver` in `Terminal.tsx`, and runs `fitAddon.fit()` → `pty_resize`:
+xterm rewraps every line it is showing, twice per visit. A peek is
+`position: absolute` over the terminal, so main never changes width and nothing
+rewraps.
+
+### Peek closes on focus, never on the pointer
+
+This is the one thing that would be easy to get wrong. Reaching a file deep in
+the tree walks the cursor past the panel's edges, and a `mouseleave` rule would
+cancel the errand halfway through. That is the line between a hover menu and a
+tool window — JetBrains calls the same mode
+[Dock Unpinned](https://www.jetbrains.com/help/idea/viewing-modes.html) and
+hides it the same way.
+
+Opening a file closes a peek by itself: look, take, gone. Pinning is what you
+do when you want the panel to stay.
+
+### The strip is visible
+
+Eight pixels with a notch that grows under the cursor, not a bare hot zone. An
+invisible edge doesn't announce itself, and when the window isn't flush against
+the screen the pointer misses it and the feature reads as broken — the
+complaint [Arc's auto-hidden sidebar](https://resources.arc.net/hc/en-us/articles/25619487530519-How-Do-You-Hide-the-Sidebar)
+collects. Hover waits **300ms** (the right edge is on the way to a scrollbar or
+a window button, so crossing it isn't a request); click and focus don't wait.
+
+There is no resize seam while peeking — the width you drag in the docked mode
+is the width the overlay uses. Neither the mode nor the width is persisted, the
+same as before this change: the app starts docked.
+
+## Keeping up with the disk
+
+A file open in a tab is usually a file some session in the next pane is busy
+rewriting, so **both the tree and the open file re-read themselves while they
+are on screen** — no more closing a tab and opening it again to see a change.
+
+- **The tree.** An expanded directory keeps re-listing (`FileTree`); a listing
+  that comes back identical is discarded rather than handed to React, so an
+  unchanged folder never re-renders its subtree. Collapsed directories poll
+  nothing.
+- **The open file.** The visible file tab re-reads its own path (`FileViewer`)
+  and swaps the text into CodeMirror through `EditorHandle.replaceText`, which
+  keeps the scroll position and clamps the caret instead of dropping it, and
+  doesn't report the change back as an edit.
+
+Both go through `usePollWhileFocused` (`src/lib/use-poll.ts`), which owns the
+one rule they share: **nothing polls while the window is unfocused.**
+
+**Unsaved edits always win.** If the file changes on disk while the tab is
+dirty, nothing is overwritten — the header says *"Changed on disk, and you have
+unsaved edits"* and offers **Load the file**, or Ctrl+S to keep yours.
+
+### Why polling and not a watcher
+
+`usePollWhileFocused` carries a `ponytail:` note saying as much. A `notify`
+watcher means a recursive watch per project plus ignore rules for
+`node_modules`/`.git`/`target` plus a debounce, all to learn about changes the
+UI mostly isn't showing. Re-reading what *is* on screen costs one directory
+listing per expanded folder and one read of one already size-capped text file,
+every two seconds, only while you're looking. The watcher earns its keep the
+day Files has to react to something it isn't already displaying.
 
 ## The tab strip
 

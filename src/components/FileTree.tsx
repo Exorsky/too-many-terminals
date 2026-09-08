@@ -3,6 +3,15 @@ import { ChevronRight, File, Folder } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import * as ipc from '@/lib/ipc';
 import type { DirEntry } from '@/lib/ipc';
+import { usePollWhileFocused } from '@/lib/use-poll';
+
+/** Whether two listings of the same directory say the same thing. Compared by
+ *  hand so an unchanged folder keeps its existing array: handing React a fresh
+ *  one every couple of seconds would re-render the whole subtree for nothing. */
+function sameListing(a: DirEntry[], b: DirEntry[]): boolean {
+  return a.length === b.length
+    && a.every((entry, i) => entry.path === b[i].path && entry.isDir === b[i].isDir);
+}
 
 interface NodeProps {
   entry: DirEntry;
@@ -22,6 +31,16 @@ function Node({ entry, depth, defaultOpen, activePath, onOpen }: NodeProps) {
     if (!open || children || !entry.isDir) return;
     ipc.listDir(entry.path).then(setChildren).catch(() => setChildren([]));
   }, [open, children, entry.isDir, entry.path]);
+
+  // ...and keeps re-listing while it stays open, so a file written by a
+  // session in the next pane shows up without collapsing the folder and
+  // expanding it again. Only expanded directories poll: a tree you never
+  // opened still costs nothing.
+  usePollWhileFocused(() => {
+    ipc.listDir(entry.path)
+      .then((next) => setChildren((prev) => (prev && sameListing(prev, next) ? prev : next)))
+      .catch(() => {});
+  }, open && entry.isDir);
 
   return (
     <>

@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Tab } from '@/types';
 
@@ -66,5 +66,66 @@ describe('FileViewer', () => {
 
     const root = container.firstElementChild as HTMLElement;
     expect(root.style.display).toBe('none');
+  });
+});
+
+describe('FileViewer, when the file changes on disk', () => {
+  afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
+
+  async function open(text: string, tab = makeTab('/proj/notes.txt')) {
+    vi.useFakeTimers();
+    vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+    vi.mocked(ipc.readFile).mockResolvedValue(text);
+    const view = render(<FileViewer tab={tab} isVisible onDirtyChange={vi.fn()} />);
+    await act(async () => {});
+    return view;
+  }
+
+  it('takes the new text in place, with no reopening', async () => {
+    const { container } = await open('before');
+    expect(container.textContent).toContain('before');
+
+    // The session in the next pane rewrites it.
+    vi.mocked(ipc.readFile).mockResolvedValue('after');
+    await act(async () => { vi.advanceTimersByTime(2000); });
+
+    expect(container.textContent).toContain('after');
+    expect(container.textContent).not.toContain('before');
+  });
+
+  it('never overwrites unsaved edits — it says so and offers the swap', async () => {
+    const onDirtyChange = vi.fn();
+    vi.useFakeTimers();
+    vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+    vi.mocked(ipc.readFile).mockResolvedValue('mine');
+    const { container } = render(
+      <FileViewer tab={makeTab('/proj/notes.txt', { dirty: true })} isVisible onDirtyChange={onDirtyChange} />,
+    );
+    await act(async () => {});
+
+    vi.mocked(ipc.readFile).mockResolvedValue('theirs');
+    await act(async () => { vi.advanceTimersByTime(2000); });
+
+    expect(screen.getByText(/Changed on disk/)).toBeInTheDocument();
+    expect(container.textContent).toContain('mine');
+    expect(container.textContent).not.toContain('theirs');
+
+    // ...until you ask for it.
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Load the file' })); });
+    expect(container.textContent).toContain('theirs');
+    expect(onDirtyChange).toHaveBeenLastCalledWith('t1', false);
+  });
+
+  it('leaves a tab you are not looking at alone', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+    vi.mocked(ipc.readFile).mockResolvedValue('x');
+    render(<FileViewer tab={makeTab('/proj/notes.txt')} isVisible={false} onDirtyChange={vi.fn()} />);
+    await act(async () => {});
+    const afterLoad = vi.mocked(ipc.readFile).mock.calls.length;
+
+    await act(async () => { vi.advanceTimersByTime(10_000); });
+
+    expect(vi.mocked(ipc.readFile).mock.calls.length).toBe(afterLoad);
   });
 });

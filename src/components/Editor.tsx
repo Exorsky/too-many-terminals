@@ -9,6 +9,11 @@ import { oneDark } from '@codemirror/theme-one-dark';
 export interface EditorHandle {
   /** Writes the file with the editor's current contents (Ctrl+S's own path). */
   save: () => void;
+  /** Swaps in text that came from disk rather than from typing — used when the
+   *  file is rewritten underneath an open tab. Keeps the view where it is
+   *  (no `scrollIntoView`) and does not report the change back as an edit, so
+   *  watching a session rewrite a file doesn't mark the tab dirty. */
+  replaceText: (text: string) => void;
 }
 
 interface EditorProps {
@@ -36,11 +41,29 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
   onChangeRef.current = onChange;
   const onSaveRef = useRef(onSave);
   onSaveRef.current = onSave;
+  /** Set while a dispatch comes from disk, so the update listener can tell it
+   *  apart from a keystroke. Dispatch is synchronous, so a plain flag is
+   *  enough — no annotation plumbing needed. */
+  const fromDisk = useRef(false);
 
   useImperativeHandle(ref, () => ({
     save: () => {
       const view = viewRef.current;
       if (view) onSaveRef.current(view.state.doc.toString());
+    },
+    replaceText: (text: string) => {
+      const view = viewRef.current;
+      if (!view || view.state.doc.toString() === text) return;
+      // Clamp the caret rather than dropping it: the file usually grew or
+      // shrank somewhere else entirely, and losing your place on every write
+      // would make watching a file edited live unusable.
+      const head = Math.min(view.state.selection.main.head, text.length);
+      fromDisk.current = true;
+      view.dispatch({
+        changes: { from: 0, to: view.state.doc.length, insert: text },
+        selection: { anchor: head },
+      });
+      fromDisk.current = false;
     },
   }), []);
 
@@ -64,7 +87,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
               run: (v) => { onSaveRef.current(v.state.doc.toString()); return true; },
             }])),
             EditorView.updateListener.of((update) => {
-              if (update.docChanged) onChangeRef.current(update.state.doc.toString());
+              if (update.docChanged && !fromDisk.current) onChangeRef.current(update.state.doc.toString());
             }),
           ],
         }),

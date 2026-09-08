@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { SquareTerminal } from 'lucide-react';
 import CommandPalette from '@/components/CommandPalette';
-import FileExplorerPanel from '@/components/FileExplorerPanel';
+import FileExplorerPanel, { FilesEdge } from '@/components/FileExplorerPanel';
 import FileViewer from '@/components/FileViewer';
 import HomeScreen from '@/components/HomeScreen';
 import SessionControls, { type MarkdownView, type SessionMode, type SplitDirection } from '@/components/SessionControls';
@@ -43,9 +43,16 @@ export default function App() {
   const [homeDir, setHomeDir] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [showFiles, setShowFiles] = useState(true);
+  // Three states, not two. `peek` lays the panel over the terminal instead of
+  // beside it, which is the whole point: docking it is a layout change, so
+  // every open and every close runs main through `ResizeObserver` →
+  // `fitAddon.fit()` → `pty_resize` and the terminal rewraps every line it is
+  // showing. An overlay costs none of that.
+  // See docs/features/file-explorer.md.
+  const [filesMode, setFilesMode] = useState<'hidden' | 'peek' | 'pinned'>('pinned');
   const [filesPanelWidth, setFilesPanelWidth] = useState(260);
   const [draggingFilesSeam, setDraggingFilesSeam] = useState(false);
+  const filesPinned = filesMode === 'pinned';
   const filesPanelRef = useRef<HTMLDivElement>(null);
   // Which tabs the top strip holds, in the order you first opened them. A tab
   // exists (sidebar) long before it's "open" up here — it lands in the strip
@@ -380,7 +387,32 @@ export default function App() {
 
   /** Opens a file from the explorer as a read-only tab — reuses the tab if
    *  that file is already open instead of duplicating it. No pty involved. */
+  // A peek closes on losing focus — Escape or a click outside it — and never
+  // on the pointer leaving. Reaching a file deep in the tree walks the cursor
+  // past the panel's edges, and a mouseleave rule would cancel the errand
+  // halfway through. This is the line between a hover menu and a tool window;
+  // JetBrains calls the same mode Dock Unpinned and hides it the same way.
+  useEffect(() => {
+    if (filesMode !== 'peek') return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setFilesMode('hidden'); };
+    const onDown = (e: PointerEvent) => {
+      const target = e.target as Element | null;
+      if (target?.closest('[data-files-panel]') || target?.closest('[data-files-edge]')) return;
+      setFilesMode('hidden');
+    };
+    document.addEventListener('keydown', onKey);
+    // Capture, so a click that opens something else still dismisses first.
+    document.addEventListener('pointerdown', onDown, true);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('pointerdown', onDown, true);
+    };
+  }, [filesMode]);
+
   const handleOpenFile = useCallback((dir: string, path: string) => {
+    // Opening a file is the peek's own ending — look, take, gone. Pinning is
+    // what you do when you want the panel to stay.
+    setFilesMode((m) => (m === 'peek' ? 'hidden' : m));
     const existing = state.tabs.find((t) => t.kind === 'file' && t.path === path);
     if (existing) {
       handleSelectTab(existing.id);
@@ -606,14 +638,14 @@ export default function App() {
   const fullMarkdown = useMemo(() => (turns ? transcriptToMarkdown(turns) : ''), [turns]);
 
   return (
-    <div className="flex h-screen bg-background text-foreground">
+    <div className="relative flex h-screen bg-background text-foreground">
       <Sidebar
         tabs={state.tabs}
         activeTabId={state.activeTabId}
         shellOptions={shellOptions}
         showHistory={showHistory}
         showSettings={showSettings}
-        showFiles={showFiles}
+        showFiles={filesPinned}
         projects={projects}
         collapsed={collapsed}
         onSelectTab={handleSelectTab}
@@ -627,7 +659,7 @@ export default function App() {
         onOpenSearch={() => setPaletteOpen(true)}
         onToggleHistory={() => { setShowHistory((v) => !v); setShowSettings(false); setShowHome(false); }}
         onToggleSettings={() => { setShowSettings((v) => !v); setShowHistory(false); setShowHome(false); }}
-        onToggleFiles={() => setShowFiles((v) => !v)}
+        onToggleFiles={() => setFilesMode((m) => (m === 'pinned' ? 'hidden' : 'pinned'))}
         showHome={homeUp}
         onGoHome={() => { setShowHome((v) => !v); setShowHistory(false); setShowSettings(false); }}
         onAddProject={handleAddProject}
@@ -757,7 +789,12 @@ export default function App() {
           )}
         </div>
       </main>
-      {showFiles && (
+      {/* Not pinned: the edge keeps a way back without taking a column. It
+          stays under the overlay while peeking, so the pointer never has to
+          cross a gap between the two. */}
+      {!filesPinned && <FilesEdge onPeek={() => setFilesMode('peek')} />}
+
+      {filesPinned && (
         <>
           <div
             onMouseDown={() => setDraggingFilesSeam(true)}
@@ -767,14 +804,40 @@ export default function App() {
             {/* wider invisible hit-area over the 1px line */}
             <span className="absolute inset-y-0 -left-1.5 -right-1.5" />
           </div>
-          <div ref={filesPanelRef} style={{ width: filesPanelWidth }} className="shrink-0 border-l border-border overflow-hidden">
+          <div
+            ref={filesPanelRef}
+            data-files-panel
+            style={{ width: filesPanelWidth }}
+            className="shrink-0 border-l border-border overflow-hidden"
+          >
             <FileExplorerPanel
               projects={projects}
               activePath={fileUp ? activeTab?.path ?? null : null}
               onOpenFile={handleOpenFile}
+              pinned
+              onTogglePin={() => setFilesMode('peek')}
             />
           </div>
         </>
+      )}
+
+      {/* Peeking: absolutely placed, so main never changes width and the
+          terminal never rewraps. No resize seam — the width you drag in the
+          docked mode is the width this uses. */}
+      {filesMode === 'peek' && (
+        <div
+          data-files-panel
+          style={{ width: filesPanelWidth }}
+          className="absolute right-0 top-0 bottom-0 z-40 border-l border-border overflow-hidden shadow-[-18px_0_34px_-18px_rgba(0,0,0,0.9)]"
+        >
+          <FileExplorerPanel
+            projects={projects}
+            activePath={fileUp ? activeTab?.path ?? null : null}
+            onOpenFile={handleOpenFile}
+            pinned={false}
+            onTogglePin={() => setFilesMode('pinned')}
+          />
+        </div>
       )}
       {draggingFilesSeam && <div className="fixed inset-0 z-50 cursor-col-resize" />}
       <CommandPalette

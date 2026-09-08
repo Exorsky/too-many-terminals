@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/ipc');
@@ -86,5 +86,56 @@ describe('FileTree', () => {
     fireEvent.click(await screen.findByText('App.tsx'));
 
     expect(onOpen).toHaveBeenCalledWith('/proj/App.tsx');
+  });
+});
+
+describe('FileTree, while a folder stays open', () => {
+  const entry = (name: string, isDir = false) => ({ name, path: `/proj/${name}`, isDir });
+
+  /** Fake timers have to be in place before the render, or the poll's interval
+   *  is created against the real clock and advancing does nothing. */
+  function setup(initial: ReturnType<typeof entry>[]) {
+    vi.useFakeTimers();
+    vi.mocked(ipc.listDir).mockResolvedValue(initial);
+    render(<FileTree root={ROOT} activePath={null} onOpen={vi.fn()} />);
+    fireEvent.click(screen.getByText('project'));
+  }
+
+  afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
+
+  it('picks up a file written next door without being collapsed first', async () => {
+    vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+    setup([entry('a.ts')]);
+    await act(async () => {});
+    expect(screen.getByText('a.ts')).toBeInTheDocument();
+
+    // A session in the next pane creates one.
+    vi.mocked(ipc.listDir).mockResolvedValue([entry('a.ts'), entry('b.ts')]);
+    await act(async () => { vi.advanceTimersByTime(2000); });
+
+    expect(screen.getByText('b.ts')).toBeInTheDocument();
+  });
+
+  it('drops a file that disappeared', async () => {
+    vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+    setup([entry('a.ts'), entry('b.ts')]);
+    await act(async () => {});
+
+    vi.mocked(ipc.listDir).mockResolvedValue([entry('a.ts')]);
+    await act(async () => { vi.advanceTimersByTime(2000); });
+
+    expect(screen.queryByText('b.ts')).not.toBeInTheDocument();
+  });
+
+  it('stops polling while the window is not focused', async () => {
+    vi.spyOn(document, 'hasFocus').mockReturnValue(false);
+    setup([entry('a.ts')]);
+    await act(async () => {});
+    const afterOpen = vi.mocked(ipc.listDir).mock.calls.length;
+
+    await act(async () => { vi.advanceTimersByTime(10_000); });
+
+    // Nobody is looking, so nothing is re-read.
+    expect(vi.mocked(ipc.listDir).mock.calls.length).toBe(afterOpen);
   });
 });
