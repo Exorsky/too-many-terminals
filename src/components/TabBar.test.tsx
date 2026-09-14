@@ -2,6 +2,7 @@ import { cleanup, createEvent, fireEvent, render, screen, within } from '@testin
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Tab } from '@/types';
 import TabBar from './TabBar';
+import { TAB_MIME } from '@/lib/dnd';
 
 afterEach(cleanup);
 
@@ -93,6 +94,89 @@ describe('TabBar', () => {
     drag('drop', 120);
 
     expect(onReorderTab).toHaveBeenCalledWith('a', 'b', 'before');
+  });
+
+  it('accepts a tab dragged in from another pane, with no local drag of its own', () => {
+    // The strip used to bail on any drag it didn't start itself, because the
+    // payload was bare text/plain and indistinguishable from a text selection.
+    // A typed payload is what lets a tab cross panes.
+    const onReorderTab = vi.fn();
+    render(
+      <TabBar
+        tabs={[makeTab('a'), makeTab('b')]}
+        activeTabId="a"
+        onSelectTab={vi.fn()}
+        onCloseTab={vi.fn()}
+        onReorderTab={onReorderTab}
+      />,
+    );
+    const target = screen.getByTitle('/proj/b');
+    Object.defineProperty(target, 'getBoundingClientRect', {
+      value: () => ({ left: 100, width: 100, right: 200, top: 0, bottom: 32, height: 32 }),
+    });
+
+    const dataTransfer = {
+      types: [TAB_MIME],
+      getData: (type: string) => (type === TAB_MIME ? 'foreign' : ''),
+      setData: vi.fn(),
+      effectAllowed: '',
+      dropEffect: '',
+    };
+    const drag = (type: 'dragOver' | 'drop', clientX: number) => {
+      const event = createEvent[type](target, { dataTransfer });
+      Object.defineProperty(event, 'clientX', { value: clientX });
+      fireEvent(target, event);
+    };
+
+    // No dragStart here: the drag began in a different pane's strip.
+    drag('dragOver', 120);
+    drag('drop', 120);
+
+    expect(onReorderTab).toHaveBeenCalledWith('foreign', 'b', 'before');
+  });
+
+  it('ignores a drag that is not ours', () => {
+    const onReorderTab = vi.fn();
+    render(
+      <TabBar
+        tabs={[makeTab('a'), makeTab('b')]}
+        activeTabId="a"
+        onSelectTab={vi.fn()}
+        onCloseTab={vi.fn()}
+        onReorderTab={onReorderTab}
+      />,
+    );
+    const target = screen.getByTitle('/proj/b');
+    // A plain text drag: no tab payload, so getData for our type is empty.
+    const dataTransfer = {
+      types: ['text/plain'],
+      getData: (type: string) => (type === TAB_MIME ? '' : 'some dragged text'),
+      setData: vi.fn(),
+      effectAllowed: '',
+      dropEffect: '',
+    };
+    const over = createEvent.dragOver(target, { dataTransfer });
+    fireEvent(target, over);
+    // Never accepted, so a real browser would not deliver a drop here at all.
+    expect(over.defaultPrevented).toBe(false);
+
+    fireEvent(target, createEvent.drop(target, { dataTransfer }));
+    expect(onReorderTab).not.toHaveBeenCalled();
+  });
+
+  it('hands the cyan active rule to the focused pane only', () => {
+    const { container, rerender } = render(
+      <TabBar tabs={[makeTab('a')]} activeTabId="a" onSelectTab={vi.fn()} onCloseTab={vi.fn()} />,
+    );
+    expect(container.querySelector('.bg-\\[\\#6fd4c9\\]')).not.toBeNull();
+
+    rerender(
+      <TabBar tabs={[makeTab('a')]} activeTabId="a" paneFocused={false} onSelectTab={vi.fn()} onCloseTab={vi.fn()} />,
+    );
+    // The notch stays — you can still read what that pane is showing — but the
+    // accent is gone, so only one strip on screen wears cyan.
+    expect(container.querySelector('.bg-\\[\\#6fd4c9\\]')).toBeNull();
+    expect(screen.getByText('a')).toBeInTheDocument();
   });
 
   it('shows an unsaved indicator for a dirty tab', () => {

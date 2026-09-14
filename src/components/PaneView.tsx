@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { SquareTerminal } from 'lucide-react';
 import FileViewer from './FileViewer';
 import MarkdownPane from './MarkdownPane';
+import PaneDropZones from './PaneDropZones';
 import Seam from './Seam';
 import SessionControls, { type MarkdownView, type SessionMode, type SplitDirection } from './SessionControls';
 import TabBar from './TabBar';
@@ -12,6 +13,7 @@ import { useDragValue } from '@/lib/use-drag-value';
 import { useTranscript } from '@/lib/use-transcript';
 import { cn } from '@/lib/utils';
 import type { Edge, Pane } from '@/lib/panes';
+import type { FileDragPayload } from '@/lib/dnd';
 import type { Tab } from '@/types';
 
 // How often an on-screen transcript re-reads while its session is live, so new
@@ -40,6 +42,13 @@ interface PaneViewProps {
   onDirtyChange: (tabId: string, dirty: boolean) => void;
   onOpenFile: (dir: string, path: string) => void;
   onSplitTab: (tabId: string, edge: Edge) => void;
+  /** A tab dropped anywhere on this pane — an edge splits, the centre moves. */
+  onDropTab: (tabId: string, zone: Edge | 'center') => void;
+  onDropFile: (payload: FileDragPayload, zone: Edge | 'center') => void;
+  /** True while a tab or file is being dragged anywhere in the window. The drop
+   *  zones only exist then, so they never intercept a click meant for the
+   *  terminal underneath. */
+  dragging: boolean;
   /** Which ways this pane still has room to split. */
   canSplit: { vertical: boolean; horizontal: boolean };
   /** Grid placement, from `paneRect`. */
@@ -56,7 +65,8 @@ interface PaneViewProps {
 export default function PaneView({
   pane, tabs, focused, visible, showMarkdownToggle, mdTabs, splitDirection,
   mdView, onSetMdView, onSetMode, onSetSplitDirection, onSelectTab, onCloseBarTab,
-  onReorderTab, onFocus, onInterrupt, onDirtyChange, onOpenFile, onSplitTab, canSplit, style,
+  onReorderTab, onFocus, onInterrupt, onDirtyChange, onOpenFile, onSplitTab, canSplit,
+  onDropTab, onDropFile, dragging, style,
 }: PaneViewProps) {
   const rowRef = useRef<HTMLDivElement>(null);
   // The terminal|transcript seam is this pane's own, unlike the grid seams.
@@ -132,6 +142,9 @@ export default function PaneView({
       />
 
       <div className="relative flex-1 min-h-0">
+        {dragging && (
+          <PaneDropZones canSplit={canSplit} onDropTab={onDropTab} onDropFile={onDropFile} />
+        )}
         <div ref={rowRef} className={cn('absolute inset-0 flex', splitActive && splitDirection === 'down' && 'flex-col')}>
           <div
             className={cn('relative flex flex-col min-w-0', mdFull ? 'hidden' : splitActive ? 'shrink-0' : 'flex-1')}

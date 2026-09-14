@@ -11,7 +11,8 @@ import SettingsView from '@/components/SettingsView';
 import Sidebar from '@/components/Sidebar';
 import { disposeTerminal, writeToTerminal } from '@/components/terminalCache';
 import * as ipc from '@/lib/ipc';
-import { findPane, paneRect, panesOf, seamBands, visibleTabIds } from '@/lib/panes';
+import { isPaneDrag, type FileDragPayload } from '@/lib/dnd';
+import { findPane, paneRect, panesOf, seamBands, visibleTabIds, type Edge } from '@/lib/panes';
 import { useSettings } from '@/lib/settings-store';
 import { activeTabId, initialTabsState, learnSessionNames, tabsReducer, UNNAMED_TAB } from '@/lib/tabs';
 import { useDragValue } from '@/lib/use-drag-value';
@@ -378,13 +379,26 @@ export default function App() {
     };
   }, [filesMode]);
 
-  const handleOpenFile = useCallback((dir: string, path: string) => {
+  const handleOpenFile = useCallback((
+    dir: string,
+    path: string,
+    /** Where to put it. Omitted (the explorer's own click) means the focused
+     *  pane; a drop names the pane and, for an edge, splits it off there. */
+    target?: { paneId: string; edge: Edge | null },
+  ) => {
     // Opening a file is the peek's own ending — look, take, gone. Pinning is
     // what you do when you want the panel to stay.
     setFilesMode((m) => (m === 'peek' ? 'hidden' : m));
+    const place = (tabId: string) => {
+      if (!target) return;
+      dispatch(target.edge
+        ? { type: 'splitTab', tabId, paneId: target.paneId, edge: target.edge }
+        : { type: 'moveTab', tabId, paneId: target.paneId });
+    };
     const existing = state.tabs.find((t) => t.kind === 'file' && t.path === path);
     if (existing) {
-      handleSelectTab(existing.id);
+      if (target) place(existing.id);
+      else handleSelectTab(existing.id);
       return;
     }
     const tab: Tab = {
@@ -399,6 +413,9 @@ export default function App() {
       path,
     };
     dispatch({ type: 'add', tab });
+    // `add` lands it in the focused pane; a drop then moves it where it was
+    // actually dropped.
+    place(tab.id);
     setShowHistory(false);
     setShowSettings(false);
     setShowHome(false);
@@ -546,6 +563,40 @@ export default function App() {
     return () => clearInterval(timer);
   }, [sleepTab]);
 
+  // Is a tab or a file being dragged right now? One listener for the whole
+  // window rather than a flag threaded through every drag source — the drop
+  // zones only mount while this is true, so they never sit between the pointer
+  // and the terminal. Capture phase, so a source that stops propagation still
+  // registers.
+  const [dragInFlight, setDragInFlight] = useState(false);
+  useEffect(() => {
+    const onStart = (e: DragEvent) => {
+      if (e.dataTransfer && isPaneDrag(e.dataTransfer.types)) setDragInFlight(true);
+    };
+    const onEnd = () => setDragInFlight(false);
+    window.addEventListener('dragstart', onStart, true);
+    window.addEventListener('dragend', onEnd, true);
+    window.addEventListener('drop', onEnd, true);
+    return () => {
+      window.removeEventListener('dragstart', onStart, true);
+      window.removeEventListener('dragend', onEnd, true);
+      window.removeEventListener('drop', onEnd, true);
+    };
+  }, []);
+
+  /** A tab dropped on a pane: an edge splits it off, the centre just moves it
+   *  into that pane's strip. `splitPane` itself degrades to a move when the
+   *  pane has no room, so there is nothing to check here. */
+  const handleDropTab = useCallback((tabId: string, paneId: string, zone: Edge | 'center') => {
+    dispatch(zone === 'center'
+      ? { type: 'moveTab', tabId, paneId }
+      : { type: 'splitTab', tabId, paneId, edge: zone });
+  }, []);
+
+  const handleDropFile = useCallback((payload: FileDragPayload, paneId: string, zone: Edge | 'center') => {
+    handleOpenFile(payload.dir, payload.path, { paneId, edge: zone === 'center' ? null : zone });
+  }, [handleOpenFile]);
+
   // The grid's two seams and the file panel's, all on one hook — they were the
   // same twenty lines of window-tracked mousemove three times over.
   const [draggingCol, startColSeam] = useDragValue(
@@ -660,6 +711,9 @@ export default function App() {
                   onDirtyChange={(tabId, dirty) => dispatch({ type: 'dirty', tabId, dirty })}
                   onOpenFile={handleOpenFile}
                   onSplitTab={(tabId, edge) => dispatch({ type: 'splitTab', tabId, paneId, edge })}
+                  dragging={dragInFlight}
+                  onDropTab={(tabId, zone) => handleDropTab(tabId, paneId, zone)}
+                  onDropFile={(payload, zone) => handleDropFile(payload, paneId, zone)}
                   // A pane one cell wide can't split sideways again, and one
                   // cell tall can't split down — so don't offer it.
                   canSplit={{ vertical: rect.colSpan > 1, horizontal: rect.rowSpan > 1 }}

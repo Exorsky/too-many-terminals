@@ -8,6 +8,7 @@ import {
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
 import type { Edge } from '@/lib/panes';
+import { TAB_MIME } from '@/lib/dnd';
 import { cn } from '@/lib/utils';
 import type { Tab } from '@/types';
 import { TabIndicator } from './Sidebar';
@@ -89,12 +90,18 @@ export default function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, onR
               onDragStart={(e) => {
                 dragIdRef.current = tab.id;
                 e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData(TAB_MIME, tab.id);
                 e.dataTransfer.setData('text/plain', tab.id);
               }}
               onDragEnd={() => { dragIdRef.current = null; setDrop(null); }}
               onDragOver={(e) => {
                 const id = dragIdRef.current;
-                if (!id || id === tab.id) return; // not our drag, or the tab itself
+                if (id === tab.id) return; // the tab itself
+                // No local id means the drag started somewhere else — another
+                // pane's strip, or the file tree. `types` is readable during
+                // dragover (unlike getData), which is the whole reason the
+                // payload is typed.
+                if (!id && !e.dataTransfer.types.includes(TAB_MIME)) return;
                 e.preventDefault();
                 e.dataTransfer.dropEffect = 'move';
                 const pos = dropSide(e);
@@ -103,8 +110,12 @@ export default function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, onR
               }}
               onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDrop(null); }}
               onDrop={(e) => {
-                const id = dragIdRef.current;
-                if (id && id !== tab.id) { e.preventDefault(); onReorderTab?.(id, tab.id, dropSide(e)); }
+                const id = dragIdRef.current ?? e.dataTransfer.getData(TAB_MIME);
+                if (id && id !== tab.id) {
+                  e.preventDefault();
+                  e.stopPropagation(); // the pane's drop zones are behind this
+                  onReorderTab?.(id, tab.id, dropSide(e));
+                }
                 dragIdRef.current = null;
                 setDrop(null);
               }}
