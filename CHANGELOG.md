@@ -11,6 +11,32 @@ listed here; see `git log` for the full history.
 
 ## [Unreleased]
 
+### Added
+
+- **Split the window into up to four panes.** Drag a tab onto the edge of a
+  pane to split it — left, right, top or bottom — or drop it in the middle to
+  move it into that pane's strip. Right-click a tab for **Split right** /
+  **Split down** if you'd rather not drag. Each pane keeps its own tab strip
+  and its own active tab, so you can watch two Claude sessions work at once, or
+  put a file next to the session editing it.
+- **Files drag out of the explorer into a pane.** From the tree or from search
+  results, onto whichever pane edge you want it opened against.
+- **Drag the seams to resize.** Both rows share one vertical seam and both
+  columns share one horizontal seam, clamped so no pane can be squeezed away.
+
+### Changed
+
+- **The tab strip is per-pane**, not one bar across the top. Closing a pane's
+  last tab collapses the pane and hands its space to a neighbour; the grid
+  never leaves a hole.
+- **Only the focused pane shows the cyan active-tab rule**, and other strips
+  dim — with four terminals on screen, which one takes your next keystroke is
+  the thing worth marking.
+- **A session visible in any pane is never auto-slept.** Previously only the
+  one tab you were typing into counted as on-screen.
+- Home, History, Settings and the session reader now cover the whole grid
+  rather than leaving a tab strip above them.
+
 ## [0.23.1] - 2026-09-08
 
 ### Added

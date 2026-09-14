@@ -127,10 +127,7 @@ const Terminal = React.memo(function Terminal({ tabId, isVisible, focused = true
     ensureWebgl(cached);
 
     // Defer initial fit to next frame so the container has final layout dimensions
-    const rafId = requestAnimationFrame(() => {
-      fitAndSync();
-      if (focused) term.focus();
-    });
+    const rafId = requestAnimationFrame(fitAndSync);
 
     // Handle resize — observe container and refit
     // Dragging a seam resizes every visible pane at pointer rate, and each fit
@@ -149,6 +146,15 @@ const Terminal = React.memo(function Terminal({ tabId, isVisible, focused = true
       clearTimeout(resizeTimeout);
       resizeObserver.disconnect();
     };
+  }, [tabId, isVisible]);
+
+  // Hand the terminal the keyboard when its pane takes focus. Its own effect,
+  // not part of the attach above: clicking between panes changes `focused` on
+  // two terminals at once, and re-running attach would tear down and rebuild
+  // each ResizeObserver and bounce a pty_resize for a size that didn't change.
+  useEffect(() => {
+    if (!isVisible || !focused) return;
+    terminalCache.get(tabId)?.term.focus();
   }, [tabId, isVisible, focused]);
 
   // Housekeeping for hidden terminals: stop idle cursor repaints, and release

@@ -304,6 +304,41 @@ the search icon button in the sidebar header
 (see [command-palette.md](features/command-palette.md)) is the fix, and the
 same question is worth asking of any future shortcut-only feature.
 
+### A mark that must not be missed → take it away from everything else
+
+With one terminal on screen, which pane has the keyboard is never a question.
+With four, it is the only question that matters — in a text editor a misplaced
+keystroke lands in an undoable buffer, here it lands in a live Claude session.
+
+The answer is **subtraction, not addition**. The active tab's 2px cyan rule
+renders only in the focused pane; unfocused strips drop to 60%. An unfocused
+pane keeps its notch (`bg-background` against the strip's `bg-card`), so you can
+still read what it is showing — it just gives up the accent. Nothing new is
+drawn, no reserved status colour is borrowed, and exactly one thing on screen
+wears cyan.
+
+The alternatives were both additions that this system forbids: a border or ring
+around the focused pane wraps a thing in its own tinted bordered card (the rule
+above), and a second accent colour would collide with the status vocabulary.
+When every pane can carry the same mark, the way to make one pane's mark mean
+something is to withhold it from the others.
+
+### A drop that changes the layout → show the shape, not a hint
+
+Dragging a tab onto a pane highlights **the literal region the pane will
+become**: half for an edge, the whole pane for a move into its strip.
+`bg-primary/12` with a `1px border-primary` — `primary` because it means "you
+put this here", the same reason it carries the tab strip's insertion line and
+the sidebar's drop line.
+
+When a split has no room (a pane already one cell wide, or the fourth pane), the
+highlight shows the **whole** pane, because a move is what will actually happen.
+The affordance never promises a layout the model won't produce, which is why
+there is no disabled-looking zone and no error to explain.
+
+The zones exist **only while a drag is in flight**. A permanent invisible
+overlay would sit between the pointer and the terminal.
+
 ## Shipped: the session bar → tab strip redesign
 
 The terminal's own top chrome (`TabBar.tsx`, formerly `SessionBar.tsx`) went
@@ -339,6 +374,9 @@ shipped shape.
 - `src/components/Sidebar.tsx` — `TabIndicator` (status vocabulary),
   `bucketsOf`/`SidebarLens` (the ledger pattern), `FolderBar`/`FolderPill`
   (grouping as a filter), `spineClass` and `RowMeta` (shape rules)
+- `src/components/PaneView.tsx`, `src/components/PaneDropZones.tsx`,
+  `src/components/Seam.tsx` — the pane grid's focus rule, drop affordance and
+  seam (see [panes.md](features/panes.md))
 - `src/components/SidebarFooter.tsx` — the menu-over-persistent-chrome pattern
 - `src/components/SettingsView.tsx` — the left-rail pattern
 - `src/types.ts` — `PROJECT_COLORS`, `projectHue`

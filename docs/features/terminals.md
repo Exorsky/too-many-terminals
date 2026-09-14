@@ -1,5 +1,10 @@
 # Terminals
 
+> The tab strip described here is now **per pane** — the window can hold up to
+> four, each with its own strip and active tab. The app-wide `barTabIds` list is
+> gone; a pane's `tabIds` is its strip. See [panes.md](panes.md).
+
+
 ## The session list
 
 Every open session — Claude and shell alike — lives in **one flat list**, sorted by what it's

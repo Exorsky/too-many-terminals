@@ -12,6 +12,7 @@ Feature and architecture docs live in `docs/` — **keep them updated when featu
   vocabulary, shape rules, the status vocabulary, and when to reach for a tab strip vs. a
   left rail vs. a menu vs. a context menu
 - [docs/features/terminals.md](docs/features/terminals.md) — sidebar (folders, pinning, drag-reorder), tabs, PTY spawning per OS
+- [docs/features/panes.md](docs/features/panes.md) — the split-pane window manager: a 2x2 grid, drag-to-split, resizable seams
 - [docs/features/file-explorer.md](docs/features/file-explorer.md) — file tree + CodeMirror editor docked to the right edge
 - [docs/features/markdown-preview.md](docs/features/markdown-preview.md) — the shared Markdown renderer: file-opening links, anchors, mermaid diagrams
 - [docs/features/home-screen.md](docs/features/home-screen.md) — idle Home: a metrics dashboard built from your session history

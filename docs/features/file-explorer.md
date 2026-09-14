@@ -1,5 +1,11 @@
 # File explorer
 
+> A file row is **draggable into a pane** — from the tree or from search results
+> — carrying `{ dir, path }` as `application/x-tmt-file`. Dropping it on a pane
+> edge opens it split there; a plain click still opens it in the focused pane.
+> See [panes.md](panes.md).
+
+
 A file browser and editor at the right edge of the window, opened from the
 **Files** square in the [sidebar rail](terminals.md#the-rail-folders-and-navigation).
 Browse every open project's files, open one as a tab, and edit it in place.
@@ -224,6 +230,8 @@ Deliberately left out — see the design notes for why each was cut:
   to see external changes.
 - **File creation/deletion/rename from the explorer.** Only edits existing
   files opened from the tree or search.
-- **Content search, git status letters, tabs-within-the-explorer, split
-  editors.** All plausible Orca-style additions; none were needed to browse,
-  read, and edit a project's files, so none were built.
+- **Content search, git status letters, tabs-within-the-explorer.** All
+  plausible Orca-style additions; none were needed to browse, read, and edit a
+  project's files, so none were built. (Split editors *were* — but as a window
+  manager the whole app shares, not a second one inside this panel. See
+  [panes.md](panes.md).)

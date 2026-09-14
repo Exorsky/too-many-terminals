@@ -12,12 +12,14 @@ WebKitGTK) and a small Rust binary, keeping installers in the ~10–25 MB range.
 ┌─────────────────────────────┐        ┌──────────────────────────────┐
 │ Webview (React, src/)       │        │ Rust core (src-tauri/src/)   │
 │                             │        │                              │
-│ App.tsx — tabs state        │ invoke │ commands.rs — thin adapters  │
+│ App.tsx — tabs + layout     │ invoke │ commands.rs — thin adapters  │
+│ lib/panes.ts — pane grid    │        │                              │
 │ lib/ipc.ts — ONLY IPC seam ─┼───────►│ pty.rs — portable-pty        │
-│ Terminal.tsx — xterm.js     │◄───────┤ shell.rs — per-OS shells     │
-│ terminalCache.ts            │channel │ claude.rs — claude CLI cmd   │
-│ SessionHistoryPanel.tsx     │ events │ session_history.rs           │
-│ SidebarFooter.tsx           │        │ session_usage.rs             │
+│ PaneView.tsx — one pane     │◄───────┤ shell.rs — per-OS shells     │
+│ Terminal.tsx — xterm.js     │channel │ claude.rs — claude CLI cmd   │
+│ terminalCache.ts            │ events │ session_history.rs           │
+│ SessionHistoryPanel.tsx     │        │ session_usage.rs             │
+│ SidebarFooter.tsx           │        │                              │
 └─────────────────────────────┘        └──────────────────────────────┘
 ```
 
@@ -41,6 +43,10 @@ WebKitGTK) and a small Rust binary, keeping installers in the ~10–25 MB range.
 
 - `src/lib/ipc.ts` is the **only** frontend module importing `@tauri-apps/api`.
   Components depend on its interface; vitest automocks it.
+- `src/lib/panes.ts` is pure layout algebra — a 2x2 grid of pane ids, no React and no
+  Tauri — so `tabsReducer` can call it and vitest can enumerate every reachable shape.
+  `src/lib/tabs.ts` owns the combined `{ tabs, layout }` state, so "close a tab" can't
+  desync from "remove it from its pane". See docs/features/panes.md.
 - Rust core modules (`pty.rs`, `shell.rs`, `claude.rs`, `session_history.rs`, `session_usage.rs`)
   take plain arguments (`&Path` roots, `Platform` enum) instead of touching Tauri state or
   `cfg!` directly, so `cargo test` covers all three platforms' logic on any host.
@@ -57,7 +63,9 @@ WebKitGTK) and a small Rust binary, keeping installers in the ~10–25 MB range.
 - **WebGL**: xterm tries the WebGL renderer and falls back to the DOM renderer on context
   loss (common on WebKitGTK). The context is held only by the **visible** terminal —
   `Terminal.tsx` disposes the WebGL addon when a tab is hidden and re-activates it on
-  re-show, so many open tabs don't exhaust the webview's WebGL2 context limit.
+  re-show, so many open tabs don't exhaust the webview's WebGL2 context limit. With the
+  pane grid the ceiling is up to four live contexts at once (one per visible pane)
+  rather than one — still well inside the limit, and hidden tabs still release theirs.
 
 ## Known follow-ups
 
