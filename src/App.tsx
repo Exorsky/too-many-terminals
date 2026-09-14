@@ -14,7 +14,7 @@ import * as ipc from '@/lib/ipc';
 import { isPaneDrag, TAB_MIME, type FileDragPayload } from '@/lib/dnd';
 import { findPane, paneRect, panesOf, seamBands, visibleTabIds, type Edge, type Pane } from '@/lib/panes';
 import { useSettings } from '@/lib/settings-store';
-import { activeTabId, initialTabsState, learnSessionNames, tabsReducer, UNNAMED_TAB } from '@/lib/tabs';
+import { activeTabId, initialTabsState, learnSessionNames, sessionModeOf, tabsReducer, UNNAMED_TAB } from '@/lib/tabs';
 import { useDragValue } from '@/lib/use-drag-value';
 import { cn } from '@/lib/utils';
 import type { SavedTab, SessionHistoryEntry, ShellOption, Tab, TabKind, TabStatus } from '@/types';
@@ -513,10 +513,11 @@ export default function App() {
     if (overlaysUp || homeUp) return new Set<string>();
     const ids = visibleTabIds(layout);
     for (const id of ids) {
-      if (mdTabs.get(id) === 'markdown') ids.delete(id);
+      const tab = state.tabs.find((t) => t.id === id);
+      if (sessionModeOf(tab, mdTabs, settings.showMarkdownToggle) === 'markdown') ids.delete(id);
     }
     return ids;
-  }, [overlaysUp, homeUp, layout, mdTabs]);
+  }, [overlaysUp, homeUp, layout, mdTabs, state.tabs, settings.showMarkdownToggle]);
   visibleTabIdsRef.current = visible;
 
   // Lazily spawn a dormant (restored) tab's pty the first time it's actually

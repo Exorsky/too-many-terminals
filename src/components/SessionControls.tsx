@@ -7,8 +7,9 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
+import type { SessionMode } from '@/types';
 
-export type SessionMode = 'terminal' | 'markdown' | 'split';
+export type { SessionMode };
 export type SplitDirection = 'right' | 'down';
 export type MarkdownView = 'rendered' | 'raw';
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { activeTabId, initialTabsState, learnSessionNames, tabBarTabs, tabsReducer, type TabsState } from './tabs';
+import { activeTabId, initialTabsState, learnSessionNames, sessionModeOf, tabBarTabs, tabsReducer, type TabsState } from './tabs';
+import type { SessionMode } from '@/types';
 import { focusedPane, panesOf, paneOfTab, visibleTabIds } from './panes';
 import type { Tab } from '@/types';
 
@@ -255,6 +256,36 @@ describe('tabsReducer pane grid', () => {
     let state = stateWith('a');
     state = tabsReducer(state, { type: 'seam', axis: 'col', frac: 0.99 });
     expect(state.layout.colFrac).toBe(0.85);
+  });
+});
+
+describe('sessionModeOf', () => {
+  const readable = makeTab('a', { kind: 'claude', resumeSessionId: 'sess-1' });
+
+  it('honours a stored mode for a readable tab', () => {
+    expect(sessionModeOf(readable, new Map<string, SessionMode>([['a', 'markdown']]), true)).toBe('markdown');
+    expect(sessionModeOf(readable, new Map<string, SessionMode>([['a', 'split']]), true)).toBe('split');
+  });
+
+  it('falls back to terminal when the tab cannot actually be read', () => {
+    // The blank-pane bug: App dropped a markdown-marked tab from the on-screen
+    // set while PaneView refused to render a transcript for it, so the pane
+    // showed neither. Both now ask this one question.
+    const stored = new Map<string, SessionMode>([['a', 'markdown']]);
+
+    // setting switched off
+    expect(sessionModeOf(readable, stored, false)).toBe('terminal');
+    // no transcript to read
+    expect(sessionModeOf(makeTab('a', { kind: 'claude', resumeSessionId: null }), stored, true)).toBe('terminal');
+    // not a Claude session at all
+    expect(sessionModeOf(makeTab('a', { kind: 'shell', resumeSessionId: 'sess-1' }), stored, true)).toBe('terminal');
+    // a file tab
+    expect(sessionModeOf(makeTab('a', { kind: 'file', path: '/p/a.md' }), stored, true)).toBe('terminal');
+  });
+
+  it('is terminal for no tab and for an unmarked tab', () => {
+    expect(sessionModeOf(null, new Map(), true)).toBe('terminal');
+    expect(sessionModeOf(readable, new Map(), true)).toBe('terminal');
   });
 });
 

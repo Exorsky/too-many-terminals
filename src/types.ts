@@ -1,5 +1,10 @@
 export type TabKind = 'claude' | 'shell' | 'file';
 
+/** How a tab is being shown: the terminal alone, its transcript alone, or both
+ *  side by side. Lives here rather than on SessionControls because App and
+ *  PaneView both have to agree on it — see `sessionModeOf` in lib/tabs.ts. */
+export type SessionMode = 'terminal' | 'markdown' | 'split';
+
 /** Live state of a Claude tab, learned from Claude Code's own hooks
  *  (SessionStart/PreToolUse/Stop/Notification). Meaningless for shell tabs,
  *  which never emit hook events. */

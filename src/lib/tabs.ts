@@ -1,4 +1,4 @@
-import type { Tab, TabStatus } from '@/types';
+import type { SessionMode, Tab, TabStatus } from '@/types';
 import {
   activateTab,
   addTabToFocused,
@@ -34,6 +34,29 @@ export function activeTabId(state: TabsState): string | null {
 /** Placeholder every fresh Claude tab starts with, until the auto-namer or the
  *  user gives it a real one. Not a name, so it never becomes a session's. */
 export const UNNAMED_TAB = 'Claude';
+
+/** How a tab is actually being shown.
+ *
+ *  The single source of truth for it, because two callers need the answer and
+ *  they must not disagree: App uses it to decide which tabs are on screen (and
+ *  so which need a live pty), PaneView uses it to decide what to render. When
+ *  those two rules diverged, a tab marked `markdown` that was no longer
+ *  readable got its terminal hidden by the first and no transcript from the
+ *  second — a blank pane under a populated tab strip.
+ *
+ *  A stored mode only applies while the tab can actually be read: a Claude
+ *  session with a transcript, and the setting switched on. Anything else is
+ *  a plain terminal, whatever was stored earlier. */
+export function sessionModeOf(
+  tab: Tab | null | undefined,
+  modes: Map<string, SessionMode>,
+  showMarkdownToggle: boolean,
+): SessionMode {
+  if (!tab) return 'terminal';
+  const readable = tab.kind === 'claude' && !!tab.resumeSessionId;
+  if (!showMarkdownToggle || !readable) return 'terminal';
+  return modes.get(tab.id) ?? 'terminal';
+}
 
 /** Folds the names currently on tabs into the persisted session-id → name map.
  *  Kept separate from `tabs` (and from the reducer) because it has to outlive

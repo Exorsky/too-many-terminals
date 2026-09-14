@@ -7,7 +7,7 @@ import Seam from './Seam';
 import SessionControls, { type MarkdownView, type SessionMode, type SplitDirection } from './SessionControls';
 import TabBar from './TabBar';
 import Terminal from './Terminal';
-import { tabBarTabs } from '@/lib/tabs';
+import { sessionModeOf, tabBarTabs } from '@/lib/tabs';
 import { transcriptToMarkdown } from '@/lib/transcript';
 import { useDragValue } from '@/lib/use-drag-value';
 import { useTranscript } from '@/lib/use-transcript';
@@ -76,10 +76,11 @@ export default function PaneView({
   const paneTabs = useMemo(() => tabBarTabs(tabs, pane.tabIds), [tabs, pane.tabIds]);
   const activeTab = paneTabs.find((t) => t.id === pane.activeTabId) ?? null;
 
-  const readable = !!activeTab && activeTab.kind === 'claude' && !!activeTab.resumeSessionId;
-  const fileUp = activeTab?.kind === 'file';
-  const canRead = showMarkdownToggle && readable && !fileUp;
-  const mode: SessionMode = (canRead && activeTab && mdTabs.get(activeTab.id)) || 'terminal';
+  // Exactly the rule App uses to decide what is on screen. Computing it twice
+  // is what left a pane blank when the two answers differed.
+  const mode = sessionModeOf(activeTab, mdTabs, showMarkdownToggle);
+  const canRead = showMarkdownToggle && !!activeTab
+    && activeTab.kind === 'claude' && !!activeTab.resumeSessionId;
   const mdReading = mode === 'markdown' || mode === 'split';
   const mdFull = mode === 'markdown';
   const splitActive = mode === 'split';
@@ -159,6 +160,11 @@ export default function PaneView({
               </div>
             )}
             <div className="relative flex-1 min-h-0">
+              {paneTabs.length === 0 && (
+                <div className="absolute inset-0 flex items-center justify-center text-[11px] text-muted-foreground">
+                  Drop a tab here
+                </div>
+              )}
               {paneTabs.filter((tab) => tab.kind !== 'file').map((tab) => (
                 <Terminal
                   key={tab.id}
