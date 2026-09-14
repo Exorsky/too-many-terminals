@@ -105,10 +105,20 @@ attach.
 ## Terminals moving between panes
 
 An xterm instance lives in `terminalCache`, outside React, and pty output is
-routed straight to it. So a tab dragged into another pane remounts its
-`<Terminal>` into a new container and `term.open()` re-parents xterm's existing
-element — buffer, scrollback and pty untouched. The cost of a move is one
-`open()`.
+routed straight to it, so a tab dragged into another pane keeps its buffer,
+scrollback and pty.
+
+**`term.open()` does not re-parent.** It builds and mounts the element the first
+time and returns immediately on every later call — so re-opening into the new
+container silently does nothing, leaving the element on the old, now-detached
+node and the new pane rendering an empty box. `Terminal.tsx` moves
+`term.element` itself and calls `term.refresh()`, since moving a node doesn't
+repaint it and the follow-up fit is a no-op when the new pane is the same size.
+
+This only ever broke *running* sessions: a dormant tab has no element yet, so it
+takes the real `open()` path and looked fine, which is what made it hard to see.
+`Terminal.test.tsx` pins it with a stand-in whose `open()` reproduces that early
+return.
 
 `Terminal` keys `attachedRef` on **the container**, not its own tab id (which is a
 prop that never changes and so could never invalidate). A tab can be in exactly

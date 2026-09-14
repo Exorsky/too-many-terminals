@@ -109,16 +109,30 @@ const Terminal = React.memo(function Terminal({ tabId, isVisible, focused = true
       }
     };
 
-    // If already attached to this container, just fit and observe resize.
-    // Otherwise `term.open` re-parents xterm's existing element into the new
-    // container — the instance lives in `terminalCache`, outside React, so the
-    // buffer, scrollback and pty all survive a move between panes untouched.
+    // Attach, or re-attach after a move between panes.
+    //
+    // `term.open()` only builds and mounts the element the FIRST time: once
+    // `term.element` exists it returns immediately without re-parenting. So a
+    // tab dragged into another pane would leave its element on the old,
+    // now-detached container and the new pane would render an empty box — and
+    // only for sessions that had actually been shown, since a dormant one has
+    // no element yet and takes the real open() path. Move the element by hand.
+    //
+    // The instance itself lives in `terminalCache`, outside React, so the
+    // buffer, scrollback and pty survive the move untouched.
     const alreadyAttached =
       attachedRef.current === container && container.querySelector('.xterm');
 
     if (!alreadyAttached) {
-      container.innerHTML = '';
-      term.open(container);
+      if (term.element) {
+        if (term.element.parentElement !== container) container.appendChild(term.element);
+        // Moving the node doesn't repaint it, and the fit below is a no-op when
+        // the pane happens to be the same size as the old one.
+        term.refresh(0, term.rows - 1);
+      } else {
+        container.innerHTML = '';
+        term.open(container);
+      }
       attachedRef.current = container;
     }
 
