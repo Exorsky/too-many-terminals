@@ -1,6 +1,19 @@
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
+/** Is there a live text selection inside `root`?
+ *
+ *  Used to hold off work that would rebuild the DOM under someone's cursor.
+ *  WebKit collapses a selection as soon as the nodes it covers are replaced,
+ *  which is far stricter than Blink — so a background refresh that Windows
+ *  tolerates drops the selection outright on macOS. */
+export function hasSelectionIn(root: HTMLElement | null | undefined): boolean {
+  if (!root) return false;
+  const selection = window.getSelection?.();
+  if (!selection || selection.isCollapsed || selection.rangeCount === 0) return false;
+  return root.contains(selection.getRangeAt(0).commonAncestorContainer);
+}
+
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }

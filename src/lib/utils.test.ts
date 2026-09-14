@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { isInterruptKeystroke, parentPath } from './utils';
+import { afterEach, describe, expect, it } from 'vitest';
+import { hasSelectionIn, isInterruptKeystroke, parentPath } from './utils';
 
 describe('parentPath', () => {
   it('shows the two nearest ancestors with an ellipsis when there are more above', () => {
@@ -40,5 +40,59 @@ describe('isInterruptKeystroke', () => {
   it('does not match ordinary input', () => {
     expect(isInterruptKeystroke('a')).toBe(false);
     expect(isInterruptKeystroke('')).toBe(false);
+  });
+});
+
+describe('hasSelectionIn', () => {
+  function selectInside(node: Node) {
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    const sel = window.getSelection()!;
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+
+  afterEach(() => window.getSelection()?.removeAllRanges());
+
+  it('is false with no selection at all', () => {
+    const el = document.createElement('div');
+    document.body.appendChild(el);
+    expect(hasSelectionIn(el)).toBe(false);
+  });
+
+  it('is false for a missing root', () => {
+    expect(hasSelectionIn(null)).toBe(false);
+    expect(hasSelectionIn(undefined)).toBe(false);
+  });
+
+  it('sees a selection inside the root', () => {
+    const el = document.createElement('div');
+    el.textContent = 'some transcript text';
+    document.body.appendChild(el);
+    selectInside(el);
+    expect(hasSelectionIn(el)).toBe(true);
+  });
+
+  it('ignores a selection that lives somewhere else', () => {
+    const mine = document.createElement('div');
+    mine.textContent = 'my pane';
+    const other = document.createElement('div');
+    other.textContent = 'another pane';
+    document.body.append(mine, other);
+    selectInside(other);
+    expect(hasSelectionIn(mine)).toBe(false);
+  });
+
+  it('ignores a collapsed selection — a caret is not a selection', () => {
+    const el = document.createElement('div');
+    el.textContent = 'text';
+    document.body.appendChild(el);
+    const range = document.createRange();
+    range.setStart(el.firstChild!, 2);
+    range.collapse(true);
+    const sel = window.getSelection()!;
+    sel.removeAllRanges();
+    sel.addRange(range);
+    expect(hasSelectionIn(el)).toBe(false);
   });
 });

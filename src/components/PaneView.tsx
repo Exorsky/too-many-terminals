@@ -11,7 +11,7 @@ import { sessionModeOf, tabBarTabs } from '@/lib/tabs';
 import { transcriptToMarkdown } from '@/lib/transcript';
 import { useDragValue } from '@/lib/use-drag-value';
 import { useTranscript } from '@/lib/use-transcript';
-import { cn } from '@/lib/utils';
+import { cn, hasSelectionIn } from '@/lib/utils';
 import type { Edge, Pane } from '@/lib/panes';
 import type { FileDragPayload } from '@/lib/dnd';
 import type { Tab } from '@/types';
@@ -70,6 +70,7 @@ export default function PaneView({
   onReorderTab, onFocus, onInterrupt, onDirtyChange, onOpenFile, onSplitTab, canSplit,
   onDropTab, onDropFile, onDropInStrip, dragging, style,
 }: PaneViewProps) {
+  const paneRef = useRef<HTMLDivElement>(null);
   const rowRef = useRef<HTMLDivElement>(null);
   // The terminal|transcript seam is this pane's own, unlike the grid seams.
   const [ratio, setRatio] = useState(0.5);
@@ -113,13 +114,21 @@ export default function PaneView({
   // session costs a read and no re-render.
   useEffect(() => {
     if (!mdReading || !activeTab || activeTab.exited) return;
-    const timer = setInterval(() => setMdReload((k) => k + 1), LIVE_FOLLOW_MS);
+    const timer = setInterval(() => {
+      // Never re-read out from under someone who is selecting text. A re-read
+      // that finds new turns rebuilds the document, and WebKit drops the
+      // selection the moment the nodes under it are replaced. The next tick
+      // picks it up as soon as the selection is released.
+      if (hasSelectionIn(paneRef.current)) return;
+      setMdReload((k) => k + 1);
+    }, LIVE_FOLLOW_MS);
     return () => clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mdReading, activeTab?.id, activeTab?.exited]);
 
   return (
     <div
+      ref={paneRef}
       style={style}
       className="relative flex flex-col min-w-0 min-h-0 overflow-hidden border-r border-b border-border"
       onMouseDownCapture={onFocus}

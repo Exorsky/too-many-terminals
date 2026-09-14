@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import type { TranscriptTurn } from '@/types';
 import { roleLabel, transcriptToMarkdown, turnToMarkdown } from '@/lib/transcript';
 import { cn } from '@/lib/utils';
@@ -18,7 +19,11 @@ const NODE_STYLES: Record<TranscriptTurn['role'], string> = {
  *  body behind both the History overlay (`SessionReader`) and the in-place
  *  markdown view (`MarkdownPane`). Presentational: callers own loading, error,
  *  empty, and the surrounding chrome. */
-export default function TranscriptDocument({ turns, view, fill = false }: {
+/** Memoised on purpose. A live session re-reads its transcript on a timer, and
+ *  most of those reads return identical content — `useTranscript` keeps the same
+ *  `turns` reference when nothing changed, so this skips rebuilding the whole
+ *  document (and, with it, throwing away any text the reader had selected). */
+function TranscriptDocument({ turns, view, fill = false }: {
   turns: TranscriptTurn[];
   view: 'rendered' | 'raw';
   /** Fill the container width (split pane) instead of a centered reading
@@ -88,3 +93,5 @@ export default function TranscriptDocument({ turns, view, fill = false }: {
     </div>
   );
 }
+
+export default memo(TranscriptDocument);
