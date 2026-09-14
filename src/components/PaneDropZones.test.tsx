@@ -115,6 +115,21 @@ describe('PaneDropZones', () => {
     expect(hl.style.right).toBe('0px');
   });
 
+  it('asks for an effect the drag source actually allows', () => {
+    // effectAllowed='copy' from the file explorer against dropEffect='move'
+    // makes the browser cancel the drop: no drop event, just a no-drop cursor.
+    // Files never reached a pane because of exactly this.
+    const { zone } = setup();
+
+    const tabDrag = fakeDataTransfer({ [TAB_MIME]: 'tab-7' });
+    drag(zone, 'dragOver', 200, 100, tabDrag);
+    expect(tabDrag.dropEffect).toBe('move');
+
+    const fileDrag = fakeDataTransfer({ [FILE_MIME]: '{}' });
+    drag(zone, 'dragOver', 200, 100, fileDrag);
+    expect(fileDrag.dropEffect).toBe('copy');
+  });
+
   it('opens a dropped file, carrying its project folder', () => {
     const { zone, onDropFile } = setup();
     const dataTransfer = fakeDataTransfer({

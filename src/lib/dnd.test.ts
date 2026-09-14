@@ -63,6 +63,15 @@ describe('zoneRect', () => {
     expect(zoneRect('center', both)).toEqual({ left: 0, right: 0, top: 0, bottom: 0 });
   });
 
+  it('shows the whole pane for a split that would empty the source pane', () => {
+    // Dragging a pane's only tab onto its own edge: the tab leaves, the pane
+    // empties and collapses straight back, so nothing moves. App passes
+    // canSplit=false for that case so the highlight stops promising a split.
+    const none = { vertical: false, horizontal: false };
+    expect(zoneRect('right', none)).toEqual({ left: 0, right: 0, top: 0, bottom: 0 });
+    expect(zoneRect('bottom', none)).toEqual({ left: 0, right: 0, top: 0, bottom: 0 });
+  });
+
   it('shows the whole pane when that split has no room — a move is what happens', () => {
     const narrow = { vertical: false, horizontal: true };
     expect(zoneRect('right', narrow)).toEqual({ left: 0, right: 0, top: 0, bottom: 0 });

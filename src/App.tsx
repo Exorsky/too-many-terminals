@@ -11,8 +11,8 @@ import SettingsView from '@/components/SettingsView';
 import Sidebar from '@/components/Sidebar';
 import { disposeTerminal, writeToTerminal } from '@/components/terminalCache';
 import * as ipc from '@/lib/ipc';
-import { isPaneDrag, type FileDragPayload } from '@/lib/dnd';
-import { findPane, paneRect, panesOf, seamBands, visibleTabIds, type Edge } from '@/lib/panes';
+import { isPaneDrag, TAB_MIME, type FileDragPayload } from '@/lib/dnd';
+import { findPane, paneRect, panesOf, seamBands, visibleTabIds, type Edge, type Pane } from '@/lib/panes';
 import { useSettings } from '@/lib/settings-store';
 import { activeTabId, initialTabsState, learnSessionNames, tabsReducer, UNNAMED_TAB } from '@/lib/tabs';
 import { useDragValue } from '@/lib/use-drag-value';
@@ -25,6 +25,12 @@ const SAVE_DEBOUNCE_MS = 300;
 // How often we scan for idle background sessions to auto-sleep. The threshold
 // itself is user-configurable (settings.autoSleepMinutes; 0 disables).
 const SLEEP_CHECK_MS = 60 * 1000;
+
+/** Would splitting this pane off `tabId` leave it with nothing? Then there is
+ *  no split to make — the pane would empty and collapse back immediately. */
+function splitWouldEmpty(pane: Pane, tabId: string | null | undefined): boolean {
+  return !!tabId && pane.tabIds.length === 1 && pane.tabIds[0] === tabId;
+}
 
 export default function App() {
   const [state, dispatch] = useReducer(tabsReducer, initialTabsState);
@@ -563,45 +569,55 @@ export default function App() {
     return () => clearInterval(timer);
   }, [sleepTab]);
 
-  // Is a tab or a file being dragged right now? One listener for the whole
-  // window rather than a flag threaded through every drag source — the drop
-  // zones only mount while this is true, so they never sit between the pointer
-  // and the terminal.
+  // What's being dragged right now, if anything — one listener for the whole
+  // window rather than a flag threaded through every drag source. The drop
+  // zones only mount while this is set, so they never sit between the pointer
+  // and the terminal. `tabId` is null for a file drag.
   //
   // `dragstart` must be BUBBLE phase. React attaches its handlers at the root
   // container, so a source only calls `setData` as the event bubbles; a
-  // capture-phase listener here runs first and reads an empty `types`, which
-  // leaves every pane with no drop target and no visible sign why.
-  // `dragend`/`drop` stay on capture: the tab strip stops propagation on drop,
-  // which would otherwise strand the flag on and leave the zones up.
-  const [dragInFlight, setDragInFlight] = useState(false);
+  // capture-phase listener here runs first, reads an empty `types`, and leaves
+  // every pane with no drop target and no visible sign why. `getData` *is*
+  // readable during dragstart (unlike dragover), so the payload can be read
+  // here too.
+  const [drag, setDrag] = useState<{ tabId: string | null } | null>(null);
+  const endDrag = useCallback(() => setDrag(null), []);
   useEffect(() => {
     const onStart = (e: DragEvent) => {
-      if (e.dataTransfer && isPaneDrag(e.dataTransfer.types)) setDragInFlight(true);
+      if (!e.dataTransfer || !isPaneDrag(e.dataTransfer.types)) return;
+      setDrag({ tabId: e.dataTransfer.getData(TAB_MIME) || null });
     };
-    const onEnd = () => setDragInFlight(false);
     window.addEventListener('dragstart', onStart);
-    window.addEventListener('dragend', onEnd, true);
-    window.addEventListener('drop', onEnd, true);
+    window.addEventListener('dragend', endDrag, true);
     return () => {
       window.removeEventListener('dragstart', onStart);
-      window.removeEventListener('dragend', onEnd, true);
-      window.removeEventListener('drop', onEnd, true);
+      window.removeEventListener('dragend', endDrag, true);
     };
-  }, []);
+  }, [endDrag]);
 
   /** A tab dropped on a pane: an edge splits it off, the centre just moves it
    *  into that pane's strip. `splitPane` itself degrades to a move when the
-   *  pane has no room, so there is nothing to check here. */
+   *  pane has no room, so there is nothing to check here.
+   *
+   *  Ends the drag here rather than from a window `drop` listener: the tab
+   *  strip stops propagation on its own drops, so a listener up there would
+   *  miss them and leave the zones on screen. */
   const handleDropTab = useCallback((tabId: string, paneId: string, zone: Edge | 'center') => {
+    endDrag();
+    const pane = findPane(layout, paneId);
+    // Splitting a pane off its own only tab would empty it and collapse it
+    // right back — the same pane, a new id, and every terminal in it remounted
+    // and rewrapped for nothing. Leave it alone.
+    if (zone !== 'center' && pane && splitWouldEmpty(pane, tabId)) return;
     dispatch(zone === 'center'
       ? { type: 'moveTab', tabId, paneId }
       : { type: 'splitTab', tabId, paneId, edge: zone });
-  }, []);
+  }, [endDrag, layout]);
 
   const handleDropFile = useCallback((payload: FileDragPayload, paneId: string, zone: Edge | 'center') => {
+    endDrag();
     handleOpenFile(payload.dir, payload.path, { paneId, edge: zone === 'center' ? null : zone });
-  }, [handleOpenFile]);
+  }, [handleOpenFile, endDrag]);
 
   // The grid's two seams and the file panel's, all on one hook — they were the
   // same twenty lines of window-tracked mousemove three times over.
@@ -717,12 +733,18 @@ export default function App() {
                   onDirtyChange={(tabId, dirty) => dispatch({ type: 'dirty', tabId, dirty })}
                   onOpenFile={handleOpenFile}
                   onSplitTab={(tabId, edge) => dispatch({ type: 'splitTab', tabId, paneId, edge })}
-                  dragging={dragInFlight}
+                  dragging={drag !== null}
                   onDropTab={(tabId, zone) => handleDropTab(tabId, paneId, zone)}
                   onDropFile={(payload, zone) => handleDropFile(payload, paneId, zone)}
                   // A pane one cell wide can't split sideways again, and one
-                  // cell tall can't split down — so don't offer it.
-                  canSplit={{ vertical: rect.colSpan > 1, horizontal: rect.rowSpan > 1 }}
+                  // cell tall can't split down. Nor can a pane be split off its
+                  // own only tab: the tab would leave, the pane would empty and
+                  // collapse straight back. Saying so here is what keeps the
+                  // drop highlight from promising a split that won't happen.
+                  canSplit={{
+                    vertical: rect.colSpan > 1 && !splitWouldEmpty(pane, drag?.tabId),
+                    horizontal: rect.rowSpan > 1 && !splitWouldEmpty(pane, drag?.tabId),
+                  }}
                   style={{
                     gridRow: `${rect.row + 1} / span ${rect.rowSpan}`,
                     gridColumn: `${rect.col + 1} / span ${rect.colSpan}`,

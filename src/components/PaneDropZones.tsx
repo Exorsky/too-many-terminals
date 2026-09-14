@@ -24,7 +24,11 @@ export default function PaneDropZones({ canSplit, onDropTab, onDropFile }: PaneD
       className="absolute inset-0 z-30"
       onDragOver={(e) => {
         e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
+        // Must be an effect the source's `effectAllowed` permits: a tab is
+        // moved between panes, a file is copied out of the explorer. Asking for
+        // 'move' against a source that allowed only 'copy' makes the browser
+        // cancel the drop outright — no drop event, just a no-drop cursor.
+        e.dataTransfer.dropEffect = e.dataTransfer.types.includes(TAB_MIME) ? 'move' : 'copy';
         const next = dropZone(e, e.currentTarget.getBoundingClientRect());
         // Bailing on an unchanged value keeps the highlight from flickering,
         // same trick the tab strip's insertion line uses.
