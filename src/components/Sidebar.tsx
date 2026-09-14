@@ -265,15 +265,30 @@ function spineClass(tab: Tab, isActive: boolean): string | null {
   }
 }
 
-/** Order of the one flat list. What you pinned sits above everything, then
- *  what's blocked on you, what's running, what's alive and idle, and finally
- *  everything asleep or exited. `sort` is stable, so sessions of equal rank
- *  keep the order you opened them in — there is no manual ordering to preserve
- *  now that the list derives its own. */
-const SEG_RANK: Record<Seg, number> = { waiting: 0, working: 1, idle: 2, quiet: 3 };
+/** How recently a session was touched, as epoch ms — the list's sort key.
+ *
+ *  Three clocks, whichever is freshest: when you opened it in this run, its
+ *  last status change, and the mtime of its transcript for one restored from a
+ *  previous run. A session you just started has only the first, a session
+ *  working right now keeps bumping the second, and a restored one that has sat
+ *  untouched for a week has only the third — so all three kinds land where you
+ *  would expect without any of them needing a special case. */
+export function recencyOf(tab: Tab, lastUsedAt?: number): number {
+  return Math.max(tab.createdAt ?? 0, tab.statusChangedAt ?? 0, lastUsedAt ?? 0);
+}
 
-function sortRank(tab: Tab): number {
-  return (tab.pinned && !tab.exited ? 0 : 10) + SEG_RANK[segOf(tab)];
+/** Order of the one flat list: newest first.
+ *
+ *  What you pinned still sits above everything — pinning is the one explicitly
+ *  manual thing in a list that otherwise derives its own order, and a pin that
+ *  scrolled away with age would mean nothing. Everything else is purely by
+ *  recency, so a session you just opened, and one that is working right now,
+ *  are both at the top without status needing its own ranking tier. */
+function orderOf(tab: Tab, lastUsed: Map<string, number>): [pinned: number, recency: number] {
+  return [
+    tab.pinned && !tab.exited ? 0 : 1,
+    recencyOf(tab, tab.resumeSessionId ? lastUsed.get(tab.resumeSessionId) : undefined),
+  ];
 }
 
 /** Whether a session is worth one of the collapsed rail's squares.
@@ -1258,7 +1273,13 @@ export default function Sidebar({
     .filter((t) => (folder === null || t.cwd === folder))
     .filter((t) => (bucket === null || bucketsOf(t).includes(bucket)))
     .filter((t) => matchesQuery(t, query))
-    .sort((a, b) => sortRank(a) - sortRank(b));
+    .sort((a, b) => {
+      const [pinA, seenA] = orderOf(a, lastUsed);
+      const [pinB, seenB] = orderOf(b, lastUsed);
+      // Stable sort, so sessions with no clock at all keep the order they were
+      // opened in rather than shuffling on every render.
+      return pinA - pinB || seenB - seenA;
+    });
 
   // What you're looking at, spelled out. All three filters read into one line
   // above the list: picking a folder narrows the list just as hard as a status

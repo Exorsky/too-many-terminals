@@ -18,24 +18,31 @@ the thing the sidebar is actually for: seeing what needs you.
 
 ### Order
 
-`sortRank()` (`Sidebar.tsx`) ranks every row, and `sort` is stable so equal ranks keep the
-order you opened them in:
+**Newest first.** `recencyOf()` (`Sidebar.tsx`) dates every row from whichever of three
+clocks is freshest, and the list runs descending:
 
-1. **Pinned**, whatever it's doing — you put it there on purpose.
-2. **Waiting on you** (`requires_response`).
-3. **Running** (`working`).
-4. **Idle** — alive, finished, nothing pending.
-5. **Quiet** — dormant, `new`, exited, and every shell.
+- `createdAt` — when you opened it in this run.
+- `statusChangedAt` — its last status change, so a session working right now keeps
+  bumping itself to the top.
+- the mtime of its transcript (`useLastUsed`), for a session restored from a previous run.
 
-There is no manual ordering to preserve, so dragging a session no longer does anything;
+A tab restored at launch deliberately gets **no** `createdAt`: stamping them all with the
+same instant would bury the real order, so those fall back to their transcript's date.
+`sort` is stable, so rows with no clock at all keep the order you opened them in.
+
+**Pinned still sits above everything.** Pinning is the one explicitly manual thing in a list
+that otherwise derives its own order, and a pin that aged out of view would mean nothing.
+
+Status no longer has a ranking tier of its own. It didn't need one: a session that is
+waiting on you or working has just changed status, so recency already floats it. What the
+old ranking couldn't express was "I just opened this" — a brand-new session sorted below
+week-old idle ones because `new` ranked as quiet.
+
+There is no manual ordering to preserve, so dragging a session doesn't do anything;
 `tabsReducer`'s `reorderTab` action was removed with the folder groups that gave it meaning.
 
-The rank comes from `segOf()`, which mirrors `TabIndicator`'s
-[status vocabulary](../design.md#status-vocabulary) one-for-one. It is deliberately **not**
-derived from `bucketsOf()`: buckets answer "show me what just finished", `segOf` answers
-"what is this session doing". Deriving one from the other is what once ranked a plain `idle`
-session down with the sleepers — `done` requires `justFinished`, so a finished-and-seen
-session fell into no bucket at all while its own row showed a green check.
+`segOf()` survives for the row spine and the ledger buckets, mirroring `TabIndicator`'s
+[status vocabulary](../design.md#status-vocabulary) one-for-one.
 
 ### A row is two lines
 
@@ -237,7 +244,7 @@ animating.
 ### What the collapsed rail shows
 
 **The same list, narrowed the same way.** The rail reads `visible` — the folder
-filter, the status chip and the query already applied, ordered by `sortRank` —
+filter, the status chip and the query already applied, ordered by recency —
 not the raw `sessions` array. It used to read the raw one, which meant folding
 the sidebar away silently dropped whatever filter you had set and reshuffled
 what was left back into the order the tabs happened to be opened in. Collapsing
@@ -318,7 +325,7 @@ does nothing — the terminal's old copy-on-select/paste-on-right-click is gone.
 ## Files
 
 - `src/App.tsx`, `src/components/Sidebar.tsx` (`SidebarLens`, `FolderBar`/`FolderPill`,
-  `NewMenu`, `TabRow`/`RowMeta`, `sortRank`/`segOf`, `useLastUsed`, `pillLabel`),
+  `NewMenu`, `TabRow`/`RowMeta`, `recencyOf`/`segOf`, `useLastUsed`, `pillLabel`),
   `src/components/SidebarFooter.tsx` (app navigation), `src/components/Terminal.tsx`,
   `src/components/terminalCache.ts`, `src/components/ui/context-menu.tsx` (tab right-click menu),
   `src/lib/tabs.ts`, `src/lib/utils.ts` (`folderName`, `parentPath`),
@@ -330,9 +337,9 @@ does nothing — the terminal's old copy-on-select/paste-on-right-click is gone.
 - `src/lib/tabs.test.ts` — tab state transitions, including `rename` and `pin`
 - `src/lib/utils.test.ts` — `parentPath` (nearest-two-ancestors, ellipsis, fewer-than-two,
   root-level, forward-slash paths, custom level count)
-- `src/components/Sidebar.test.tsx` — session rows and the flat list's order (pinned →
-  waiting → running → idle → asleep, stable among equals, and a live idle session ranking
-  above a dormant one), the two-line row (folder on its own line, second line dropped when
+- `src/components/Sidebar.test.tsx` — session rows and the flat list's order (newest
+  first whatever each session is doing, a just-opened session above an older idle one,
+  pinned kept on top however stale, stable when nothing has a clock yet), the two-line row (folder on its own line, second line dropped when
   it would say nothing, activity target highlighted, elapsed and last-used), the session
   ledger and filter field (see [attention-inbox.md](attention-inbox.md)), folder pills
   (counts, narrowing, the lens naming the selection, pressed state, per-row folder line

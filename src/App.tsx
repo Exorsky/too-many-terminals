@@ -237,6 +237,7 @@ export default function App() {
         resumeSessionId: resumeSessionId ?? null,
         exited: false,
         status: 'new',
+        createdAt: Date.now(),
       };
       dispatch({ type: 'add', tab });
       setShowHistory(false);
@@ -416,6 +417,7 @@ export default function App() {
       resumeSessionId: null,
       exited: false,
       status: 'new',
+      createdAt: Date.now(),
       path,
     };
     dispatch({ type: 'add', tab });

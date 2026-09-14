@@ -35,6 +35,11 @@ export interface Tab {
   /** Epoch ms of the last status transition — powers the elapsed-time label
    *  on working/requires_response rows. */
   statusChangedAt?: number;
+  /** Epoch ms this tab was opened, for sessions started in this run. Absent on
+   *  a restored tab on purpose: restoring them all at launch would stamp them
+   *  with the same instant and bury the real order, so those fall back to their
+   *  transcript's mtime instead. See `recencyOf` in Sidebar.tsx. */
+  createdAt?: number;
   /** A short "what Claude is doing right now" label from the PreToolUse
    *  hook payload (e.g. "editing Sidebar.tsx") — only ever set alongside
    *  `working`; cleared on any other status. */

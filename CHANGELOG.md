@@ -26,6 +26,17 @@ listed here; see `git log` for the full history.
 
 ### Changed
 
+- **The session list is ordered newest first.** A session you just opened, and one
+  that is working right now, both sit at the top; everything else falls back by
+  how long ago it was last touched, using its transcript's date for sessions
+  restored from a previous run. Status no longer has a ranking tier of its own —
+  it didn't need one, and it couldn't express "I just opened this". What you
+  pinned still sits above everything.
+- **A live transcript no longer re-reads while you are selecting text in it.**
+  Re-reading rebuilds the document, and WebKit drops a selection as soon as the
+  nodes under it are replaced, so copying out of a running session's preview was
+  close to impossible on macOS. The transcript body also skips re-rendering
+  entirely when a re-read finds nothing new.
 - **The tab strip is per-pane**, not one bar across the top. Closing a pane's
   last tab collapses the pane and hands its space to a neighbour; the grid
   never leaves a hole.

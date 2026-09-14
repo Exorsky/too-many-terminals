@@ -220,37 +220,52 @@ describe('Sidebar', () => {
   });
 
   describe('the one flat list', () => {
-    it('sorts pinned first, then waiting, running, idle and finally asleep', () => {
+    const MIN = 60_000;
+    const ago = (m: number) => Date.now() - m * MIN;
+
+    it('sorts newest first, whatever each session is doing', () => {
       renderSidebar({
         tabs: [
-          makeTab('sleeper', { status: 'idle', dormant: true }),
-          makeTab('finished', { status: 'idle' }),
-          makeTab('busy', { status: 'working' }),
-          makeTab('blocked', { status: 'requires_response' }),
-          makeTab('kept', { pinned: true, status: 'idle', dormant: true }),
+          makeTab('week-old', { status: 'idle', dormant: true, statusChangedAt: ago(60 * 24 * 7) }),
+          makeTab('just-opened', { status: 'new', createdAt: ago(0) }),
+          makeTab('an-hour-ago', { status: 'idle', statusChangedAt: ago(60) }),
+          makeTab('busy-now', { status: 'working', statusChangedAt: ago(1) }),
         ],
       });
       const names = [...list().querySelectorAll('[data-session-name]')].map((el) => el.textContent);
-      expect(names).toEqual(['kept', 'blocked', 'busy', 'finished', 'sleeper']);
+      expect(names).toEqual(['just-opened', 'busy-now', 'an-hour-ago', 'week-old']);
     });
 
-    it('keeps the order sessions were opened in among equals', () => {
+    it('keeps what you pinned above everything, however old it is', () => {
+      // Pinning is the one explicitly manual thing in a list that otherwise
+      // derives its own order; a pin that aged out of view would mean nothing.
+      renderSidebar({
+        tabs: [
+          makeTab('fresh', { status: 'working', statusChangedAt: ago(0) }),
+          makeTab('kept', { pinned: true, status: 'idle', dormant: true, statusChangedAt: ago(60 * 24 * 30) }),
+        ],
+      });
+      const names = [...list().querySelectorAll('[data-session-name]')].map((el) => el.textContent);
+      expect(names).toEqual(['kept', 'fresh']);
+    });
+
+    it('puts a session you just opened above one that has been idle a while', () => {
+      renderSidebar({
+        tabs: [
+          makeTab('older', { status: 'idle', statusChangedAt: ago(30) }),
+          makeTab('brand-new', { status: 'new', createdAt: ago(0) }),
+        ],
+      });
+      const names = [...list().querySelectorAll('[data-session-name]')].map((el) => el.textContent);
+      expect(names).toEqual(['brand-new', 'older']);
+    });
+
+    it('keeps the order sessions were opened in when none has a clock yet', () => {
       renderSidebar({
         tabs: [makeTab('first', { status: 'idle' }), makeTab('second', { status: 'idle' })],
       });
       const names = [...list().querySelectorAll('[data-session-name]')].map((el) => el.textContent);
       expect(names).toEqual(['first', 'second']);
-    });
-
-    it('ranks a live idle session above a dormant one — the bug the ribbon showed', () => {
-      // `idle` is in no ledger bucket, so deriving the sort from buckets put a
-      // finished-and-seen session down with the sleepers while its own row
-      // showed a green check.
-      renderSidebar({
-        tabs: [makeTab('asleep', { status: 'idle', dormant: true }), makeTab('alive', { status: 'idle' })],
-      });
-      const names = [...list().querySelectorAll('[data-session-name]')].map((el) => el.textContent);
-      expect(names).toEqual(['alive', 'asleep']);
     });
   });
 
@@ -825,18 +840,19 @@ describe('Sidebar', () => {
       .filter((b) => b.hasAttribute('data-session-square'))
       .map((b) => b.getAttribute('aria-label'));
 
-    it('orders squares by status, not by the order tabs were opened', () => {
+    it('orders squares newest first, the same order the expanded list uses', () => {
+      const ago = (m: number) => Date.now() - m * 60_000;
       renderSidebar({
         projects: [PROJECT, OTHER],
         collapsed: true,
         tabs: [
-          makeTab('quiet-here', { status: 'new' }),
-          makeTab('needs-there', { status: 'requires_response', cwd: OTHER }),
-          makeTab('busy-here', { status: 'working' }),
+          makeTab('oldest-here', { status: 'new', createdAt: ago(30) }),
+          makeTab('newest-there', { status: 'requires_response', cwd: OTHER, statusChangedAt: ago(1) }),
+          makeTab('middle-here', { status: 'working', statusChangedAt: ago(10) }),
         ],
       });
       expect(squareNames()).toEqual([
-        'needs-there, other', 'busy-here, project', 'quiet-here, project',
+        'newest-there, other', 'middle-here, project', 'oldest-here, project',
       ]);
     });
 
