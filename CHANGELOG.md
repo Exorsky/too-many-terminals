@@ -11,6 +11,8 @@ listed here; see `git log` for the full history.
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-09-14
+
 ### Added
 
 - **Split the window into up to four panes.** Drag a tab onto the edge of a
@@ -353,7 +355,8 @@ listed here; see `git log` for the full history.
 - The transcript reader now renders pipe tables, nested/checkbox lists,
   italics, autolinks, and horizontal rules.
 
-[Unreleased]: https://github.com/Exorsky/too-many-terminals/compare/v0.23.1...HEAD
+[Unreleased]: https://github.com/Exorsky/too-many-terminals/compare/v0.24.0...HEAD
+[0.24.0]: https://github.com/Exorsky/too-many-terminals/compare/v0.23.1...v0.24.0
 [0.23.1]: https://github.com/Exorsky/too-many-terminals/compare/v0.23.0...v0.23.1
 [0.23.0]: https://github.com/Exorsky/too-many-terminals/compare/v0.22.0...v0.23.0
 [0.22.0]: https://github.com/Exorsky/too-many-terminals/compare/v0.21.0...v0.22.0
