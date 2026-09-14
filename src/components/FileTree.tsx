@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type DragEvent } from 'react';
 import { ChevronRight, File, Folder } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import * as ipc from '@/lib/ipc';
+import { FILE_MIME } from '@/lib/dnd';
 import type { DirEntry } from '@/lib/ipc';
 import { usePollWhileFocused } from '@/lib/use-poll';
 
@@ -13,15 +14,32 @@ function sameListing(a: DirEntry[], b: DirEntry[]): boolean {
     && a.every((entry, i) => entry.path === b[i].path && entry.isDir === b[i].isDir);
 }
 
+/** Marks a file row as draggable into a pane. Directories aren't draggable —
+ *  there is nothing to open. The payload carries the project folder as well as
+ *  the path, because a file tab needs a cwd and the drop target has no way to
+ *  work out which project a path belongs to. */
+function fileDragProps(rootDir: string, path: string, isDir: boolean) {
+  if (isDir) return {};
+  return {
+    draggable: true,
+    onDragStart: (e: DragEvent) => {
+      e.dataTransfer.effectAllowed = 'copy';
+      e.dataTransfer.setData(FILE_MIME, JSON.stringify({ dir: rootDir, path }));
+    },
+  };
+}
+
 interface NodeProps {
   entry: DirEntry;
   depth: number;
+  /** The project folder this tree is rooted at, for the drag payload. */
+  rootDir: string;
   defaultOpen?: boolean;
   activePath: string | null;
   onOpen: (path: string) => void;
 }
 
-function Node({ entry, depth, defaultOpen, activePath, onOpen }: NodeProps) {
+function Node({ entry, depth, rootDir, defaultOpen, activePath, onOpen }: NodeProps) {
   const [open, setOpen] = useState(!!defaultOpen);
   const [children, setChildren] = useState<DirEntry[] | null>(null);
 
@@ -46,6 +64,7 @@ function Node({ entry, depth, defaultOpen, activePath, onOpen }: NodeProps) {
     <>
       <button
         type="button"
+        {...fileDragProps(rootDir, entry.path, entry.isDir)}
         className={cn(
           'flex items-center gap-1.5 w-[calc(100%-8px)] mx-1 my-0.5 px-1.5 py-[3px] rounded-sm text-left',
           'text-[11px] text-muted-foreground hover:text-foreground hover:bg-white/4 border-none bg-transparent cursor-pointer font-inherit',
@@ -73,7 +92,7 @@ function Node({ entry, depth, defaultOpen, activePath, onOpen }: NodeProps) {
         <span className="truncate">{entry.name}</span>
       </button>
       {open && children?.map((child) => (
-        <Node key={child.path} entry={child} depth={depth + 1} activePath={activePath} onOpen={onOpen} />
+        <Node key={child.path} entry={child} depth={depth + 1} rootDir={rootDir} activePath={activePath} onOpen={onOpen} />
       ))}
     </>
   );
@@ -91,5 +110,5 @@ export interface FileTreeProps {
  *  walks the whole tree (node_modules included) up front. Starts fully
  *  collapsed, including the project root itself. */
 export default function FileTree({ root, activePath, onOpen }: FileTreeProps) {
-  return <Node entry={root} depth={0} activePath={activePath} onOpen={onOpen} />;
+  return <Node entry={root} depth={0} rootDir={root.path} activePath={activePath} onOpen={onOpen} />;
 }

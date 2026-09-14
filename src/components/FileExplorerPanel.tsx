@@ -3,6 +3,7 @@ import { File, FolderTree, Pin, PinOff, Search } from 'lucide-react';
 import { cn, folderName } from '@/lib/utils';
 import { searchFiles, type FileMatch } from '@/lib/file-search';
 import FileTree from './FileTree';
+import { FILE_MIME } from '@/lib/dnd';
 
 interface FileExplorerPanelProps {
   projects: string[];
@@ -111,6 +112,11 @@ export default function FileExplorerPanel({
               <button
                 key={m.path}
                 type="button"
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.effectAllowed = 'copy';
+                  e.dataTransfer.setData(FILE_MIME, JSON.stringify({ dir: m.root, path: m.path }));
+                }}
                 className={cn(
                   'flex items-center gap-1.5 w-[calc(100%-8px)] mx-1 my-0.5 px-2 py-1 rounded-sm text-left',
                   'text-[11px] text-muted-foreground hover:text-foreground hover:bg-white/4 border-none bg-transparent cursor-pointer font-inherit',
