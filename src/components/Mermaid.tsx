@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react';
+import { memo, useEffect, useId, useState } from 'react';
 import CodeBlock from './CodeBlock';
 
 /** `mermaid` is ~1 MB — loaded the first time a diagram actually shows up,
@@ -23,9 +23,14 @@ function mermaid() {
  *  falls back to its own source — while you're typing one, every keystroke
  *  is a half-written diagram, and blanking the pane on each of them would be
  *  worse than showing the text. */
-export default function Mermaid({ chart }: { chart: string }) {
+function Mermaid({ chart }: { chart: string }) {
   const [svg, setSvg] = useState('');
+  // Three states, not two: nothing has been attempted yet, it failed, or we
+  // have a diagram. Without the first, a mount shows the raw source for as long
+  // as mermaid takes to load (~1 MB on the first diagram) and then swaps it for
+  // the picture — a flash of code and a jump in height every single time.
   const [failed, setFailed] = useState(false);
+  const [tried, setTried] = useState(false);
   // useId is unique per instance; mermaid wants a plain DOM-id-safe string.
   const id = `mmd-${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
 
@@ -37,18 +42,34 @@ export default function Mermaid({ chart }: { chart: string }) {
         if (!cancelled) {
           setSvg(r.svg);
           setFailed(false);
+          setTried(true);
         }
       })
       .catch(() => {
         if (!cancelled) {
           setSvg('');
           setFailed(true);
+          setTried(true);
         }
       });
     return () => { cancelled = true; };
   }, [chart, id]);
 
-  if (!svg) return <CodeBlock lang={failed ? "mermaid — couldn't render" : 'mermaid'} code={chart} />;
+  // Only a diagram that actually failed falls back to its source — while you're
+  // typing one, every keystroke is a half-written diagram and blanking the pane
+  // on each would be worse than showing the text.
+  if (failed) return <CodeBlock lang="mermaid — couldn't render" code={chart} />;
+  if (!svg) {
+    return (
+      <div
+        data-testid="mermaid-pending"
+        aria-busy={!tried}
+        className="rounded-lg border border-border bg-[#0a0b0e] px-3 py-4 text-[11px] text-muted-foreground"
+      >
+        Rendering diagram…
+      </div>
+    );
+  }
   return (
     <div
       className="rounded-lg border border-border bg-[#0a0b0e] p-3 overflow-x-auto scrollbar-thin [&_svg]:max-w-full [&_svg]:h-auto"
@@ -57,3 +78,8 @@ export default function Mermaid({ chart }: { chart: string }) {
     />
   );
 }
+
+/** Memoised so an unchanged chart never re-renders: the diagram is injected
+ *  with `dangerouslySetInnerHTML`, and re-setting that replaces the whole SVG
+ *  subtree — enough on its own to drop a selection that reaches into it. */
+export default memo(Mermaid);

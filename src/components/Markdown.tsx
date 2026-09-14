@@ -1,4 +1,4 @@
-import { Children, isValidElement, useRef, type ReactElement, type ReactNode } from 'react';
+import { Children, isValidElement, useMemo, useRef, type ReactElement, type ReactNode } from 'react';
 import ReactMarkdown, { type Components, type ExtraProps } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import * as ipc from '@/lib/ipc';
@@ -85,7 +85,20 @@ export default function Markdown({ source, onOpenLink }: MarkdownProps) {
     });
   };
 
-  const components: Components = {
+  // Whatever the current render's handlers are. Held in a ref so `components`
+  // below can be built once and still call through to them.
+  const liveRef = useRef({ onOpenLink, scrollToAnchor });
+  liveRef.current = { onOpenLink, scrollToAnchor };
+
+  // Built ONCE. react-markdown maps tag names to these functions, and React
+  // compares element types by reference — so rebuilding this object every render
+  // hands every tag a brand-new component type and React unmounts and remounts
+  // the entire document. That threw away any text the reader had selected, and
+  // reset every <Mermaid> to its "not rendered yet" state, which is why a
+  // diagram flashed its own source and the page jumped. The two handlers that
+  // need live values read them from a ref at click time instead of being baked
+  // in as dependencies.
+  const components = useMemo<Components>(() => ({
     h1: heading(1),
     h2: heading(2),
     h3: heading(3),
@@ -105,11 +118,11 @@ export default function Markdown({ source, onOpenLink }: MarkdownProps) {
             if (target.startsWith('#')) {
               let id = target.slice(1);
               try { id = decodeURIComponent(id); } catch { /* keep it as written */ }
-              scrollToAnchor(id);
+              liveRef.current.scrollToAnchor(id);
             } else if (isExternalHref(target)) {
               ipc.openExternal(target);
             } else if (target) {
-              onOpenLink?.(target);
+              liveRef.current.onOpenLink?.(target);
             }
           }}
         >
@@ -190,7 +203,7 @@ export default function Markdown({ source, onOpenLink }: MarkdownProps) {
       </th>
     ),
     td: ({ children, style }) => <td style={style} className="px-3 py-1.5 align-top">{children}</td>,
-  };
+  }), []);
 
   return (
     <div ref={rootRef} className="flex flex-col gap-3 font-sans text-[14.5px] leading-[1.62] text-[#d7dae1]">

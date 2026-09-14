@@ -1,5 +1,15 @@
 # Markdown preview
 
+> The `components` map handed to `react-markdown` is built **once**
+> (`useMemo`, `Markdown.tsx`). React compares element types by reference, so
+> rebuilding it per render gives every tag a new component type and remounts the
+> entire document — which drops the reader's selection and resets each
+> `<Mermaid>` to its un-rendered state. The two live handlers (`onOpenLink`,
+> `scrollToAnchor`) are read from a ref at click time so the map can stay static.
+> `Mermaid` is memoised for the same reason: re-applying its
+> `dangerouslySetInnerHTML` replaces the whole SVG subtree.
+
+
 One renderer (`src/components/Markdown.tsx`) draws every piece of Markdown in
 the app: a `.md`/`.mdx` file's **Preview** half in the
 [file explorer](file-explorer.md), and every Claude reply in the

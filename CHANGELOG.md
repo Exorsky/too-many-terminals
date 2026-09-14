@@ -32,6 +32,12 @@ listed here; see `git log` for the full history.
   restored from a previous run. Status no longer has a ranking tier of its own —
   it didn't need one, and it couldn't express "I just opened this". What you
   pinned still sits above everything.
+- **Markdown no longer rebuilds itself on every render.** The renderer handed
+  react-markdown a fresh set of components each time, so React threw away the
+  whole document and built it again — losing any text you had selected, and
+  resetting every mermaid diagram, which flashed its own source and jumped the
+  page while you tried to select around it. Diagrams also show a quiet
+  placeholder until they have actually been drawn, instead of their source.
 - **A live transcript no longer re-reads while you are selecting text in it.**
   Re-reading rebuilds the document, and WebKit drops a selection as soon as the
   nodes under it are replaced, so copying out of a running session's preview was

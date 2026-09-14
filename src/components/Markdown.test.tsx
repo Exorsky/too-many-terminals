@@ -93,3 +93,63 @@ describe('Markdown code fences', () => {
     expect(screen.getByText('rust')).toBeInTheDocument();
   });
 });
+
+describe('re-rendering must not rebuild the document', () => {
+  const withDiagram = '# Title\n\nSome prose worth selecting.\n\n```mermaid\ngraph TD;\nA-->B;\n```\n';
+
+  it('keeps the very same DOM nodes across a re-render', async () => {
+    // react-markdown maps tags to the `components` object by reference. Rebuild
+    // it each render and every tag becomes a new component type, so React
+    // unmounts and remounts the whole document — throwing away the reader's
+    // selection and resetting each diagram to "not rendered yet".
+    const { rerender } = render(<Markdown source={withDiagram} />);
+    await waitFor(() => expect(screen.getByTestId('diagram')).toBeInTheDocument());
+
+    const headingBefore = screen.getByText('Title');
+    const proseBefore = screen.getByText('Some prose worth selecting.');
+    const diagramBefore = screen.getByTestId('diagram');
+
+    rerender(<Markdown source={withDiagram} />);
+
+    expect(screen.getByText('Title')).toBe(headingBefore);
+    expect(screen.getByText('Some prose worth selecting.')).toBe(proseBefore);
+    expect(screen.getByTestId('diagram')).toBe(diagramBefore);
+  });
+
+  it('does not flash the diagram source on a re-render', async () => {
+    const { rerender } = render(<Markdown source={withDiagram} />);
+    await waitFor(() => expect(screen.getByTestId('diagram')).toBeInTheDocument());
+
+    rerender(<Markdown source={withDiagram} />);
+    // The remount showed `graph TD;` as a code block and jumped the layout.
+    expect(screen.queryByText(/graph TD/)).toBeNull();
+    expect(screen.getByTestId('diagram')).toBeInTheDocument();
+  });
+
+  it('shows a placeholder, not the source, before the first render resolves', () => {
+    render(<Markdown source={withDiagram} />);
+    expect(screen.getByTestId('mermaid-pending')).toBeInTheDocument();
+    expect(screen.queryByText(/graph TD/)).toBeNull();
+  });
+
+  it('still falls back to the source when a diagram genuinely fails', async () => {
+    const mermaid = (await import('mermaid')).default;
+    vi.mocked(mermaid.render).mockRejectedValueOnce(new Error('bad diagram'));
+    render(<Markdown source={withDiagram} />);
+    await waitFor(() => expect(screen.getByText(/graph TD/)).toBeInTheDocument());
+    expect(screen.getByText(/couldn't render/)).toBeInTheDocument();
+  });
+
+  it('still opens a file link after the handler changes identity', async () => {
+    const first = vi.fn();
+    const second = vi.fn();
+    const src = '[a doc](./docs/x.md)';
+    const { rerender } = render(<Markdown source={src} onOpenLink={first} />);
+    rerender(<Markdown source={src} onOpenLink={second} />);
+
+    await userEvent.click(screen.getByText('a doc'));
+    // The components map is built once, so the handler has to be read live.
+    expect(second).toHaveBeenCalledWith('./docs/x.md');
+    expect(first).not.toHaveBeenCalled();
+  });
+});
