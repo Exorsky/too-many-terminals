@@ -179,6 +179,39 @@ describe('TabBar', () => {
     expect(screen.getByText('a')).toBeInTheDocument();
   });
 
+  it("offers Split right / Split down from a tab context menu", async () => {
+    const onSplitTab = vi.fn();
+    render(
+      <TabBar
+        tabs={[makeTab('a')]}
+        activeTabId="a"
+        onSelectTab={vi.fn()}
+        onCloseTab={vi.fn()}
+        onSplitTab={onSplitTab}
+        canSplit={{ vertical: true, horizontal: true }}
+      />,
+    );
+    fireEvent.contextMenu(screen.getByTitle('/proj/a'));
+    fireEvent.click(await screen.findByText('Split right'));
+    expect(onSplitTab).toHaveBeenCalledWith('a', 'right');
+  });
+
+  it('hides a split the pane has no room for', async () => {
+    render(
+      <TabBar
+        tabs={[makeTab('a')]}
+        activeTabId="a"
+        onSelectTab={vi.fn()}
+        onCloseTab={vi.fn()}
+        onSplitTab={vi.fn()}
+        canSplit={{ vertical: false, horizontal: true }}
+      />,
+    );
+    fireEvent.contextMenu(screen.getByTitle('/proj/a'));
+    expect(await screen.findByText('Split down')).toBeInTheDocument();
+    expect(screen.queryByText('Split right')).toBeNull();
+  });
+
   it('shows an unsaved indicator for a dirty tab', () => {
     render(<TabBar tabs={[makeTab('a', { dirty: true })]} activeTabId="a" onSelectTab={vi.fn()} onCloseTab={vi.fn()} />);
     expect(screen.getByTitle('Unsaved changes')).toBeInTheDocument();

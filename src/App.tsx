@@ -566,19 +566,25 @@ export default function App() {
   // Is a tab or a file being dragged right now? One listener for the whole
   // window rather than a flag threaded through every drag source — the drop
   // zones only mount while this is true, so they never sit between the pointer
-  // and the terminal. Capture phase, so a source that stops propagation still
-  // registers.
+  // and the terminal.
+  //
+  // `dragstart` must be BUBBLE phase. React attaches its handlers at the root
+  // container, so a source only calls `setData` as the event bubbles; a
+  // capture-phase listener here runs first and reads an empty `types`, which
+  // leaves every pane with no drop target and no visible sign why.
+  // `dragend`/`drop` stay on capture: the tab strip stops propagation on drop,
+  // which would otherwise strand the flag on and leave the zones up.
   const [dragInFlight, setDragInFlight] = useState(false);
   useEffect(() => {
     const onStart = (e: DragEvent) => {
       if (e.dataTransfer && isPaneDrag(e.dataTransfer.types)) setDragInFlight(true);
     };
     const onEnd = () => setDragInFlight(false);
-    window.addEventListener('dragstart', onStart, true);
+    window.addEventListener('dragstart', onStart);
     window.addEventListener('dragend', onEnd, true);
     window.addEventListener('drop', onEnd, true);
     return () => {
-      window.removeEventListener('dragstart', onStart, true);
+      window.removeEventListener('dragstart', onStart);
       window.removeEventListener('dragend', onEnd, true);
       window.removeEventListener('drop', onEnd, true);
     };
