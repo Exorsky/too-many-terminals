@@ -1,5 +1,13 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { File, TerminalSquare, X } from 'lucide-react';
+import { Columns2, File, Rows2, TerminalSquare, X } from 'lucide-react';
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu';
+import type { Edge } from '@/lib/panes';
 import { cn } from '@/lib/utils';
 import type { Tab } from '@/types';
 import { TabIndicator } from './Sidebar';
@@ -14,6 +22,18 @@ interface TabBarProps {
   /** Docked to the row's trailing edge, outside the scrolling tab list —
    *  `SessionControls` (Markdown Preview / Split) for the active session. */
   trailing?: ReactNode;
+  /** False for a pane that doesn't have the keyboard. The active tab keeps its
+   *  notch so you can still read what that pane is showing, but it gives up the
+   *  cyan rule and the strip dims — with up to four terminals on screen, knowing
+   *  which one will take your next keystroke matters more than anything else the
+   *  chrome could say. See docs/design.md. */
+  paneFocused?: boolean;
+  /** Split this pane along an edge, moving the tab into the new half. Absent
+   *  when the grid is full — a fifth pane has nowhere to go. */
+  onSplitTab?: (tabId: string, edge: Edge) => void;
+  /** Whether this pane still has room to split each way, so the menu doesn't
+   *  offer a split that would silently degrade to "move it here". */
+  canSplit?: { vertical: boolean; horizontal: boolean };
 }
 
 /** Left of the target's horizontal midpoint drops before it, right drops after
@@ -28,7 +48,7 @@ function dropSide(e: { clientX: number; currentTarget: HTMLElement }): 'before' 
  *  it's given: App.tsx feeds it the tabs you've actually gone into, in the order
  *  you opened them. Click to switch, drag to reorder, middle-click or × to close
  *  (what "close" means per kind is App.tsx's call). docs/features/file-explorer.md. */
-export default function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, onReorderTab, trailing }: TabBarProps) {
+export default function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, onReorderTab, trailing, paneFocused = true, onSplitTab, canSplit }: TabBarProps) {
   const activeRef = useRef<HTMLDivElement>(null);
   // Which tab is being dragged (a ref, so `dragover` can decide synchronously)
   // and where the insertion line currently sits. One piece of state for the
@@ -45,11 +65,15 @@ export default function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, onR
   if (tabs.length === 0 && !trailing) return null;
 
   return (
-    <div className="flex items-stretch h-8 shrink-0 border-b border-border bg-card">
+    <div className={cn(
+      'flex items-stretch h-8 shrink-0 border-b border-border bg-card',
+      !paneFocused && 'opacity-60',
+    )}>
       <div className="flex items-stretch flex-1 min-w-0 overflow-x-auto scrollbar-thin">
         {tabs.map((tab) => {
           const isActive = tab.id === activeTabId;
-          return (
+          const splittable = onSplitTab && (canSplit?.vertical || canSplit?.horizontal);
+          const row = (
             <div
               key={tab.id}
               ref={isActive ? activeRef : undefined}
@@ -95,7 +119,7 @@ export default function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, onR
                   )}
                 />
               )}
-              {isActive && <span className="absolute left-0 right-0 top-0 h-0.5 bg-[#6fd4c9]" />}
+              {isActive && paneFocused && <span className="absolute left-0 right-0 top-0 h-0.5 bg-[#6fd4c9]" />}
               {tab.kind === 'claude'
                 ? <TabIndicator status={tab.status} dormant={tab.dormant} size={11} />
                 : tab.kind === 'file'
@@ -116,6 +140,32 @@ export default function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, onR
                 <X size={11} />
               </button>
             </div>
+          );
+
+          if (!splittable) return row;
+          return (
+            <ContextMenu key={tab.id}>
+              <ContextMenuTrigger asChild>{row}</ContextMenuTrigger>
+              <ContextMenuContent className="min-w-40">
+                {canSplit?.vertical && (
+                  <ContextMenuItem onSelect={() => onSplitTab?.(tab.id, 'right')}>
+                    <Columns2 size={13} />
+                    <span>Split right</span>
+                  </ContextMenuItem>
+                )}
+                {canSplit?.horizontal && (
+                  <ContextMenuItem onSelect={() => onSplitTab?.(tab.id, 'bottom')}>
+                    <Rows2 size={13} />
+                    <span>Split down</span>
+                  </ContextMenuItem>
+                )}
+                <ContextMenuSeparator />
+                <ContextMenuItem onSelect={() => onCloseTab(tab.id)}>
+                  <X size={13} />
+                  <span>Close</span>
+                </ContextMenuItem>
+              </ContextMenuContent>
+            </ContextMenu>
           );
         })}
       </div>

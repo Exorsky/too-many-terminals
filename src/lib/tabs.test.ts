@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { initialTabsState, learnSessionNames, moveId, tabBarTabs, tabsReducer, type TabsState } from './tabs';
+import { activeTabId, initialTabsState, learnSessionNames, tabBarTabs, tabsReducer, type TabsState } from './tabs';
+import { focusedPane, panesOf, paneOfTab, visibleTabIds } from './panes';
 import type { Tab } from '@/types';
 
 function makeTab(id: string, overrides: Partial<Tab> = {}): Tab {
@@ -27,15 +28,15 @@ describe('tabsReducer', () => {
   it('add appends and activates the new tab', () => {
     const state = stateWith('a', 'b');
     expect(state.tabs.map((t) => t.id)).toEqual(['a', 'b']);
-    expect(state.activeTabId).toBe('b');
+    expect(activeTabId(state)).toBe('b');
   });
 
   it('select switches the active tab, ignoring unknown ids', () => {
     let state = stateWith('a', 'b');
     state = tabsReducer(state, { type: 'select', tabId: 'a' });
-    expect(state.activeTabId).toBe('a');
+    expect(activeTabId(state)).toBe('a');
     state = tabsReducer(state, { type: 'select', tabId: 'nope' });
-    expect(state.activeTabId).toBe('a');
+    expect(activeTabId(state)).toBe('a');
   });
 
   it('close of the active tab activates the next tab in its place', () => {
@@ -43,26 +44,26 @@ describe('tabsReducer', () => {
     state = tabsReducer(state, { type: 'select', tabId: 'b' });
     state = tabsReducer(state, { type: 'close', tabId: 'b' });
     expect(state.tabs.map((t) => t.id)).toEqual(['a', 'c']);
-    expect(state.activeTabId).toBe('c');
+    expect(activeTabId(state)).toBe('c');
   });
 
   it('close of the last tab falls back to the previous one', () => {
     let state = stateWith('a', 'b');
     state = tabsReducer(state, { type: 'close', tabId: 'b' });
-    expect(state.activeTabId).toBe('a');
+    expect(activeTabId(state)).toBe('a');
   });
 
   it('close of an inactive tab keeps the active one', () => {
     let state = stateWith('a', 'b');
     state = tabsReducer(state, { type: 'close', tabId: 'a' });
-    expect(state.activeTabId).toBe('b');
+    expect(activeTabId(state)).toBe('b');
   });
 
   it('closing the only tab leaves no active tab', () => {
     let state = stateWith('a');
     state = tabsReducer(state, { type: 'close', tabId: 'a' });
     expect(state.tabs).toEqual([]);
-    expect(state.activeTabId).toBeNull();
+    expect(activeTabId(state)).toBeNull();
   });
 
   it('rename changes only the named tab', () => {
@@ -202,19 +203,58 @@ describe('tabBarTabs', () => {
   });
 });
 
-describe('moveId', () => {
-  const ids = ['a', 'b', 'c'];
-
-  it('moves before and after a target', () => {
-    expect(moveId(ids, 'a', 'c', 'before')).toEqual(['b', 'a', 'c']);
-    expect(moveId(ids, 'a', 'c', 'after')).toEqual(['b', 'c', 'a']);
-    expect(moveId(ids, 'c', 'a', 'before')).toEqual(['c', 'a', 'b']);
+describe('tabsReducer pane grid', () => {
+  it('add drops the new tab into the focused pane', () => {
+    const state = stateWith('a', 'b');
+    expect(focusedPane(state.layout).tabIds).toEqual(['a', 'b']);
+    expect(focusedPane(state.layout).activeTabId).toBe('b');
   });
 
-  it('leaves the list alone for a no-op or an unknown id', () => {
-    expect(moveId(ids, 'a', 'a', 'before')).toBe(ids);
-    expect(moveId(ids, 'a', 'zzz', 'after')).toBe(ids);
-    expect(moveId(ids, 'zzz', 'a', 'after')).toBe(ids);
+  it('splitTab puts the tab alone in a new pane and focuses it', () => {
+    let state = stateWith('a', 'b');
+    const pane = state.layout.focusedPaneId;
+    state = tabsReducer(state, { type: 'splitTab', tabId: 'b', paneId: pane, edge: 'right' });
+    expect(panesOf(state.layout.grid)).toHaveLength(2);
+    expect(focusedPane(state.layout).tabIds).toEqual(['b']);
+    // Both panes are on screen now, not just the focused one.
+    expect(visibleTabIds(state.layout)).toEqual(new Set(['a', 'b']));
+  });
+
+  it('select focuses the pane a tab already lives in rather than moving it', () => {
+    let state = stateWith('a', 'b');
+    const left = state.layout.focusedPaneId;
+    state = tabsReducer(state, { type: 'splitTab', tabId: 'b', paneId: left, edge: 'right' });
+    const right = state.layout.focusedPaneId;
+
+    state = tabsReducer(state, { type: 'select', tabId: 'a' });
+    expect(state.layout.focusedPaneId).toBe(left);
+    expect(paneOfTab(state.layout, 'a')?.id).toBe(left);
+
+    state = tabsReducer(state, { type: 'select', tabId: 'b' });
+    expect(state.layout.focusedPaneId).toBe(right);
+  });
+
+  it('closing the last tab in a pane collapses it', () => {
+    let state = stateWith('a', 'b');
+    state = tabsReducer(state, { type: 'splitTab', tabId: 'b', paneId: state.layout.focusedPaneId, edge: 'right' });
+    expect(panesOf(state.layout.grid)).toHaveLength(2);
+
+    state = tabsReducer(state, { type: 'close', tabId: 'b' });
+    expect(panesOf(state.layout.grid)).toHaveLength(1);
+    expect(state.tabs.map((t) => t.id)).toEqual(['a']);
+  });
+
+  it('removeFromPane takes a tab off the grid but keeps it open', () => {
+    let state = stateWith('a', 'b');
+    state = tabsReducer(state, { type: 'removeFromPane', tabId: 'b' });
+    expect(focusedPane(state.layout).tabIds).toEqual(['a']);
+    expect(state.tabs.map((t) => t.id)).toEqual(['a', 'b']); // still open
+  });
+
+  it('seam clamps so a pane never vanishes', () => {
+    let state = stateWith('a');
+    state = tabsReducer(state, { type: 'seam', axis: 'col', frac: 0.99 });
+    expect(state.layout.colFrac).toBe(0.85);
   });
 });
 

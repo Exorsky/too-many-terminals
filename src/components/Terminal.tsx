@@ -7,11 +7,16 @@ import '@xterm/xterm/css/xterm.css';
 import * as ipc from '@/lib/ipc';
 import { getActiveXtermTheme } from '@/lib/themes';
 import { isInterruptKeystroke } from '@/lib/utils';
+import { seamDragging } from '@/lib/use-drag-value';
 import { terminalCache, flushPendingWrites, type CachedTerminal } from './terminalCache';
 
 interface TerminalProps {
   tabId: string;
   isVisible: boolean;
+  /** True only for the visible tab of the *focused* pane. With up to four
+   *  terminals on screen, an unconditional `term.focus()` on every attach turns
+   *  into a focus fight where the last pane to render steals the keyboard. */
+  focused?: boolean;
   /** Called on a bare Escape/Ctrl+C keystroke — Claude Code's own Stop hook
    *  doesn't fire on a user interrupt, so this is the only signal the app
    *  gets that a "working" tab may actually be sitting idle. The caller
@@ -39,9 +44,13 @@ function ensureWebgl(cached: CachedTerminal): void {
   }
 }
 
-const Terminal = React.memo(function Terminal({ tabId, isVisible, onInterrupt }: TerminalProps) {
+const Terminal = React.memo(function Terminal({ tabId, isVisible, focused = true, onInterrupt }: TerminalProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const attachedRef = useRef<string | null>(null);
+  // The container this terminal's DOM currently lives in — not the tab id, which
+  // never changes for a given <Terminal> and so could never invalidate. Moving a
+  // tab between panes remounts the component with a *new* container, and that's
+  // exactly the case this has to notice.
+  const attachedRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     // Create terminal and register in cache on mount, even for hidden tabs,
@@ -100,14 +109,17 @@ const Terminal = React.memo(function Terminal({ tabId, isVisible, onInterrupt }:
       }
     };
 
-    // If already attached to this container, just fit and observe resize
+    // If already attached to this container, just fit and observe resize.
+    // Otherwise `term.open` re-parents xterm's existing element into the new
+    // container — the instance lives in `terminalCache`, outside React, so the
+    // buffer, scrollback and pty all survive a move between panes untouched.
     const alreadyAttached =
-      attachedRef.current === tabId && container.querySelector('.xterm');
+      attachedRef.current === container && container.querySelector('.xterm');
 
     if (!alreadyAttached) {
       container.innerHTML = '';
       term.open(container);
-      attachedRef.current = tabId;
+      attachedRef.current = container;
     }
 
     // Activate WebGL now the terminal is visible — on first attach and on every
@@ -117,14 +129,18 @@ const Terminal = React.memo(function Terminal({ tabId, isVisible, onInterrupt }:
     // Defer initial fit to next frame so the container has final layout dimensions
     const rafId = requestAnimationFrame(() => {
       fitAndSync();
-      term.focus();
+      if (focused) term.focus();
     });
 
     // Handle resize — observe container and refit
+    // Dragging a seam resizes every visible pane at pointer rate, and each fit
+    // is a pty_resize plus a full xterm rewrap. Back the debounce off while a
+    // drag is live — longer, not skipped, so the trailing call still lands and
+    // nothing needs re-fitting on mouseup.
     let resizeTimeout: ReturnType<typeof setTimeout>;
     const resizeObserver = new ResizeObserver(() => {
       clearTimeout(resizeTimeout);
-      resizeTimeout = setTimeout(fitAndSync, 50);
+      resizeTimeout = setTimeout(fitAndSync, seamDragging ? 250 : 50);
     });
     resizeObserver.observe(container);
 
@@ -133,7 +149,7 @@ const Terminal = React.memo(function Terminal({ tabId, isVisible, onInterrupt }:
       clearTimeout(resizeTimeout);
       resizeObserver.disconnect();
     };
-  }, [tabId, isVisible]);
+  }, [tabId, isVisible, focused]);
 
   // Housekeeping for hidden terminals: stop idle cursor repaints, and release
   // the WebGL context. Webviews cap the number of live WebGL2 contexts, so many

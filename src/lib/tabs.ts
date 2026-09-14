@@ -1,11 +1,35 @@
 import type { Tab, TabStatus } from '@/types';
+import {
+  activateTab,
+  addTabToFocused,
+  closePaneTab,
+  focusedPane,
+  focusPane,
+  initialLayout,
+  movePaneTab,
+  resizeSeam,
+  splitPane,
+  type Edge,
+  type Layout,
+} from './panes';
 
 export interface TabsState {
   tabs: Tab[];
-  activeTabId: string | null;
+  /** Where every tab sits on the pane grid, which pane each is showing, and
+   *  which pane has the keyboard. Replaces the old single `activeTabId` —
+   *  with a grid there is one active tab *per pane*. See lib/panes.ts. */
+  layout: Layout;
 }
 
-export const initialTabsState: TabsState = { tabs: [], activeTabId: null };
+export const initialTabsState: TabsState = { tabs: [], layout: initialLayout };
+
+/** The tab you're actually typing into: the focused pane's active tab. Most of
+ *  the app only cares about this one — the sidebar highlight, the command
+ *  palette, the file explorer's current path. The things that care about
+ *  *everything on screen* use `visibleTabIds(state.layout)` instead. */
+export function activeTabId(state: TabsState): string | null {
+  return focusedPane(state.layout)?.activeTabId ?? null;
+}
 
 /** Placeholder every fresh Claude tab starts with, until the auto-namer or the
  *  user gives it a real one. Not a name, so it never becomes a session's. */
@@ -40,18 +64,6 @@ export function tabBarTabs(tabs: Tab[], openIds: string[]): Tab[] {
     .filter((t): t is Tab => t !== undefined);
 }
 
-/** Moves `id` before/after `targetId` in a plain id list — the top strip's own
- *  order. No folder rules apply here (unlike the sidebar's session order): the
- *  strip is whatever you dragged it into. Returns the list unchanged when the
- *  move is a no-op or names an id that isn't there. */
-export function moveId(ids: string[], id: string, targetId: string, position: 'before' | 'after'): string[] {
-  if (id === targetId || !ids.includes(id) || !ids.includes(targetId)) return ids;
-  const rest = ids.filter((x) => x !== id);
-  const at = rest.indexOf(targetId);
-  rest.splice(position === 'after' ? at + 1 : at, 0, id);
-  return rest;
-}
-
 export type TabsAction =
   | { type: 'add'; tab: Tab }
   | { type: 'close'; tabId: string }
@@ -64,33 +76,43 @@ export type TabsAction =
   | { type: 'wake'; tabId: string }
   | { type: 'sleep'; tabId: string }
   | { type: 'dirty'; tabId: string; dirty: boolean }
-  | { type: 'pin'; tabId: string; pinned: boolean };
+  | { type: 'pin'; tabId: string; pinned: boolean }
+  // --- pane grid ---
+  /** Split `paneId` along `edge`, putting `tabId` alone in the new pane. */
+  | { type: 'splitTab'; tabId: string; paneId: string; edge: Edge }
+  /** Drop `tabId` into `paneId`'s strip — a cross-pane move or a reorder. */
+  | { type: 'moveTab'; tabId: string; paneId: string; targetTabId?: string; position?: 'before' | 'after' }
+  | { type: 'focusPane'; paneId: string }
+  | { type: 'seam'; axis: 'col' | 'row'; frac: number }
+  /** Take a tab out of its pane without closing it — the strip's × for a
+   *  session, which stays open, running, and in the sidebar. */
+  | { type: 'removeFromPane'; tabId: string };
 
 export function tabsReducer(state: TabsState, action: TabsAction): TabsState {
   switch (action.type) {
     case 'add':
       return {
         tabs: [...state.tabs, action.tab],
-        activeTabId: action.tab.id,
+        layout: addTabToFocused(state.layout, action.tab.id),
       };
 
+    // The neighbour-activation rule ("prefer the tab that took its place, else
+    // the previous one") now lives in panes.ts, so a tab leaving a strip behaves
+    // the same whether it was closed or dragged out.
     case 'close': {
-      const index = state.tabs.findIndex((t) => t.id === action.tabId);
-      if (index === -1) return state;
-      const tabs = state.tabs.filter((t) => t.id !== action.tabId);
-      let activeTabId = state.activeTabId;
-      if (activeTabId === action.tabId) {
-        // Prefer the tab that took the closed tab's place, else the previous one.
-        activeTabId = (tabs[index] ?? tabs[index - 1])?.id ?? null;
-      }
-      return { tabs, activeTabId };
+      if (!state.tabs.some((t) => t.id === action.tabId)) return state;
+      return {
+        tabs: state.tabs.filter((t) => t.id !== action.tabId),
+        layout: closePaneTab(state.layout, action.tabId),
+      };
     }
 
     case 'select':
       if (!state.tabs.some((t) => t.id === action.tabId)) return state;
       return {
-        ...state,
-        activeTabId: action.tabId,
+        // Already in a pane? Focus that pane rather than dragging the tab
+        // across the screen. Otherwise it opens in the focused pane.
+        layout: activateTab(state.layout, action.tabId),
         // Selecting a "just finished" tab is what "seen" means for it.
         tabs: state.tabs.map((t) =>
           t.id === action.tabId && t.justFinished ? { ...t, justFinished: false } : t,
@@ -191,5 +213,25 @@ export function tabsReducer(state: TabsState, action: TabsAction): TabsState {
           t.id === action.tabId ? { ...t, pinned: action.pinned } : t,
         ),
       };
+
+    case 'splitTab':
+      if (!state.tabs.some((t) => t.id === action.tabId)) return state;
+      return { ...state, layout: splitPane(state.layout, action.paneId, action.edge, action.tabId) };
+
+    case 'moveTab':
+      if (!state.tabs.some((t) => t.id === action.tabId)) return state;
+      return {
+        ...state,
+        layout: movePaneTab(state.layout, action.tabId, action.paneId, action.targetTabId, action.position),
+      };
+
+    case 'focusPane':
+      return { ...state, layout: focusPane(state.layout, action.paneId) };
+
+    case 'seam':
+      return { ...state, layout: resizeSeam(state.layout, action.axis, action.frac) };
+
+    case 'removeFromPane':
+      return { ...state, layout: closePaneTab(state.layout, action.tabId) };
   }
 }

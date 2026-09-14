@@ -1,23 +1,20 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { SquareTerminal } from 'lucide-react';
 import CommandPalette from '@/components/CommandPalette';
 import FileExplorerPanel, { FilesEdge } from '@/components/FileExplorerPanel';
-import FileViewer from '@/components/FileViewer';
 import HomeScreen from '@/components/HomeScreen';
-import SessionControls, { type MarkdownView, type SessionMode, type SplitDirection } from '@/components/SessionControls';
+import PaneView from '@/components/PaneView';
+import Seam from '@/components/Seam';
+import { type MarkdownView, type SessionMode, type SplitDirection } from '@/components/SessionControls';
 import SessionHistoryPanel from '@/components/SessionHistoryPanel';
 import SessionReader from '@/components/SessionReader';
 import SettingsView from '@/components/SettingsView';
 import Sidebar from '@/components/Sidebar';
-import TabBar from '@/components/TabBar';
-import Terminal from '@/components/Terminal';
-import MarkdownPane from '@/components/MarkdownPane';
 import { disposeTerminal, writeToTerminal } from '@/components/terminalCache';
 import * as ipc from '@/lib/ipc';
+import { findPane, paneRect, panesOf, seamBands, visibleTabIds } from '@/lib/panes';
 import { useSettings } from '@/lib/settings-store';
-import { initialTabsState, learnSessionNames, moveId, tabBarTabs, tabsReducer, UNNAMED_TAB } from '@/lib/tabs';
-import { transcriptToMarkdown } from '@/lib/transcript';
-import { useTranscript } from '@/lib/use-transcript';
+import { activeTabId, initialTabsState, learnSessionNames, tabsReducer, UNNAMED_TAB } from '@/lib/tabs';
+import { useDragValue } from '@/lib/use-drag-value';
 import { cn } from '@/lib/utils';
 import type { SavedTab, SessionHistoryEntry, ShellOption, Tab, TabKind, TabStatus } from '@/types';
 
@@ -27,9 +24,6 @@ const SAVE_DEBOUNCE_MS = 300;
 // How often we scan for idle background sessions to auto-sleep. The threshold
 // itself is user-configurable (settings.autoSleepMinutes; 0 disables).
 const SLEEP_CHECK_MS = 60 * 1000;
-// How often the on-screen transcript re-reads while its tab is working, so new
-// turns show up live as Claude answers.
-const LIVE_FOLLOW_MS = 1200;
 
 export default function App() {
   const [state, dispatch] = useReducer(tabsReducer, initialTabsState);
@@ -51,13 +45,8 @@ export default function App() {
   // See docs/features/file-explorer.md.
   const [filesMode, setFilesMode] = useState<'hidden' | 'peek' | 'pinned'>('pinned');
   const [filesPanelWidth, setFilesPanelWidth] = useState(260);
-  const [draggingFilesSeam, setDraggingFilesSeam] = useState(false);
   const filesPinned = filesMode === 'pinned';
   const filesPanelRef = useRef<HTMLDivElement>(null);
-  // Which tabs the top strip holds, in the order you first opened them. A tab
-  // exists (sidebar) long before it's "open" up here — it lands in the strip
-  // when you actually go into it, and stays until you close it from there.
-  const [barTabIds, setBarTabIds] = useState<string[]>([]);
   // Home is the resting screen: implicit when no tab is open, reachable any time
   // from the sidebar wordmark, and where every launch starts — a restored
   // workspace opens on the city, not on whichever tab happened to be last.
@@ -72,15 +61,14 @@ export default function App() {
   // tab (terminal is the default, so it isn't stored).
   const [mdTabs, setMdTabs] = useState<Map<string, SessionMode>>(new Map());
   const [mdView, setMdView] = useState<MarkdownView>('rendered');
-  const [mdReload, setMdReload] = useState(0);
-  // Split view: which edge the second pane opens against, its size as a
-  // fraction of the row/column, and whether the seam is being dragged.
-  // Direction is a window-level layout choice (not per-tab), same as ratio
-  // always was — it's "how I like to look at things", not session state.
+  // Which edge a tab's transcript opens against. A window-level preference —
+  // "how I like to look at things" — not session state, so it's shared by every
+  // pane rather than stored per tab.
+  // ponytail: one shared transcript direction; per-pane would need transcripts
+  // to become their own tab kind, which is a separate refactor.
   const [splitDirection, setSplitDirection] = useState<SplitDirection>('right');
-  const [splitRatio, setSplitRatio] = useState(0.5);
-  const [draggingSeam, setDraggingSeam] = useState(false);
-  const splitRowRef = useRef<HTMLDivElement>(null);
+  const { layout } = state;
+  const gridRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     ipc.listShells().then(setShellOptions).catch(() => {});
@@ -157,7 +145,10 @@ export default function App() {
   const prevStatusRef = useRef<Map<string, TabStatus>>(new Map());
   // The tab the user is actually looking at right now (active, app focused, no
   // overlay covering it) — the one case where a notification is redundant.
-  const visibleTabIdRef = useRef<string | null>(null);
+  // Which tabs are on screen right now, as a set — read by the notification
+  // guard and the auto-sleep sweep, both of which run off a timer and so need
+  // the live value rather than a render-time closure.
+  const visibleTabIdsRef = useRef<Set<string>>(new Set());
 
   // Ask for notification permission once, up front, if the pref is on.
   useEffect(() => {
@@ -171,7 +162,7 @@ export default function App() {
    *  first status of a tab so restoring a workspace doesn't fire a burst. */
   const maybeNotify = useCallback((tabId: string, prev: TabStatus | undefined, status: TabStatus) => {
     if (!notificationsRef.current || prev === undefined) return;
-    if (document.hasFocus() && tabId === visibleTabIdRef.current) return;
+    if (document.hasFocus() && visibleTabIdsRef.current.has(tabId)) return;
     const name = tabsRef.current.find((t) => t.id === tabId)?.name ?? 'Claude';
     if (status === 'requires_response') void ipc.notify(name, 'Needs your input');
     else if (status === 'idle' && prev === 'working') void ipc.notify(name, 'Finished');
@@ -226,12 +217,6 @@ export default function App() {
     ipc.killPty(tabId);
   }, []);
 
-  /** Puts a tab in the top strip. Idempotent, appends — so the strip keeps the
-   *  order you opened things in and re-entering a tab never reshuffles it. */
-  const openInBar = useCallback((tabId: string) => {
-    setBarTabIds((ids) => (ids.includes(tabId) ? ids : [...ids, tabId]));
-  }, []);
-
   /** Spawns a tab at an explicit project folder — used for user-initiated new
    *  sessions and for resuming a past session; the pty starts immediately. */
   const spawnTabAt = useCallback(
@@ -247,13 +232,12 @@ export default function App() {
         status: 'new',
       };
       dispatch({ type: 'add', tab });
-      openInBar(tab.id);
       setShowHistory(false);
       setShowSettings(false);
       setShowHome(false);
       startPty(tab);
     },
-    [startPty, openInBar],
+    [startPty],
   );
 
   // Restore the previous workspace (projects + open tabs) once on startup.
@@ -337,7 +321,6 @@ export default function App() {
       next.delete(tabId);
       return next;
     });
-    setBarTabIds((ids) => ids.filter((id) => id !== tabId));
     dispatch({ type: 'close', tabId });
   }, [state.tabs]);
 
@@ -347,25 +330,10 @@ export default function App() {
   const handleCloseBarTab = useCallback((tabId: string) => {
     const tab = state.tabs.find((t) => t.id === tabId);
     if (!tab || tab.kind === 'file') { handleCloseTab(tabId); return; }
-    const index = barTabIds.indexOf(tabId);
-    const rest = barTabIds.filter((id) => id !== tabId);
-    setBarTabIds(rest);
-    // Closing the tab you're looking at hands you its neighbour in the strip.
-    if (state.activeTabId === tabId) {
-      const fallback = rest[index] ?? rest[index - 1];
-      if (fallback) dispatch({ type: 'select', tabId: fallback });
-    }
-  }, [state.tabs, state.activeTabId, barTabIds, handleCloseTab]);
-
-  /** Drag-reorder inside the strip. Its order is its own — dragging a session
-   *  here doesn't touch the sidebar's order (and can cross folders, which the
-   *  sidebar's own reorder refuses). */
-  const handleReorderBarTab = useCallback(
-    (tabId: string, targetId: string, position: 'before' | 'after') => {
-      setBarTabIds((ids) => moveId(ids, tabId, targetId, position));
-    },
-    [],
-  );
+    // The neighbour that takes its place — and collapsing the pane if that was
+    // its last tab — is `closePaneTab`'s job, in lib/panes.ts.
+    dispatch({ type: 'removeFromPane', tabId });
+  }, [state.tabs, handleCloseTab]);
 
   /** Set a tab's view mode: terminal (default), full markdown, or split. */
   const setTabMode = useCallback((tabId: string, mode: SessionMode) => {
@@ -381,9 +349,10 @@ export default function App() {
     setShowHistory(false);
     setShowSettings(false);
     setShowHome(false);
-    openInBar(tabId);
+    // A tab already on the grid gets its pane focused rather than moved; one
+    // that isn't opens in the focused pane. See `activateTab` in lib/panes.ts.
     dispatch({ type: 'select', tabId });
-  }, [openInBar]);
+  }, []);
 
   /** Opens a file from the explorer as a read-only tab — reuses the tab if
    *  that file is already open instead of duplicating it. No pty involved. */
@@ -430,11 +399,10 @@ export default function App() {
       path,
     };
     dispatch({ type: 'add', tab });
-    openInBar(tab.id);
     setShowHistory(false);
     setShowSettings(false);
     setShowHome(false);
-  }, [state.tabs, handleSelectTab, openInBar]);
+  }, [state.tabs, handleSelectTab]);
 
   // Command palette — Ctrl/Cmd+Shift+P from anywhere. Capture phase so it fires
   // before the focused xterm swallows the key; Shift+P (not Ctrl+K) to avoid
@@ -506,36 +474,39 @@ export default function App() {
     [spawnTabAt],
   );
 
-  const activeTab = state.tabs.find((t) => t.id === state.activeTabId) ?? null;
-  const activeReadable = !!activeTab && activeTab.kind === 'claude' && !!activeTab.resumeSessionId;
+  const currentTabId = activeTabId(state);
+  const activeTab = state.tabs.find((t) => t.id === currentTabId) ?? null;
   const overlaysUp = showHistory || showSettings || readerTarget !== null;
   const fileUp = !!activeTab && activeTab.kind === 'file';
-  // Home covers the terminal too, but unlike the overlays it *is* the resting
+  // Home covers the grid too, but unlike the overlays it *is* the resting
   // state when nothing is open, so it gets its own flag.
   const homeUp = showHome || state.tabs.length === 0;
-  // SessionControls (Preview/Split) docks to the tab strip for a readable
-  // Claude tab — never for a file tab, which already shows its own name there.
-  const canRead = settings.showMarkdownToggle && activeReadable && !fileUp;
-  // The active tab's view mode (terminal unless it can be read AND is toggled).
-  const activeMode: SessionMode = (canRead && activeTab && mdTabs.get(activeTab.id)) || 'terminal';
-  // Markdown pane is on screen (markdown or split); its transcript must load.
-  const mdReading = activeMode === 'markdown' || activeMode === 'split';
-  // Markdown fully replaces the terminal (terminal hidden, no live process needed).
-  const mdFull = activeMode === 'markdown';
-  const splitActive = activeMode === 'split';
-  // Feed the notification guard: which tab is genuinely on screen right now. In
-  // split the terminal is still visible, so only full-markdown counts as hidden.
-  visibleTabIdRef.current = overlaysUp || homeUp || mdFull ? null : activeTab?.id ?? null;
+
+  /** Every tab genuinely on screen — one per pane, not just the focused one.
+   *  This is the thing the grid changed: with up to four terminals visible,
+   *  "is this tab on screen" stopped being a single id. A tab reading as full
+   *  markdown is excluded: its terminal is hidden and needs no live process. */
+  const visible = useMemo(() => {
+    if (overlaysUp || homeUp) return new Set<string>();
+    const ids = visibleTabIds(layout);
+    for (const id of ids) {
+      if (mdTabs.get(id) === 'markdown') ids.delete(id);
+    }
+    return ids;
+  }, [overlaysUp, homeUp, layout, mdTabs]);
+  visibleTabIdsRef.current = visible;
 
   // Lazily spawn a dormant (restored) tab's pty the first time it's actually
-  // shown as a live terminal. Full-markdown reading or an overlay doesn't need
-  // the process; split does (the terminal half is live), so only mdFull blocks.
+  // shown as a live terminal — now for every pane, since a tab can be on screen
+  // in a pane you aren't typing into. `startPty` is idempotent via `spawnedRef`.
   useEffect(() => {
-    if (!activeTab || !activeTab.dormant) return;
-    if (overlaysUp || homeUp || mdFull) return;
-    startPty(activeTab);
-    dispatch({ type: 'wake', tabId: activeTab.id });
-  }, [activeTab, overlaysUp, homeUp, mdFull, startPty]);
+    for (const id of visible) {
+      const tab = state.tabs.find((t) => t.id === id);
+      if (!tab?.dormant) continue;
+      startPty(tab);
+      dispatch({ type: 'wake', tabId: id });
+    }
+  }, [visible, state.tabs, startPty]);
 
   // Auto-sleep idle background Claude sessions. Every tick, a resumable Claude
   // tab that's been idle and off-screen for the configured threshold is put to
@@ -550,7 +521,7 @@ export default function App() {
         return;
       }
       const now = Date.now();
-      const visibleId = visibleTabIdRef.current;
+      const onScreen = visibleTabIdsRef.current;
       for (const tab of tabsRef.current) {
         const eligible =
           tab.kind === 'claude' &&
@@ -558,7 +529,8 @@ export default function App() {
           !tab.exited &&
           tab.status === 'idle' &&
           !!tab.resumeSessionId &&
-          tab.id !== visibleId;
+          // Any pane you can see counts as on screen, not just the focused one.
+          !onScreen.has(tab.id);
         if (!eligible) {
           idleSinceRef.current.delete(tab.id);
           continue;
@@ -574,74 +546,46 @@ export default function App() {
     return () => clearInterval(timer);
   }, [sleepTab]);
 
-  // Drag-to-resize the split seam. Tracks the pointer on window (not the seam)
-  // so a fast drag doesn't outrun the 1px handle, and clamps the ratio so both
-  // panes keep a usable minimum. Reads clientX/width for a right split,
-  // clientY/height for a down split.
-  useEffect(() => {
-    if (!draggingSeam) return;
-    const onMove = (e: MouseEvent) => {
-      const row = splitRowRef.current;
-      if (!row) return;
-      const r = row.getBoundingClientRect();
-      const ratio = splitDirection === 'right'
-        ? (e.clientX - r.left) / r.width
-        : (e.clientY - r.top) / r.height;
-      setSplitRatio(Math.min(0.75, Math.max(0.25, ratio)));
-    };
-    const onUp = () => setDraggingSeam(false);
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-    return () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-    };
-  }, [draggingSeam, splitDirection]);
-
-  // Drag-to-resize the file explorer panel, same pattern as the split seam
-  // above but tracking width from the panel's own right edge (it's docked to
-  // the window edge, not a fixed-position row).
-  useEffect(() => {
-    if (!draggingFilesSeam) return;
-    const onMove = (e: MouseEvent) => {
-      const panel = filesPanelRef.current;
-      if (!panel) return;
-      const r = panel.getBoundingClientRect();
-      setFilesPanelWidth(Math.min(480, Math.max(200, r.right - e.clientX)));
-    };
-    const onUp = () => setDraggingFilesSeam(false);
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-    return () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-    };
-  }, [draggingFilesSeam]);
-
-  // Live-follow: while the transcript is on screen, re-read it on a steady tick
-  // so new turns appear as Claude answers — including plain-text replies, which
-  // never flip the tab to `working`. The read is cheap to ignore when nothing
-  // changed (useTranscript skips identical content), so a quiet session doesn't
-  // re-render; only real growth updates the view.
-  useEffect(() => {
-    if (!mdReading || overlaysUp || !activeTab || activeTab.exited) return;
-    const timer = setInterval(() => setMdReload((k) => k + 1), LIVE_FOLLOW_MS);
-    return () => clearInterval(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mdReading, overlaysUp, activeTab?.id, activeTab?.exited]);
-
-  const { turns, error } = useTranscript(
-    mdReading && activeTab ? activeTab.cwd : null,
-    mdReading && activeTab ? activeTab.resumeSessionId : null,
-    mdReload,
+  // The grid's two seams and the file panel's, all on one hook — they were the
+  // same twenty lines of window-tracked mousemove three times over.
+  const [draggingCol, startColSeam] = useDragValue(
+    (e) => {
+      const g = gridRef.current;
+      if (!g) return null;
+      const r = g.getBoundingClientRect();
+      return (e.clientX - r.left) / r.width;
+    },
+    (frac) => dispatch({ type: 'seam', axis: 'col', frac }),
   );
-  const fullMarkdown = useMemo(() => (turns ? transcriptToMarkdown(turns) : ''), [turns]);
+  const [draggingRow, startRowSeam] = useDragValue(
+    (e) => {
+      const g = gridRef.current;
+      if (!g) return null;
+      const r = g.getBoundingClientRect();
+      return (e.clientY - r.top) / r.height;
+    },
+    (frac) => dispatch({ type: 'seam', axis: 'row', frac }),
+  );
+  const [draggingFilesSeam, startFilesSeam] = useDragValue(
+    (e) => {
+      const panel = filesPanelRef.current;
+      if (!panel) return null;
+      return panel.getBoundingClientRect().right - e.clientX;
+    },
+    (width) => setFilesPanelWidth(Math.min(480, Math.max(200, width))),
+  );
+
+  // An L-shaped grid splits only one of its rows, so the vertical seam has to
+  // stop at the row that isn't split (and vice versa).
+  const bands = seamBands(layout.grid);
+  const colSeamShown = bands.vertical[0] || bands.vertical[1];
+  const rowSeamShown = bands.horizontal[0] || bands.horizontal[1];
 
   return (
     <div className="relative flex h-screen bg-background text-foreground">
       <Sidebar
         tabs={state.tabs}
-        activeTabId={state.activeTabId}
+        activeTabId={currentTabId}
         shellOptions={shellOptions}
         showHistory={showHistory}
         showSettings={showSettings}
@@ -669,105 +613,101 @@ export default function App() {
         onToggleCollapse={() => setCollapsed((v) => !v)}
       />
       <main className="relative flex-1 min-w-0 flex flex-col" data-terminal-area>
-        {/* The tabs you've actually gone into — sessions, shells and files —
-            in the order you opened them. Not every tab that exists: that's
-            the sidebar's list. */}
-        {!overlaysUp && (
-          <TabBar
-            tabs={tabBarTabs(state.tabs, barTabIds)}
-            activeTabId={state.activeTabId}
-            onSelectTab={handleSelectTab}
-            onCloseTab={handleCloseBarTab}
-            onReorderTab={handleReorderBarTab}
-            trailing={canRead && activeTab ? (
-              <SessionControls
-                mode={activeMode}
-                splitDirection={splitDirection}
-                onSetMode={(m) => setTabMode(activeTab.id, m)}
-                onSetSplitDirection={setSplitDirection}
-              />
-            ) : undefined}
-          />
-        )}
         <div className="relative flex-1 min-h-0">
-          {/* Terminal and markdown share the pane: full alone, or split
-              right/down (SessionControls), divided by a draggable seam. */}
-          <div ref={splitRowRef} className={cn('absolute inset-0 flex', splitActive && splitDirection === 'down' && 'flex-col')}>
-            <div
-              className={cn('relative flex flex-col min-w-0', mdFull ? 'hidden' : splitActive ? 'shrink-0' : 'flex-1')}
-              style={splitActive ? (splitDirection === 'right' ? { width: `${splitRatio * 100}%` } : { height: `${splitRatio * 100}%` }) : undefined}
-            >
-              {splitActive && (
-                <div className="flex items-center gap-1.5 h-7 px-3 shrink-0 border-b border-border bg-card">
-                  <SquareTerminal size={11} className="text-muted-foreground shrink-0" />
-                  <span className="font-mono text-[10px] tracking-[0.12em] uppercase text-muted-foreground">Terminal</span>
-                </div>
-              )}
-              <div className="relative flex-1 min-h-0">
-                {state.tabs.filter((tab) => tab.kind !== 'file').map((tab) => (
-                  <Terminal
-                    key={tab.id}
-                    tabId={tab.id}
-                    isVisible={tab.id === state.activeTabId && !overlaysUp && !homeUp && !mdFull}
-                    onInterrupt={() => dispatch({ type: 'interrupt', tabId: tab.id })}
-                  />
-                ))}
-                {state.tabs.filter((tab) => tab.kind === 'file').map((tab) => (
-                  <FileViewer
-                    key={tab.id}
-                    tab={tab}
-                    isVisible={tab.id === state.activeTabId && !overlaysUp && !homeUp}
-                    onDirtyChange={(tabId, dirty) => dispatch({ type: 'dirty', tabId, dirty })}
-                    onOpenFile={handleOpenFile}
-                  />
-                ))}
-                {!overlaysUp && !mdReading && !fileUp && homeUp && (
-                  <HomeScreen
-                    projects={projects}
-                    onAddProject={handleAddProject}
-                  />
-                )}
-              </div>
-            </div>
-            {splitActive && (
-              <div
-                onMouseDown={() => setDraggingSeam(true)}
-                className={cn(
-                  'group relative shrink-0 bg-border-hover',
-                  splitDirection === 'right'
-                    ? 'w-px cursor-col-resize shadow-[-14px_0_22px_-18px_rgba(0,0,0,0.9)]'
-                    : 'h-px cursor-row-resize shadow-[0_-14px_22px_-18px_rgba(0,0,0,0.9)]',
-                )}
-                title="Drag to resize"
-              >
-                {/* wider invisible hit-area over the 1px line */}
-                <span className={cn('absolute', splitDirection === 'right' ? 'inset-y-0 -left-1.5 -right-1.5' : 'inset-x-0 -top-1.5 -bottom-1.5')} />
-                <span className={cn(
-                  'absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-border-hover',
-                  splitDirection === 'right' ? 'w-1 h-8' : 'w-8 h-1',
-                  'transition-colors group-hover:bg-muted-foreground',
-                  draggingSeam && 'bg-primary',
-                )} />
-              </div>
-            )}
-            {mdReading && (
-              <MarkdownPane
-                turns={turns}
-                error={error}
-                view={mdView}
-                onSetView={setMdView}
-                onRefresh={() => setMdReload((k) => k + 1)}
-                turnsCount={turns ? turns.length : null}
-                markdownText={fullMarkdown}
-                label={splitActive ? 'Transcript' : undefined}
-                fill={splitActive}
-                className={splitActive ? 'flex-1 bg-card' : 'flex-1'}
+          {/* The pane grid. Up to four panes on a 2x2 of cells, each owning its
+              own tab strip; a pane spanning several cells just spans grid
+              tracks. Both rows share one column seam and both columns share one
+              row seam — that's what makes it a grid rather than a pane tree.
+              See docs/features/panes.md.
+
+              Hidden here, never unmounted: dropping the grid would unmount
+              every <Terminal>, and coming back would re-attach and rewrap all
+              of them. Their own `isVisible` is already false while an overlay
+              or Home is up, so the ResizeObserver is disconnected and
+              display:none costs no fit. */}
+          <div
+            ref={gridRef}
+            className={cn('absolute inset-0 grid', (overlaysUp || homeUp) && 'hidden')}
+            style={{
+              gridTemplateColumns: `${layout.colFrac}fr ${1 - layout.colFrac}fr`,
+              gridTemplateRows: `${layout.rowFrac}fr ${1 - layout.rowFrac}fr`,
+            }}
+          >
+            {panesOf(layout.grid).map((paneId) => {
+              const pane = findPane(layout, paneId);
+              if (!pane) return null;
+              const rect = paneRect(layout.grid, paneId);
+              return (
+                <PaneView
+                  key={paneId}
+                  pane={pane}
+                  tabs={state.tabs}
+                  focused={paneId === layout.focusedPaneId}
+                  visible={visible}
+                  showMarkdownToggle={settings.showMarkdownToggle}
+                  mdTabs={mdTabs}
+                  splitDirection={splitDirection}
+                  mdView={mdView}
+                  onSetMdView={setMdView}
+                  onSetMode={setTabMode}
+                  onSetSplitDirection={setSplitDirection}
+                  onSelectTab={handleSelectTab}
+                  onCloseBarTab={handleCloseBarTab}
+                  onReorderTab={(tabId, targetTabId, position) =>
+                    dispatch({ type: 'moveTab', tabId, paneId, targetTabId, position })}
+                  onFocus={() => dispatch({ type: 'focusPane', paneId })}
+                  onInterrupt={(tabId) => dispatch({ type: 'interrupt', tabId })}
+                  onDirtyChange={(tabId, dirty) => dispatch({ type: 'dirty', tabId, dirty })}
+                  onOpenFile={handleOpenFile}
+                  onSplitTab={(tabId, edge) => dispatch({ type: 'splitTab', tabId, paneId, edge })}
+                  // A pane one cell wide can't split sideways again, and one
+                  // cell tall can't split down — so don't offer it.
+                  canSplit={{ vertical: rect.colSpan > 1, horizontal: rect.rowSpan > 1 }}
+                  style={{
+                    gridRow: `${rect.row + 1} / span ${rect.rowSpan}`,
+                    gridColumn: `${rect.col + 1} / span ${rect.colSpan}`,
+                  }}
+                />
+              );
+            })}
+
+            {colSeamShown && (
+              <Seam
+                orientation="vertical"
+                dragging={draggingCol}
+                onStart={startColSeam}
+                className="absolute"
+                style={{
+                  left: `${layout.colFrac * 100}%`,
+                  top: bands.vertical[0] ? 0 : `${layout.rowFrac * 100}%`,
+                  bottom: bands.vertical[1] ? 0 : `${(1 - layout.rowFrac) * 100}%`,
+                }}
               />
             )}
-            {draggingSeam && (
-              <div className={cn('fixed inset-0 z-50', splitDirection === 'right' ? 'cursor-col-resize' : 'cursor-row-resize')} />
+            {rowSeamShown && (
+              <Seam
+                orientation="horizontal"
+                dragging={draggingRow}
+                onStart={startRowSeam}
+                className="absolute"
+                style={{
+                  top: `${layout.rowFrac * 100}%`,
+                  left: bands.horizontal[0] ? 0 : `${layout.colFrac * 100}%`,
+                  right: bands.horizontal[1] ? 0 : `${(1 - layout.colFrac) * 100}%`,
+                }}
+              />
+            )}
+            {(draggingCol || draggingRow) && (
+              <div className={cn('fixed inset-0 z-50', draggingCol ? 'cursor-col-resize' : 'cursor-row-resize')} />
             )}
           </div>
+          {/* Home is the resting screen, so it covers the grid rather than
+              living in a pane — with nothing open there is no pane to put it in. */}
+          {homeUp && !overlaysUp && (
+            <div className="absolute inset-0 bg-background">
+              <HomeScreen projects={projects} onAddProject={handleAddProject} />
+            </div>
+          )}
           {showHistory && projects.length > 0 && (
             <div className="absolute inset-0 bg-background">
               <SessionHistoryPanel projects={projects} sessionNames={sessionNames} onResume={handleResumeSession} onRead={handleReadSession} />
@@ -797,14 +737,12 @@ export default function App() {
 
       {filesPinned && (
         <>
-          <div
-            onMouseDown={() => setDraggingFilesSeam(true)}
-            className="relative w-px shrink-0 cursor-col-resize bg-border-hover"
-            title="Drag to resize"
-          >
-            {/* wider invisible hit-area over the 1px line */}
-            <span className="absolute inset-y-0 -left-1.5 -right-1.5" />
-          </div>
+          <Seam
+            orientation="vertical"
+            dragging={draggingFilesSeam}
+            onStart={startFilesSeam}
+            className="relative shrink-0"
+          />
           <div
             ref={filesPanelRef}
             data-files-panel
