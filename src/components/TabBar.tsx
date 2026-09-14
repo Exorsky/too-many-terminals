@@ -29,6 +29,11 @@ interface TabBarProps {
    *  which one will take your next keystroke matters more than anything else the
    *  chrome could say. See docs/design.md. */
   paneFocused?: boolean;
+  /** A tab dropped on the strip itself rather than onto one of its tabs —
+   *  the empty space to the right. Appends it to this pane. Without this a drop
+   *  there hits no handler at all and the tab silently stays where it came
+   *  from, which reads as the drag having done nothing. */
+  onDropInStrip?: (tabId: string) => void;
   /** Split this pane along an edge, moving the tab into the new half. Absent
    *  when the grid is full — a fifth pane has nowhere to go. */
   onSplitTab?: (tabId: string, edge: Edge) => void;
@@ -49,7 +54,7 @@ function dropSide(e: { clientX: number; currentTarget: HTMLElement }): 'before' 
  *  it's given: App.tsx feeds it the tabs you've actually gone into, in the order
  *  you opened them. Click to switch, drag to reorder, middle-click or × to close
  *  (what "close" means per kind is App.tsx's call). docs/features/file-explorer.md. */
-export default function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, onReorderTab, trailing, paneFocused = true, onSplitTab, canSplit }: TabBarProps) {
+export default function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, onReorderTab, trailing, paneFocused = true, onSplitTab, canSplit, onDropInStrip }: TabBarProps) {
   const activeRef = useRef<HTMLDivElement>(null);
   // Which tab is being dragged (a ref, so `dragover` can decide synchronously)
   // and where the insertion line currently sits. One piece of state for the
@@ -66,10 +71,27 @@ export default function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, onR
   if (tabs.length === 0 && !trailing) return null;
 
   return (
-    <div className={cn(
-      'flex items-stretch h-8 shrink-0 border-b border-border bg-card',
-      !paneFocused && 'opacity-60',
-    )}>
+    <div
+      className={cn(
+        'flex items-stretch h-8 shrink-0 border-b border-border bg-card',
+        !paneFocused && 'opacity-60',
+      )}
+      onDragOver={(e) => {
+        if (!dragIdRef.current && !e.dataTransfer.types.includes(TAB_MIME)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+      }}
+      onDrop={(e) => {
+        // Individual tabs stop propagation, so this only sees drops that
+        // missed them — the empty run of strip past the last tab.
+        const id = dragIdRef.current ?? e.dataTransfer.getData(TAB_MIME);
+        dragIdRef.current = null;
+        setDrop(null);
+        if (!id) return;
+        e.preventDefault();
+        onDropInStrip?.(id);
+      }}
+    >
       <div className="flex items-stretch flex-1 min-w-0 overflow-x-auto scrollbar-thin">
         {tabs.map((tab) => {
           const isActive = tab.id === activeTabId;
@@ -111,10 +133,14 @@ export default function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, onR
               onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDrop(null); }}
               onDrop={(e) => {
                 const id = dragIdRef.current ?? e.dataTransfer.getData(TAB_MIME);
-                if (id && id !== tab.id) {
+                if (id) {
+                  // Always claim our own drag, even when it lands back on the
+                  // tab it started from — otherwise the strip's own handler
+                  // below would treat it as a drop into empty space and shunt
+                  // the tab to the end.
                   e.preventDefault();
-                  e.stopPropagation(); // the pane's drop zones are behind this
-                  onReorderTab?.(id, tab.id, dropSide(e));
+                  e.stopPropagation();
+                  if (id !== tab.id) onReorderTab?.(id, tab.id, dropSide(e));
                 }
                 dragIdRef.current = null;
                 setDrop(null);

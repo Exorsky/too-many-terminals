@@ -42,6 +42,8 @@ interface PaneViewProps {
   onDirtyChange: (tabId: string, dirty: boolean) => void;
   onOpenFile: (dir: string, path: string) => void;
   onSplitTab: (tabId: string, edge: Edge) => void;
+  /** A tab dropped on this pane's strip, past its last tab. */
+  onDropInStrip: (tabId: string) => void;
   /** A tab dropped anywhere on this pane — an edge splits, the centre moves. */
   onDropTab: (tabId: string, zone: Edge | 'center') => void;
   onDropFile: (payload: FileDragPayload, zone: Edge | 'center') => void;
@@ -66,7 +68,7 @@ export default function PaneView({
   pane, tabs, focused, visible, showMarkdownToggle, mdTabs, splitDirection,
   mdView, onSetMdView, onSetMode, onSetSplitDirection, onSelectTab, onCloseBarTab,
   onReorderTab, onFocus, onInterrupt, onDirtyChange, onOpenFile, onSplitTab, canSplit,
-  onDropTab, onDropFile, dragging, style,
+  onDropTab, onDropFile, onDropInStrip, dragging, style,
 }: PaneViewProps) {
   const rowRef = useRef<HTMLDivElement>(null);
   // The terminal|transcript seam is this pane's own, unlike the grid seams.
@@ -129,6 +131,7 @@ export default function PaneView({
         paneFocused={focused}
         onSplitTab={onSplitTab}
         canSplit={canSplit}
+        onDropInStrip={onDropInStrip}
         onSelectTab={onSelectTab}
         onCloseTab={onCloseBarTab}
         onReorderTab={onReorderTab}

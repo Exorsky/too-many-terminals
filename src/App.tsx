@@ -736,6 +736,7 @@ export default function App() {
                   onSplitTab={(tabId, edge) => dispatch({ type: 'splitTab', tabId, paneId, edge })}
                   dragging={drag !== null}
                   onDropTab={(tabId, zone) => handleDropTab(tabId, paneId, zone)}
+                  onDropInStrip={(tabId) => { endDrag(); dispatch({ type: 'moveTab', tabId, paneId }); }}
                   onDropFile={(payload, zone) => handleDropFile(payload, paneId, zone)}
                   // A pane one cell wide can't split sideways again, and one
                   // cell tall can't split down. Nor can a pane be split off its

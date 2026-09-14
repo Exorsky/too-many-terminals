@@ -50,6 +50,7 @@ function renderPane(pane: Pane, tabs: Tab[], visible: Set<string>, extra = {}) {
       onSplitTab={vi.fn()}
       canSplit={{ vertical: true, horizontal: true }}
       onDropTab={vi.fn()}
+      onDropInStrip={vi.fn()}
       onDropFile={vi.fn()}
       dragging={false}
       {...extra}
