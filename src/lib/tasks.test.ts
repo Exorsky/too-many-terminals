@@ -7,7 +7,7 @@ vi.mock('@/lib/ipc', () => ({
 
 import * as ipc from '@/lib/ipc';
 import {
-  addTask, byTaskOrder, deleteTask, formatDue, fromLocalInput, getTasks, groupOf, linkSession,
+  addTask, byCompletionOrder, byTaskOrder, deleteTask, formatDue, fromLocalInput, getTasks, groupOf, linkSession,
   matchesFilter, newTask, resetTasksForTest, sanitizeTask, startOfDay, toLocalInput, updateTask,
 } from './tasks';
 import type { Task } from '@/types';
@@ -160,5 +160,30 @@ describe('the store', () => {
     expect(t.projectDir).toBeNull();
     expect(t.sessionIds).toEqual([]);
     expect(matchesFilter(t, 'all', NOW)).toBe(true);
+  });
+});
+
+describe('the Completed filter', () => {
+  it('is the only filter that admits finished work', () => {
+    const done = task({ done: true, dueAt: NOW });
+    // Due today, but finished — every "what's left" view has to ignore it.
+    expect(matchesFilter(done, 'all', NOW)).toBe(false);
+    expect(matchesFilter(done, 'today', NOW)).toBe(false);
+    expect(matchesFilter(done, 'upcoming', NOW)).toBe(false);
+    expect(matchesFilter(done, 'no-project', NOW)).toBe(false);
+    expect(matchesFilter(done, 'completed', NOW)).toBe(true);
+  });
+
+  it('leaves open tasks out of it, whatever their date', () => {
+    expect(matchesFilter(task({ dueAt: NOW }), 'completed', NOW)).toBe(false);
+    expect(matchesFilter(task({ dueAt: null }), 'completed', NOW)).toBe(false);
+  });
+
+  it('orders finished work by when it was finished, newest first', () => {
+    // Due date stops being interesting once the thing is done; "what did I get
+    // through" reads newest-first.
+    const early = task({ done: true, updatedAt: NOW - 3_600_000, dueAt: NOW });
+    const late = task({ done: true, updatedAt: NOW, dueAt: NOW + 86_400_000 });
+    expect([early, late].sort(byCompletionOrder)).toEqual([late, early]);
   });
 });

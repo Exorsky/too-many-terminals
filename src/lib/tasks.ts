@@ -96,13 +96,14 @@ export const GROUP_LABEL: Record<TaskGroup, string> = {
  *  in the default view — a completed task is a receipt, not a plan. */
 export const GROUP_ORDER: TaskGroup[] = ['overdue', 'today', 'upcoming', 'later', 'done'];
 
-export type TaskFilter = 'all' | 'today' | 'upcoming' | 'no-project';
+export type TaskFilter = 'all' | 'today' | 'upcoming' | 'no-project' | 'completed';
 
 export const FILTER_LABEL: Record<TaskFilter, string> = {
   all: 'All',
   today: 'Today',
   upcoming: 'Upcoming',
   'no-project': 'No project',
+  completed: 'Completed',
 };
 
 /** Which tasks a filter chip shows. `all` hides completed tasks — they're
@@ -117,7 +118,22 @@ export function matchesFilter(task: Task, filter: TaskFilter, now: number): bool
     }
     case 'upcoming': return groupOf(task, now) === 'upcoming';
     case 'no-project': return !task.done && task.projectDir === null;
+    // The only filter that admits finished work. Everything else is a view of
+    // what is still on the plate, which is why `groupOf` sends a done task to
+    // its own group and no other filter ever looks there.
+    case 'completed': return task.done;
   }
+}
+
+/** Within the `done` group: most recently finished first.
+ *
+ *  Ordered by `updatedAt`, which is stamped when `done` is set — so it is the
+ *  completion time unless you edit a task after finishing it, which is rare
+ *  enough not to justify carrying a second timestamp in the stored shape.
+ *  A completed list answers "what did I get done", and that reads newest-first;
+ *  due date is no longer interesting once the thing is finished. */
+export function byCompletionOrder(a: Task, b: Task): number {
+  return b.updatedAt - a.updatedAt;
 }
 
 /** Within a group: soonest due first, undated by creation, newest last —

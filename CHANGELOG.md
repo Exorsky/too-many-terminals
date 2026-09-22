@@ -13,6 +13,10 @@ listed here; see `git log` for the full history.
 
 ### Added
 
+- **A Completed filter in To-Do.** Finished tasks were written out of every
+  view — the `Done` group existed but nothing could reach it — so ticking one
+  off made it vanish. They now collect under **Completed**, most recently
+  finished first.
 - **Search inside your past sessions.** The history panel's search box now reads
   the full text of every transcript on disk, not just each session's first
   message, and covers every project rather than only the folders you have open —

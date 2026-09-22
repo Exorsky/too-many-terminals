@@ -13,7 +13,7 @@ That ordering decides most of the design below.
 ```
 To-Do                          7 open              [+ New task]
 
-[All 7] [Today 3] [Upcoming 2] [No project 4]
+[All 7] [Today 3] [Upcoming 2] [No project 4] [Completed 18]
 
 OVERDUE  1
  ☐ Rotate the staging cert                      Yesterday 09:00  ⋯
@@ -59,6 +59,15 @@ anyone west of Greenwich.
 
 The **Today** filter includes overdue tasks. Something you missed is still today's
 problem, and a separate trip to find it is the reason it stayed missed.
+
+**Completed** is the only filter that admits finished work, and the only way to
+see it: `groupOf` sends a done task to the `done` group, and every other filter
+is a view of what's still on the plate. Inside it the order flips to
+`byCompletionOrder` — most recently finished first, off `updatedAt`. Due date
+stops being interesting once the thing is done, and "what did I get through"
+reads newest-first. There's no separate `completedAt` in the stored shape:
+`updatedAt` is stamped when `done` is set, and it only drifts if you edit a task
+*after* finishing it, which isn't worth a second timestamp on every row.
 
 ### When a filter comes back empty
 

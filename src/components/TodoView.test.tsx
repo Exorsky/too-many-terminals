@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/ipc');
 
-import { resetTasksForTest } from '@/lib/tasks';
+import { newTask, resetTasksForTest } from '@/lib/tasks';
 import TodoView from './TodoView';
 
 afterEach(cleanup);
@@ -50,5 +50,49 @@ describe('TodoView empty state', () => {
     await user.click(screen.getByRole('button', { name: 'Create task' }));
     expect(screen.getByLabelText('New task title')).toBeInTheDocument();
     expect(screen.queryByText('Nothing to do')).not.toBeInTheDocument();
+  });
+});
+
+describe('TodoView Completed filter', () => {
+  it('shows finished tasks, which no other filter does', async () => {
+    const now = Date.now();
+    resetTasksForTest([
+      { ...newTask(), title: 'Rotate the Grafana token', done: true, updatedAt: now },
+      { ...newTask(), title: 'Still to do', done: false },
+    ]);
+    const user = userEvent.setup();
+    renderTodo();
+
+    // The open task is what All is for; the finished one is deliberately absent.
+    expect(screen.getByText('Still to do')).toBeInTheDocument();
+    expect(screen.queryByText('Rotate the Grafana token')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /^Completed/ }));
+
+    expect(screen.getByText('Rotate the Grafana token')).toBeInTheDocument();
+    expect(screen.queryByText('Still to do')).not.toBeInTheDocument();
+  });
+
+  it('lists the most recently finished first', async () => {
+    const now = Date.now();
+    resetTasksForTest([
+      { ...newTask(), title: 'Finished earlier', done: true, updatedAt: now - 3_600_000 },
+      { ...newTask(), title: 'Finished just now', done: true, updatedAt: now },
+    ]);
+    const user = userEvent.setup();
+    renderTodo();
+    await user.click(screen.getByRole('button', { name: /^Completed/ }));
+
+    const titles = screen.getAllByText(/^Finished /).map((el) => el.textContent);
+    expect(titles).toEqual(['Finished just now', 'Finished earlier']);
+  });
+
+  it('has its own empty state', async () => {
+    resetTasksForTest([{ ...newTask(), title: 'Still to do' }]);
+    const user = userEvent.setup();
+    renderTodo();
+
+    await user.click(screen.getByRole('button', { name: /^Completed/ }));
+    expect(screen.getByText('Nothing finished yet')).toBeInTheDocument();
   });
 });

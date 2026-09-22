@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { CheckCheck, Copy, Folder, FolderInput, Inbox, MoreHorizontal, Pencil, Plus, Sparkles, Trash2 } from 'lucide-react';
 import {
-  addTask, byTaskOrder, deleteTask, FILTER_LABEL, formatDue, GROUP_LABEL, GROUP_ORDER,
+  addTask, byCompletionOrder, byTaskOrder, deleteTask, FILTER_LABEL, formatDue, GROUP_LABEL, GROUP_ORDER,
   groupOf, matchesFilter, newTask, updateTask, useTasks, type TaskFilter,
 } from '@/lib/tasks';
 import { cn, folderName } from '@/lib/utils';
@@ -11,7 +11,7 @@ import {
   DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
-const FILTERS: TaskFilter[] = ['all', 'today', 'upcoming', 'no-project'];
+const FILTERS: TaskFilter[] = ['all', 'today', 'upcoming', 'no-project', 'completed'];
 
 /** An empty list should say which emptiness this is. "Nothing under Today" is
  *  the filter name read back at you; "Nothing due today" is an answer. */
@@ -20,6 +20,7 @@ const EMPTY_COPY: Record<TaskFilter, { title: string; body: string }> = {
   'today': { title: 'Nothing due today', body: 'Anything due before midnight shows up here.' },
   'upcoming': { title: 'Nothing upcoming', body: 'Tasks with a future date will appear here.' },
   'no-project': { title: 'No unassigned tasks', body: 'Every task currently belongs to a project.' },
+  'completed': { title: 'Nothing finished yet', body: 'Tasks you tick off collect here.' },
 };
 
 /** Priority is a word, not a colored pill — three of those on every row is how
@@ -208,9 +209,17 @@ export default function TodoView({
   useEffect(() => { if (composing) composeRef.current?.focus(); }, [composing]);
 
   const grouped = useMemo(() => {
-    const visible = tasks.filter((t) => matchesFilter(t, filter, now)).sort(byTaskOrder);
+    const visible = tasks.filter((t) => matchesFilter(t, filter, now));
     return GROUP_ORDER
-      .map((group) => ({ group, items: visible.filter((t) => groupOf(t, now) === group) }))
+      .map((group) => ({
+        group,
+        // Finished work sorts by when it was finished; everything else by
+        // what's next. Per group rather than per filter, so a `done` section
+        // reads the same wherever it turns up.
+        items: visible
+          .filter((t) => groupOf(t, now) === group)
+          .sort(group === 'done' ? byCompletionOrder : byTaskOrder),
+      }))
       .filter((g) => g.items.length > 0);
   }, [tasks, filter, now]);
 
