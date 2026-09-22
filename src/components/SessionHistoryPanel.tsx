@@ -229,7 +229,7 @@ export default function SessionHistoryPanel({ projects, sessionNames, onResume, 
           Session History
         </span>
         {entries !== null && (
-          <span className="text-[11px] text-muted-foreground tabular-nums">
+          <span className="text-[11px] text-muted-foreground font-mono tabular-nums">
             {isFiltering ? (
               <><span className="text-foreground">{shownCount}</span> of {totalCount} sessions</>
             ) : (
@@ -243,7 +243,7 @@ export default function SessionHistoryPanel({ projects, sessionNames, onResume, 
               'ml-auto flex items-center justify-center w-5.5 h-5.5 rounded-sm border cursor-pointer shrink-0',
               showCalendar
                 ? 'text-primary bg-primary/10 border-primary/40'
-                : 'bg-transparent border-transparent text-muted-foreground hover:text-foreground hover:bg-white/[0.07]',
+                : 'bg-transparent border-transparent text-muted-foreground hover:text-foreground hover:bg-selected',
             )}
             aria-pressed={showCalendar}
             title={showCalendar ? 'Hide the calendar (c)' : 'Show the calendar (c)'}
@@ -339,7 +339,7 @@ export default function SessionHistoryPanel({ projects, sessionNames, onResume, 
             <span className="text-[10px] tracking-[0.16em] uppercase text-muted-foreground">
               Sessions per day
             </span>
-            <span className="text-[9.5px] tracking-[0.08em] uppercase text-muted-foreground/70">
+            <span className="text-[9.5px] tracking-[0.08em] uppercase text-muted-foreground">
               last 3 months
             </span>
           </div>
@@ -411,8 +411,8 @@ export default function SessionHistoryPanel({ projects, sessionNames, onResume, 
                     tabIndex={0}
                     className={cn(
                       'group/history flex items-stretch w-full text-left border-b border-border/60 cursor-pointer outline-none',
-                      isActive && 'bg-white/[0.03]',
-                      'hover:bg-white/[0.03]',
+                      isActive && 'bg-hover',
+                      'hover:bg-hover',
                     )}
                     onClick={() => { if (!confirming) onResume(entry.projectDir, entry); }}
                     onFocus={() => setActiveIndex(globalIndex)}
@@ -443,13 +443,13 @@ export default function SessionHistoryPanel({ projects, sessionNames, onResume, 
                           </>
                         )}
                         <span
-                          className="shrink-0 text-[10px] px-1 rounded-sm border border-border bg-white/[0.04]"
+                          className="shrink-0 text-[10px] px-1 rounded-sm border border-border bg-hover"
                           title={entry.sessionId}
                         >
                           {entry.sessionId.slice(0, 7)}
                         </span>
                         <span className="shrink-0 opacity-50">·</span>
-                        <span className="shrink-0 tabular-nums" title={fullTimestamp(entry.lastUsedIso)}>
+                        <span className="shrink-0 font-mono tabular-nums" title={fullTimestamp(entry.lastUsedIso)}>
                           {relativeTime(entry.lastUsedIso)} · {absoluteLabel(entry.lastUsedIso, group)}
                         </span>
                       </div>
@@ -470,7 +470,7 @@ export default function SessionHistoryPanel({ projects, sessionNames, onResume, 
                             Delete
                           </button>
                           <button
-                            className="text-[10.5px] text-muted-foreground hover:text-foreground hover:bg-white/[0.07] bg-transparent border-none cursor-pointer font-inherit px-1.5 py-0.5 rounded-sm"
+                            className="text-[10.5px] text-muted-foreground hover:text-foreground hover:bg-selected bg-transparent border-none cursor-pointer font-inherit px-1.5 py-0.5 rounded-sm"
                             onClick={(e) => { e.stopPropagation(); setPendingDeleteId(null); }}
                           >
                             Cancel
@@ -479,28 +479,28 @@ export default function SessionHistoryPanel({ projects, sessionNames, onResume, 
                       ) : (
                         <>
                           <button
-                            className="flex items-center justify-center w-5 h-5 rounded-sm bg-transparent border-none cursor-pointer text-muted-foreground/60 hover:text-[#6fd4c9] hover:bg-white/[0.07]"
+                            className="flex items-center justify-center w-5 h-5 rounded-sm bg-transparent border-none cursor-pointer text-muted-foreground hover:text-[#6fd4c9] hover:bg-selected"
                             title="Read this session (Space)"
                             onClick={(e) => { e.stopPropagation(); onRead(entry.projectDir, entry); }}
                           >
                             <FileText size={12} />
                           </button>
                           <button
-                            className="flex items-center justify-center w-5 h-5 rounded-sm bg-transparent border-none cursor-pointer text-muted-foreground/60 hover:text-foreground hover:bg-white/[0.07]"
+                            className="flex items-center justify-center w-5 h-5 rounded-sm bg-transparent border-none cursor-pointer text-muted-foreground hover:text-foreground hover:bg-selected"
                             title="Export this session to a file (hand off to another machine)"
                             onClick={(e) => { e.stopPropagation(); ipc.exportSession(entry.projectDir, entry.sessionId).catch(() => {}); }}
                           >
                             <Upload size={12} />
                           </button>
                           <button
-                            className="flex items-center justify-center w-5 h-5 rounded-sm bg-transparent border-none cursor-pointer text-muted-foreground/60 hover:text-foreground hover:bg-white/[0.07]"
+                            className="flex items-center justify-center w-5 h-5 rounded-sm bg-transparent border-none cursor-pointer text-muted-foreground hover:text-foreground hover:bg-selected"
                             title="Resume this session"
                             onClick={(e) => { e.stopPropagation(); onResume(entry.projectDir, entry); }}
                           >
                             <ArrowRight size={12} />
                           </button>
                           <button
-                            className="flex items-center justify-center w-5 h-5 rounded-sm bg-transparent border-none cursor-pointer text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10"
+                            className="flex items-center justify-center w-5 h-5 rounded-sm bg-transparent border-none cursor-pointer text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                             title="Delete this session"
                             onClick={(e) => { e.stopPropagation(); setPendingDeleteId(entry.sessionId); }}
                           >
@@ -519,17 +519,17 @@ export default function SessionHistoryPanel({ projects, sessionNames, onResume, 
 
       {entries !== null && entries.length > 0 && (
         <div className="flex items-center h-6 px-4 border-t border-border shrink-0 text-[10.5px] text-muted-foreground">
-          <kbd className="mr-1 px-1 rounded-sm border border-border bg-white/[0.05] text-[#9297a3]">↑↓</kbd> navigate
+          <kbd className="mr-1 px-1 rounded-sm border border-border bg-raised text-[#9297a3]">↑↓</kbd> navigate
           <span className="mx-2 opacity-40">·</span>
-          <kbd className="mr-1 px-1 rounded-sm border border-border bg-white/[0.05] text-[#9297a3]">↵</kbd> resume
+          <kbd className="mr-1 px-1 rounded-sm border border-border bg-raised text-[#9297a3]">↵</kbd> resume
           <span className="mx-2 opacity-40">·</span>
-          <kbd className="mr-1 px-1 rounded-sm border border-border bg-white/[0.05] text-[#9297a3]">space</kbd> read
+          <kbd className="mr-1 px-1 rounded-sm border border-border bg-raised text-[#9297a3]">space</kbd> read
           <span className="mx-2 opacity-40">·</span>
-          <kbd className="mr-1 px-1 rounded-sm border border-border bg-white/[0.05] text-[#9297a3]">del</kbd> delete
+          <kbd className="mr-1 px-1 rounded-sm border border-border bg-raised text-[#9297a3]">del</kbd> delete
           <span className="mx-2 opacity-40">·</span>
-          <kbd className="mr-1 px-1 rounded-sm border border-border bg-white/[0.05] text-[#9297a3]">c</kbd> calendar
+          <kbd className="mr-1 px-1 rounded-sm border border-border bg-raised text-[#9297a3]">c</kbd> calendar
           <span className="mx-2 opacity-40">·</span>
-          <kbd className="mr-1 px-1 rounded-sm border border-border bg-white/[0.05] text-[#9297a3]">/</kbd> search
+          <kbd className="mr-1 px-1 rounded-sm border border-border bg-raised text-[#9297a3]">/</kbd> search
         </div>
       )}
     </div>

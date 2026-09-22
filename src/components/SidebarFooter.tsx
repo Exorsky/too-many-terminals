@@ -77,8 +77,8 @@ function UsageRow({ label, window: w, windowSeconds, now }: {
           title={ahead ? 'Burning faster than the clock' : 'Behind the clock — the window outlasts the limit'}
         />
       </div>
-      <span className="w-6 shrink-0 text-right tabular-nums text-foreground">{w.percent}%</span>
-      <span className="w-11 shrink-0 text-right tabular-nums text-muted-foreground" title="Resets in">
+      <span className="w-6 shrink-0 text-right font-mono tabular-nums text-foreground">{w.percent}%</span>
+      <span className="w-11 shrink-0 text-right font-mono tabular-nums text-muted-foreground" title="Resets in">
         {formatDuration(secondsLeft)}
       </span>
     </div>

@@ -11,6 +11,7 @@ function makeTab(id: string, overrides: Partial<Tab> = {}): Tab {
     name: id,
     shellId: null,
     cwd: 'C:\\Users\\x\\project',
+    projectDir: 'C:\\Users\\x\\project',
     resumeSessionId: null,
     exited: false,
     status: 'idle',
@@ -19,9 +20,11 @@ function makeTab(id: string, overrides: Partial<Tab> = {}): Tab {
 }
 
 const TABS: Tab[] = [
-  makeTab('Fix auth redirect', { cwd: 'C:\\Users\\x\\api-gateway', status: 'requires_response' }),
-  makeTab('Migrate v2 schema', { cwd: 'C:\\Users\\x\\billing-svc', status: 'working' }),
-  makeTab('PowerShell', { kind: 'shell', shellId: 'powershell', cwd: 'C:\\Users\\x\\web-app' }),
+  makeTab('Fix auth redirect', { cwd: 'C:\\Users\\x\\api-gateway', projectDir: 'C:\\Users\\x\\api-gateway', status: 'requires_response' }),
+  makeTab('Migrate v2 schema', { cwd: 'C:\\Users\\x\\billing-svc', projectDir: 'C:\\Users\\x\\billing-svc', status: 'working' }),
+  // Unfiled: the palette has to be able to find an Inbox session too.
+  makeTab('Quick nginx question', { cwd: 'C:\\Users\\x\\.tmt\\scratch\\ab12', projectDir: null }),
+  makeTab('PowerShell', { kind: 'shell', shellId: 'powershell', cwd: 'C:\\Users\\x\\web-app', projectDir: 'C:\\Users\\x\\web-app' }),
 ];
 
 function renderPalette(overrides: Partial<React.ComponentProps<typeof CommandPalette>> = {}) {
@@ -51,7 +54,7 @@ describe('CommandPalette', () => {
     expect(screen.getByText('PowerShell')).toBeInTheDocument();
   });
 
-  it('excludes file tabs — they live in their own strip, not this "jump to a terminal" list', () => {
+  it('excludes file tabs — a file is a view of a session, not one', () => {
     renderPalette({ tabs: [...TABS, makeTab('README.md', { kind: 'file', path: 'C:\\Users\\x\\project\\README.md' })] });
     expect(screen.queryByText('README.md')).not.toBeInTheDocument();
   });
@@ -63,7 +66,7 @@ describe('CommandPalette', () => {
     expect(screen.queryByText('Fix auth redirect')).not.toBeInTheDocument();
   });
 
-  it('filters by folder name', async () => {
+  it('filters by project name', async () => {
     renderPalette();
     await userEvent.keyboard('gateway');
     expect(screen.getByText('Fix auth redirect')).toBeInTheDocument();
@@ -97,9 +100,16 @@ describe('CommandPalette', () => {
     expect(props.onSelectTab).not.toHaveBeenCalled();
   });
 
+  it('finds an unfiled session by typing Inbox', async () => {
+    renderPalette();
+    await userEvent.keyboard('inbox');
+    expect(screen.getByText('Quick nginx question')).toBeInTheDocument();
+    expect(screen.queryByText('Migrate v2 schema')).not.toBeInTheDocument();
+  });
+
   it('shows an empty state when nothing matches', async () => {
     renderPalette();
     await userEvent.keyboard('zzzzz');
-    expect(screen.getByText(/No open terminal matches/)).toBeInTheDocument();
+    expect(screen.getByText(/No open session matches/)).toBeInTheDocument();
   });
 });

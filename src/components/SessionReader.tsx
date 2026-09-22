@@ -49,13 +49,13 @@ export default function SessionReader({ projectDir, entry, onClose, onResume }: 
           <div className="flex items-center gap-1.5 text-[10.5px] text-muted-foreground">
             <span className="truncate">{folderName(projectDir)}</span>
             <span className="opacity-50">·</span>
-            <span className="shrink-0 px-1 rounded-sm border border-border bg-white/[0.04]" title={entry.sessionId}>
+            <span className="shrink-0 px-1 rounded-sm border border-border bg-hover" title={entry.sessionId}>
               {entry.sessionId.slice(0, 7)}
             </span>
             {turns && (
               <>
                 <span className="opacity-50">·</span>
-                <span className="shrink-0 tabular-nums">{turns.length} turns</span>
+                <span className="shrink-0 font-mono tabular-nums">{turns.length} turns</span>
               </>
             )}
           </div>
@@ -84,7 +84,7 @@ export default function SessionReader({ projectDir, entry, onClose, onResume }: 
         <button
           onClick={() => setReloadKey((k) => k + 1)}
           title="Re-read (a live session keeps growing)"
-          className="flex items-center justify-center w-7 h-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-white/[0.07] cursor-pointer bg-transparent border border-border"
+          className="flex items-center justify-center w-7 h-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-selected cursor-pointer bg-transparent border border-border"
         >
           <RefreshCw size={12} />
         </button>
@@ -98,7 +98,7 @@ export default function SessionReader({ projectDir, entry, onClose, onResume }: 
         <button
           onClick={onClose}
           title="Close reader (Esc)"
-          className="flex items-center justify-center w-6 h-6 rounded-md text-muted-foreground hover:text-foreground hover:bg-white/[0.07] cursor-pointer bg-transparent border-none"
+          className="flex items-center justify-center w-6 h-6 rounded-md text-muted-foreground hover:text-foreground hover:bg-selected cursor-pointer bg-transparent border-none"
         >
           <X size={14} />
         </button>

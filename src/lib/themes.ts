@@ -129,6 +129,18 @@ export function cssVars(c: ThemeColors): Record<string, string> {
     '--warning-foreground': c.background,
     '--attention': mix(c.warning, c.destructive, 0.5),
     '--usage': c.usage,
+    // The two text tiers between `foreground` and `mutedForeground`'s floor.
+    // Derived rather than editable: a theme picks how loud its text is, and
+    // these keep the same relative steps whatever it picks.
+    '--dim': mix(c.background, c.foreground, 0.72),
+    '--faint': mix(c.background, c.mutedForeground, 0.55),
+    // Row states. White overlays, not theme colors: they have to read as "this
+    // surface is raised" on top of whatever background the theme set, and a
+    // tinted overlay would fight the project hues sitting in the same rows.
+    '--hover': 'rgba(255, 255, 255, 0.04)',
+    '--selected': 'rgba(255, 255, 255, 0.075)',
+    '--selected-hover': 'rgba(255, 255, 255, 0.095)',
+    '--raised': 'rgba(255, 255, 255, 0.055)',
   };
 }
 
@@ -163,6 +175,29 @@ export const DEFAULT_THEME: Theme = {
   name: 'Default',
   builtIn: true,
   colors: {
+    background: '#0a0a0c',
+    foreground: '#e9e9ee',
+    card: '#101014',
+    border: '#1e1e24',
+    primary: '#8b7df7',
+    mutedForeground: '#7c7c87',
+    usage: '#8b7df7',
+    destructive: '#e5534b',
+    success: '#45b96a',
+    warning: '#d9a441',
+    magenta: '#c792ea',
+    cyan: '#6fd4c9',
+    selection: '#2e2a45',
+  },
+};
+
+/** The palette the app shipped with through 0.24 — kept as a preset so the
+ *  retune of Default is a change of look, not a loss of one. */
+const CLASSIC_THEME: Theme = {
+  id: 'classic',
+  name: 'Classic blue',
+  builtIn: true,
+  colors: {
     background: '#0c0d10',
     foreground: '#e7e8ec',
     card: '#121319',
@@ -181,6 +216,7 @@ export const DEFAULT_THEME: Theme = {
 
 export const PRESETS: Theme[] = [
   DEFAULT_THEME,
+  CLASSIC_THEME,
   {
     id: 'amber',
     name: 'Amber',

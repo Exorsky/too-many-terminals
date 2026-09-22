@@ -9,10 +9,15 @@ tokens *mean*, and which UI pattern to reach for given a piece of content.
 
 ## Visual identity, in one paragraph
 
-Dark, monospace, near-square. Every surface is `ui-monospace` — there is no
-second display face, because the terminal *is* the product; chrome that tried
-to look like a "normal app" next to a monospace terminal would read as a
-mismatch. Corners are close to sharp (see [Shape](#shape) below), elevation is
+Dark, near-square, two faces. The chrome is the system sans
+(`ui-sans-serif`/SF Pro Text/Segoe UI); the terminal, and anything that has to
+line up in a column — timestamps, counts, paths, key hints — stays
+`ui-monospace`. This reverses an earlier decision that the whole app should be
+monospace because "the terminal *is* the product". It held while the app was a
+terminal with a tab strip; it stopped holding once the chrome grew a task list,
+a session ledger and inspectors, where monospace costs horizontal room and
+flattens the difference between a name and its metadata. Making the terminal
+the *only* monospaced surface is what now marks it as the content. Corners are close to sharp (see [Shape](#shape) below), elevation is
 almost always a 1px border rather than a shadow, and color is spent on
 **meaning** (a status dot, a folder's identity, a selected/pinned state) far
 more often than on decoration. The one place the design allows itself
@@ -31,8 +36,12 @@ new screen is what each token is *for*:
 | `background` / `card` | App vs. slightly-raised surface (sidebar, panels) | — |
 | `border` / `border-hover` | The only elevation cue in most of the UI (1px, not shadow) | — |
 | `primary` | "You selected this" — active tab, active nav row, **and** a pinned session | No |
-| `muted-foreground` | Secondary text: descriptions, meta, folder chips | — |
-| `success` / `warning` / `attention` / `destructive` | Session status only (idle / working / needs-you / error) | **Never** — see [Status vocabulary](#status-vocabulary) |
+| `dim` | The tier between `foreground` and `muted-foreground`: a row's own name when the row isn't selected. Derived, not editable — `mix(background, foreground, 0.72)` | — |
+| `muted-foreground` | Metadata: timestamps, counts, section labels, folder chips | — |
+| `faint` | The punctuation *between* metadata — the `·` separators, an empty-slot placeholder. Never a word you have to read; `mix(background, mutedForeground, 0.55)` | — |
+| `hover` / `raised` / `selected` / `selected-hover` | The four row states, as white overlays at 4% / 5.5% / 7.5% / 9.5%. Every hoverable row, ghost button and tab uses these and nothing else | — |
+| `success` / `warning` / `destructive` | Session status only (working / needs-you / error) | **Never** — see [Status vocabulary](#status-vocabulary) |
+| `attention` | Despite the name, **not** a session-status colour: `STATE_DOT.attention` is `warning` plus a ring, so the state survives readers who can't separate green from yellow. One consumer today — the "notifications are blocked" line in Settings | — |
 | `usage` | The usage-meter bar's color below the warning threshold. App chrome only, no ansi counterpart — kept separate from `primary` so a theme's accent and its "how much I've used" bar can differ | — |
 | project hue (`projectHue(index)`, `PROJECT_COLORS` in `types.ts`) | Cross-folder disambiguation — a small dot next to a folder-name chip in the Pinned/Attention strips, where several folders' sessions sit in one list and the color is doing real work. **Not** shown in the folder's own header (a neutral `Folder` glyph instead) — the name right there already identifies it; a second color badge on the same row would be decoration | Never a full tinted background (see [Shape](#shape)) |
 
@@ -57,9 +66,15 @@ change.
 
 ## Type & scale
 
-One face everywhere: `ui-monospace, 'Cascadia Code', 'JetBrains Mono',
-Consolas, monospace` (`globals.css`, `body`). There's no formal type-scale
-token, but the sizes actually in use form a consistent ladder (counted across
+Two faces, both declared as tokens in `globals.css`'s `@theme`:
+`--font-sans` for the chrome (the `body` default) and `--font-mono`
+(`Cascadia Code`/`JetBrains Mono`) reached through Tailwind's `font-mono`.
+The rule for which: **monospace is for things that line up or get typed** —
+timestamps, counts, durations, paths, `⌘K` hints, transcript text. Everything
+you read as prose is sans. In practice `font-mono` travels with
+`tabular-nums`; if you're adding one without the other, check you meant to.
+
+The sizes in use form a consistent ladder (counted across
 `src/components/*.tsx`):
 
 | Size | Used for |
@@ -84,6 +99,22 @@ Uppercase eyebrow labels
 `tracking-[0.16em]` and `text-muted-foreground` — never full-strength
 foreground, so they read as structure rather than content.
 
+### Text tiers
+
+Four, and a row is expected to use at least two of them — a name level with its
+own timestamp is the single most common way a dense list stops being scannable:
+
+| Tier | Token | What it holds |
+|---|---|---|
+| 1 | `foreground` | The selected row; the thing you're working on |
+| 2 | `dim` | An unselected row's own name |
+| 3 | `muted-foreground` | Timestamps, counts, section labels, status words |
+| 4 | `faint` | Separators and placeholders — decoration, not content |
+
+Ad-hoc opacities (`text-muted-foreground/60` and friends) are not a fifth tier.
+They were how tiers 3 and 4 used to be spelled, and they drifted to seven
+different values reaching as low as 1.7:1 contrast.
+
 ## Shape
 
 Radii come from one `--radius: 0.25rem` (4px) base with Tailwind's
@@ -105,8 +136,12 @@ common radius in the codebase (32 uses vs. 21 `rounded-md`, 24 `rounded-full`,
 A session row is **never** wrapped in its own tinted, bordered card — that was
 the pre-redesign look (a colored box per folder) and read as busy once more than
 three or four were open. A row stays borderless and flat, differing from its
-neighbours only by a hover/active background tint (`hover:bg-white/4`,
-`bg-white/6`–`bg-white/8` for active/selected).
+neighbours only by a hover/active background tint (`hover:bg-hover`,
+`bg-selected` for active/selected, `bg-selected-hover` when it's both). Those
+are tokens rather than literals on purpose: the same four overlays were once
+fourteen hand-written whites between `bg-white/[0.008]` and `bg-white/10`, which
+is how a "selected" row in one panel came to look like a "hover" row in
+another.
 
 Two passes were spent learning where a status *may* spend shape. The first gave
 a folder holding a live session a soft status-colored border and tint, on the
@@ -135,6 +170,38 @@ pill is the one place identity is allowed a filled shape, and only while
 selected — a neutral white tint there was invisible against unselected pills
 that all carry the same bright dot, and the hue was already doing this exact job
 two pixels away.
+
+## Buttons and focus
+
+Most of what looks like a button in this app is a bare `<button>` with a class
+string, not a component — `ui/button.tsx` exists but speaks shadcn's vocabulary
+(`text-sm`, `rounded-md`) rather than this app's. Three shapes recur often
+enough to be shared from `lib/utils.ts`, as strings the call site composes with
+`cn()` and its own sizing:
+
+| Constant | Shape |
+|---|---|
+| `ICON_BUTTON` | Square, centered, icon-only, ghost. Call site sets `w-5 h-5` or `w-6 h-6` |
+| `ACTION_ROW` | Full-width left-aligned row: an inspector's action list, a sidebar footer row |
+| `ACTION_ROW_DANGER` | The same, `destructive` — muted until hovered, so a Delete at the bottom of a list isn't the loudest thing in it |
+
+They're strings and not a component on purpose: every call site already wraps
+them in `cn()` and supplies its own height and padding, so a wrapper would exist
+only to forward props straight through. What they buy is agreement — one place
+that decides what a ghost hover looks like.
+
+Bordered buttons (`border-border` + `hover:border-border-hover`) are the
+secondary variant, used where something needs to look pressable against an empty
+area: **New task**, **Create task**, the Retry in an error state. There is no
+filled/primary variant anywhere in the chrome. `primary` is a *state* color here
+(see [Color](#color)) and spending it on a button would put it in competition
+with the selected row it's supposed to mark.
+
+**Focus is restyled, never removed.** `globals.css` gives `:focus-visible` a 2px
+`--ring` outline inset by 1px, so a ring on a 26px row doesn't clip its
+neighbour. An input that wants a border-based focus instead opts out with
+`outline-none` — utilities win over base — but nothing may simply have no focus
+treatment. Before this, most custom buttons had none at all.
 
 ## Iconography
 

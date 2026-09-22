@@ -18,6 +18,26 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+/* The app's recurring button shapes, as class strings rather than a component.
+ * Every call site already composes with `cn()` and supplies its own size, so a
+ * wrapper would exist only to forward props straight through. What these are
+ * for is agreement: one place that decides what a ghost button's hover looks
+ * like, instead of fourteen call sites each guessing a white. */
+
+/** Square, centered, icon-only. The call site sets the size (`w-5 h-5`). */
+export const ICON_BUTTON =
+  'flex items-center justify-center shrink-0 rounded-sm border-none cursor-pointer bg-transparent text-muted-foreground hover:text-foreground hover:bg-raised';
+
+/** Full-width left-aligned action: an inspector's action list, a sidebar row.
+ *  The call site sets height, padding and text size. */
+export const ACTION_ROW =
+  'flex items-center gap-2 w-full shrink-0 rounded-sm border-none cursor-pointer bg-transparent font-inherit text-left text-muted-foreground hover:text-foreground hover:bg-hover';
+
+/** `ACTION_ROW` for something you can't undo. Muted until hovered, so a
+ *  Delete sitting at the bottom of a list isn't the loudest thing in it. */
+export const ACTION_ROW_DANGER =
+  'flex items-center gap-2 w-full shrink-0 rounded-sm border-none cursor-pointer bg-transparent font-inherit text-left text-destructive/85 hover:text-destructive hover:bg-destructive/10';
+
 /** Last path segment of a project directory — the name we show for a folder. */
 export function folderName(dir: string): string {
   return dir.split(/[/\\]/).filter(Boolean).pop() ?? dir;

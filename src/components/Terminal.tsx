@@ -46,10 +46,11 @@ function ensureWebgl(cached: CachedTerminal): void {
 
 const Terminal = React.memo(function Terminal({ tabId, isVisible, focused = true, onInterrupt }: TerminalProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  // The container this terminal's DOM currently lives in — not the tab id, which
-  // never changes for a given <Terminal> and so could never invalidate. Moving a
-  // tab between panes remounts the component with a *new* container, and that's
-  // exactly the case this has to notice.
+  // The container this terminal's DOM currently lives in. Invalidated by a new
+  // container (the component remounted somewhere else) *and* by a new `tabId`
+  // on the same container — the workspace renders one <Terminal> and swaps its
+  // tabId as you switch sessions, so the node under it stays put while the
+  // terminal that belongs in it changes.
   const attachedRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -120,12 +121,20 @@ const Terminal = React.memo(function Terminal({ tabId, isVisible, focused = true
     //
     // The instance itself lives in `terminalCache`, outside React, so the
     // buffer, scrollback and pty survive the move untouched.
+    // "Is *this* terminal in there", not "is there a terminal in there". The
+    // looser check silently passed when the container held a *different*
+    // session's element, so switching sessions left the previous one on screen
+    // — the whole workspace appeared frozen.
     const alreadyAttached =
-      attachedRef.current === container && container.querySelector('.xterm');
+      attachedRef.current === container && !!term.element && container.contains(term.element);
 
     if (!alreadyAttached) {
       if (term.element) {
-        if (term.element.parentElement !== container) container.appendChild(term.element);
+        if (term.element.parentElement !== container) {
+          // Evict whoever is in there first: appending alone would stack every
+          // session ever shown in this container on top of each other.
+          container.replaceChildren(term.element);
+        }
         // Moving the node doesn't repaint it, and the fit below is a no-op when
         // the pane happens to be the same size as the old one.
         term.refresh(0, term.rows - 1);

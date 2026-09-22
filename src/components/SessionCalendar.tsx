@@ -57,9 +57,9 @@ export default function SessionCalendar({ months, now, selected = null, onSelect
           <div key={month.key} className="min-w-0">
             <div className="flex items-baseline justify-between gap-2 mb-1.5">
               <span className="text-[10px] tracking-[0.16em] uppercase text-muted-foreground">{month.label}</span>
-              <span className="text-[9.5px] tabular-nums text-muted-foreground/70">{month.total}</span>
+              <span className="text-[9.5px] font-mono tabular-nums text-muted-foreground">{month.total}</span>
             </div>
-            <div className="grid grid-cols-7 gap-[2px] mb-[3px] text-[9px] text-center text-muted-foreground/70">
+            <div className="grid grid-cols-7 gap-[2px] mb-[3px] text-[9px] text-center text-muted-foreground">
               {WEEKDAYS.map((w, i) => <span key={i}>{w}</span>)}
             </div>
             <div className="grid grid-cols-7 gap-[2px]">
@@ -72,7 +72,7 @@ export default function SessionCalendar({ months, now, selected = null, onSelect
                   : undefined;
                 const className = cn(
                   'relative aspect-square min-w-0 grid place-items-center rounded-sm p-0 font-inherit',
-                  'border border-transparent bg-white/[0.025] text-[10px] tabular-nums text-foreground/20',
+                  'border border-transparent bg-white/[0.025] text-[10px] font-mono tabular-nums text-foreground/20',
                   // The date has to survive the fill: brighter at level 3, and
                   // flipped to ink at 4, where the fill is lighter than the type.
                   level > 0 && 'dash-mark',
@@ -115,7 +115,7 @@ export default function SessionCalendar({ months, now, selected = null, onSelect
       </div>
 
       {/* hover caption — what that day actually holds, not a prompt out of context */}
-      <div className="mt-2.5 h-5 flex items-center justify-center gap-2 text-[10.5px] text-muted-foreground min-w-0 tabular-nums">
+      <div className="mt-2.5 h-5 flex items-center justify-center gap-2 text-[10.5px] text-muted-foreground min-w-0 font-mono tabular-nums">
         {caption ? (
           <>
             <b className="font-medium text-foreground shrink-0">{caption.label}</b>
@@ -142,7 +142,7 @@ export default function SessionCalendar({ months, now, selected = null, onSelect
             </span>
           </>
         ) : (
-          <span className="text-[10px] tracking-[0.1em] uppercase text-muted-foreground/60">
+          <span className="text-[10px] tracking-[0.1em] uppercase text-muted-foreground">
             {onSelectDay ? 'Point at a day for its totals, click it to see only that day' : 'Point at a day for its totals'}
           </span>
         )}

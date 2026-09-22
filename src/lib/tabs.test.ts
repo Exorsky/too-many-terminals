@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { activeTabId, initialTabsState, learnSessionNames, sessionModeOf, tabBarTabs, tabsReducer, type TabsState } from './tabs';
-import type { SessionMode } from '@/types';
-import { focusedPane, panesOf, paneOfTab, visibleTabIds } from './panes';
-import type { Tab } from '@/types';
+import { activeTabId, initialTabsState, sessionModeOf, tabsReducer, type TabsState } from './tabs';
+import { activeContent, contentKey, findPane, panesOf, sessionContent, visibleSessionIds } from './panes';
+
+/** Every tab on the grid, as keys, in pane order. */
+function tabKeys(layout: Parameters<typeof panesOf>[0] extends never ? never : TabsState['layout']): string[] {
+  return layout.panes.flatMap((p) => p.contents.map((c) => contentKey(c)!));
+}
+import type { SessionMode, Tab } from '@/types';
 
 function makeTab(id: string, overrides: Partial<Tab> = {}): Tab {
   return {
@@ -11,6 +15,7 @@ function makeTab(id: string, overrides: Partial<Tab> = {}): Tab {
     name: id,
     shellId: 'powershell',
     cwd: 'C:\\Users\\x',
+    projectDir: null,
     resumeSessionId: null,
     exited: false,
     status: 'new',
@@ -26,299 +31,349 @@ function stateWith(...ids: string[]): TabsState {
 }
 
 describe('tabsReducer', () => {
-  it('add appends and activates the new tab', () => {
+  it('add appends and selects the new session', () => {
     const state = stateWith('a', 'b');
     expect(state.tabs.map((t) => t.id)).toEqual(['a', 'b']);
     expect(activeTabId(state)).toBe('b');
   });
 
-  it('select switches the active tab, ignoring unknown ids', () => {
-    let state = stateWith('a', 'b');
-    state = tabsReducer(state, { type: 'select', tabId: 'a' });
-    expect(activeTabId(state)).toBe('a');
-    state = tabsReducer(state, { type: 'select', tabId: 'nope' });
-    expect(activeTabId(state)).toBe('a');
-  });
-
-  it('close of the active tab activates the next tab in its place', () => {
-    let state = stateWith('a', 'b', 'c');
-    state = tabsReducer(state, { type: 'select', tabId: 'b' });
-    state = tabsReducer(state, { type: 'close', tabId: 'b' });
-    expect(state.tabs.map((t) => t.id)).toEqual(['a', 'c']);
-    expect(activeTabId(state)).toBe('c');
-  });
-
-  it('close of the last tab falls back to the previous one', () => {
-    let state = stateWith('a', 'b');
-    state = tabsReducer(state, { type: 'close', tabId: 'b' });
-    expect(activeTabId(state)).toBe('a');
-  });
-
-  it('close of an inactive tab keeps the active one', () => {
-    let state = stateWith('a', 'b');
-    state = tabsReducer(state, { type: 'close', tabId: 'a' });
-    expect(activeTabId(state)).toBe('b');
-  });
-
-  it('closing the only tab leaves no active tab', () => {
-    let state = stateWith('a');
-    state = tabsReducer(state, { type: 'close', tabId: 'a' });
-    expect(state.tabs).toEqual([]);
+  it('add with select:false leaves the selection alone', () => {
+    // How a restored workspace arrives: many sessions, none selected, so a
+    // launch opens on Home rather than on whichever was saved last.
+    const state = [makeTab('a'), makeTab('b')].reduce(
+      (s, tab) => tabsReducer(s, { type: 'add', tab, select: false }),
+      initialTabsState,
+    );
+    expect(state.tabs).toHaveLength(2);
     expect(activeTabId(state)).toBeNull();
   });
 
-  it('rename changes only the named tab', () => {
-    let state = stateWith('a', 'b');
-    state = tabsReducer(state, { type: 'rename', tabId: 'a', name: 'renamed' });
-    expect(state.tabs[0].name).toBe('renamed');
-    expect(state.tabs[1].name).toBe('b');
+  it('closing a session takes its tab out and promotes the neighbour', () => {
+    // A strip behaves the same whether a tab was closed or dragged away:
+    // "next, else previous".
+    const state = stateWith('a', 'b', 'c');
+    const after = tabsReducer(tabsReducer(state, { type: 'select', tabId: 'b' }), { type: 'close', tabId: 'b' });
+    expect(after.tabs.map((t) => t.id)).toEqual(['a', 'c']);
+    expect(tabKeys(after.layout)).toEqual(['session:a:claude', 'session:c:claude']);
+    expect(activeTabId(after)).toBe('c');
   });
 
-  it('exited marks the tab without removing it', () => {
-    let state = stateWith('a');
-    state = tabsReducer(state, { type: 'exited', tabId: 'a' });
-    expect(state.tabs[0].exited).toBe(true);
-    expect(state.tabs).toHaveLength(1);
+  it('closing the last session leaves an empty pane showing Home', () => {
+    const after = tabsReducer(stateWith('a'), { type: 'close', tabId: 'a' });
+    expect(activeTabId(after)).toBeNull();
+    expect(panesOf(after.layout.grid)).toHaveLength(1);
+    expect(after.layout.panes[0].contents).toEqual([]);
   });
 
-  it('sessionResolved records the learned session id on only that tab', () => {
-    let state = stateWith('a', 'b');
-    state = tabsReducer(state, { type: 'sessionResolved', tabId: 'a', sessionId: 'sess-1' });
-    expect(state.tabs[0].resumeSessionId).toBe('sess-1');
-    expect(state.tabs[1].resumeSessionId).toBeNull();
+  it('closing a session that is not on screen changes nothing on screen', () => {
+    const state = stateWith('a', 'b');
+    const after = tabsReducer(state, { type: 'close', tabId: 'a' });
+    expect(activeTabId(after)).toBe('b');
   });
 
-  it('status updates only the named tab, leaving others untouched', () => {
-    let state = stateWith('a', 'b');
-    state = tabsReducer(state, { type: 'status', tabId: 'a', status: 'working' });
-    expect(state.tabs[0].status).toBe('working');
-    expect(state.tabs[1].status).toBe('new');
-
-    state = tabsReducer(state, { type: 'status', tabId: 'a', status: 'requires_response' });
-    expect(state.tabs[0].status).toBe('requires_response');
+  it('selecting an unknown id is a no-op', () => {
+    const state = stateWith('a');
+    expect(tabsReducer(state, { type: 'select', tabId: 'nope' })).toBe(state);
   });
 
-  it('status stamps statusChangedAt on every transition', () => {
-    let state = stateWith('a');
-    const before = Date.now();
-    state = tabsReducer(state, { type: 'status', tabId: 'a', status: 'working' });
-    expect(state.tabs[0].statusChangedAt).toBeGreaterThanOrEqual(before);
-  });
-
-  it('status marks justFinished only on a working -> idle transition', () => {
-    let state = stateWith('a');
-    // new -> idle isn't a completion (no work happened).
-    state = tabsReducer(state, { type: 'status', tabId: 'a', status: 'idle' });
-    expect(state.tabs[0].justFinished).toBe(false);
-
-    state = tabsReducer(state, { type: 'status', tabId: 'a', status: 'working' });
-    state = tabsReducer(state, { type: 'status', tabId: 'a', status: 'idle' });
-    expect(state.tabs[0].justFinished).toBe(true);
-
-    // Starting new work clears it again.
-    state = tabsReducer(state, { type: 'status', tabId: 'a', status: 'working' });
-    expect(state.tabs[0].justFinished).toBe(false);
-  });
-
-  it('interrupt flips a working claude tab to requires_response', () => {
-    let state = initialTabsState;
-    state = tabsReducer(state, { type: 'add', tab: makeTab('a', { kind: 'claude', status: 'working' }) });
-    state = tabsReducer(state, { type: 'interrupt', tabId: 'a' });
-    expect(state.tabs[0].status).toBe('requires_response');
-    expect(state.tabs[0].statusChangedAt).toBeDefined();
-  });
-
-  it('interrupt is a no-op on a tab that is not a working claude tab', () => {
-    let state = initialTabsState;
-    state = tabsReducer(state, { type: 'add', tab: makeTab('shell', { kind: 'shell', status: 'working' }) });
-    state = tabsReducer(state, { type: 'add', tab: makeTab('idle-claude', { kind: 'claude', status: 'idle' }) });
-    state = tabsReducer(state, { type: 'interrupt', tabId: 'shell' });
-    state = tabsReducer(state, { type: 'interrupt', tabId: 'idle-claude' });
-    expect(state.tabs[0].status).toBe('working'); // shell untouched
-    expect(state.tabs[1].status).toBe('idle'); // already-idle claude untouched
-  });
-
-  it('select clears justFinished on the tab it activates (seen)', () => {
+  it('selecting a just-finished session clears the mark', () => {
     let state = stateWith('a');
     state = tabsReducer(state, { type: 'status', tabId: 'a', status: 'working' });
     state = tabsReducer(state, { type: 'status', tabId: 'a', status: 'idle' });
     expect(state.tabs[0].justFinished).toBe(true);
-
     state = tabsReducer(state, { type: 'select', tabId: 'a' });
     expect(state.tabs[0].justFinished).toBe(false);
   });
 
-  it('wake clears the dormant flag on only the named tab', () => {
-    let state = initialTabsState;
-    state = tabsReducer(state, { type: 'add', tab: makeTab('a', { dormant: true }) });
-    state = tabsReducer(state, { type: 'add', tab: makeTab('b', { dormant: true }) });
+  it('only working -> idle counts as just finished', () => {
+    let state = stateWith('a');
+    state = tabsReducer(state, { type: 'status', tabId: 'a', status: 'idle' });
+    expect(state.tabs[0].justFinished).toBe(false);
+  });
+
+  it('an activity detail is dropped as soon as the session stops working', () => {
+    let state = stateWith('a');
+    state = tabsReducer(state, { type: 'status', tabId: 'a', status: 'working', detail: 'editing x.ts' });
+    expect(state.tabs[0].statusDetail).toBe('editing x.ts');
+    state = tabsReducer(state, { type: 'status', tabId: 'a', status: 'idle' });
+    expect(state.tabs[0].statusDetail).toBeUndefined();
+  });
+
+  it('an interrupt only moves a working claude session', () => {
+    let state = tabsReducer(initialTabsState, { type: 'add', tab: makeTab('c', { kind: 'claude' }) });
+    state = tabsReducer(state, { type: 'status', tabId: 'c', status: 'working' });
+    state = tabsReducer(state, { type: 'interrupt', tabId: 'c' });
+    expect(state.tabs[0].status).toBe('requires_response');
+
+    // A shell session has no Claude status to reinterpret.
+    let shell = stateWith('s');
+    shell = tabsReducer(shell, { type: 'status', tabId: 's', status: 'working' });
+    shell = tabsReducer(shell, { type: 'interrupt', tabId: 's' });
+    expect(shell.tabs[0].status).toBe('working');
+  });
+
+  it('setProject files a session without touching its working directory', () => {
+    // The whole point of the two fields: moving a scratch session into a
+    // project must never move the directory a live Claude process is in.
+    let state = tabsReducer(initialTabsState, {
+      type: 'add',
+      tab: makeTab('a', { kind: 'claude', cwd: '/home/u/.tmt/scratch/abc' }),
+    });
+    state = tabsReducer(state, { type: 'setProject', tabId: 'a', projectDir: '/proj' });
+    expect(state.tabs[0].projectDir).toBe('/proj');
+    expect(state.tabs[0].cwd).toBe('/home/u/.tmt/scratch/abc');
+
+    state = tabsReducer(state, { type: 'setProject', tabId: 'a', projectDir: null });
+    expect(state.tabs[0].projectDir).toBeNull();
+    expect(state.tabs[0].cwd).toBe('/home/u/.tmt/scratch/abc');
+  });
+
+  it('archiving sleeps the session and takes its tabs off the grid', () => {
+    const state = stateWith('a', 'b');
+    const after = tabsReducer(state, { type: 'archive', tabId: 'b', archived: true });
+    expect(after.tabs[1].archived).toBe(true);
+    expect(after.tabs[1].dormant).toBe(true);
+    expect(tabKeys(after.layout)).toEqual(['session:a:claude']);
+    // The session itself is still there — archive is not close.
+    expect(after.tabs).toHaveLength(2);
+  });
+
+  it('unarchiving leaves the selection alone', () => {
+    let state = tabsReducer(stateWith('a', 'b'), { type: 'archive', tabId: 'b', archived: true });
+    state = tabsReducer(state, { type: 'select', tabId: 'a' });
+    state = tabsReducer(state, { type: 'archive', tabId: 'b', archived: false });
+    expect(state.tabs[1].archived).toBe(false);
+    expect(activeTabId(state)).toBe('a');
+  });
+
+  it('sleep and wake flip dormancy without losing the session', () => {
+    let state = stateWith('a');
+    state = tabsReducer(state, { type: 'sleep', tabId: 'a' });
+    expect(state.tabs[0]).toMatchObject({ dormant: true, exited: false });
     state = tabsReducer(state, { type: 'wake', tabId: 'a' });
     expect(state.tabs[0].dormant).toBe(false);
-    expect(state.tabs[1].dormant).toBe(true);
-  });
-
-  it('sleep marks the tab dormant and clears any exited flag', () => {
-    let state = initialTabsState;
-    state = tabsReducer(state, { type: 'add', tab: makeTab('a', { kind: 'claude', status: 'idle', exited: true }) });
-    state = tabsReducer(state, { type: 'sleep', tabId: 'a' });
-    expect(state.tabs[0].dormant).toBe(true);
-    expect(state.tabs[0].exited).toBe(false);
-  });
-
-  it('dirty updates only the named tab', () => {
-    let state = stateWith('a', 'b');
-    state = tabsReducer(state, { type: 'dirty', tabId: 'a', dirty: true });
-    expect(state.tabs[0].dirty).toBe(true);
-    expect(state.tabs[1].dirty).toBeUndefined();
-
-    state = tabsReducer(state, { type: 'dirty', tabId: 'a', dirty: false });
-    expect(state.tabs[0].dirty).toBe(false);
-  });
-
-  it('pin updates only the named tab, leaving others untouched', () => {
-    let state = stateWith('a', 'b');
-    state = tabsReducer(state, { type: 'pin', tabId: 'a', pinned: true });
-    expect(state.tabs[0].pinned).toBe(true);
-    expect(state.tabs[1].pinned).toBeUndefined();
-
-    state = tabsReducer(state, { type: 'pin', tabId: 'a', pinned: false });
-    expect(state.tabs[0].pinned).toBe(false);
-  });
-});
-
-describe('tabBarTabs', () => {
-  const claudeTab = makeTab('claude-1', { kind: 'claude' });
-  const shellTab = makeTab('shell-1', { kind: 'shell' });
-  const fileA = makeTab('file-a', { kind: 'file', path: '/proj/a.md' });
-
-  it('shows nothing until a tab has been opened', () => {
-    expect(tabBarTabs([claudeTab, shellTab], [])).toEqual([]);
-  });
-
-  it('keeps the order tabs were opened in, not the sidebar order', () => {
-    expect(tabBarTabs([claudeTab, shellTab, fileA], ['file-a', 'claude-1'])).toEqual([fileA, claudeTab]);
-  });
-
-  it('drops an id whose tab is gone', () => {
-    expect(tabBarTabs([claudeTab], ['claude-1', 'closed-one'])).toEqual([claudeTab]);
-  });
-});
-
-describe('tabsReducer pane grid', () => {
-  it('add drops the new tab into the focused pane', () => {
-    const state = stateWith('a', 'b');
-    expect(focusedPane(state.layout).tabIds).toEqual(['a', 'b']);
-    expect(focusedPane(state.layout).activeTabId).toBe('b');
-  });
-
-  it('splitTab puts the tab alone in a new pane and focuses it', () => {
-    let state = stateWith('a', 'b');
-    const pane = state.layout.focusedPaneId;
-    state = tabsReducer(state, { type: 'splitTab', tabId: 'b', paneId: pane, edge: 'right' });
-    expect(panesOf(state.layout.grid)).toHaveLength(2);
-    expect(focusedPane(state.layout).tabIds).toEqual(['b']);
-    // Both panes are on screen now, not just the focused one.
-    expect(visibleTabIds(state.layout)).toEqual(new Set(['a', 'b']));
-  });
-
-  it('select focuses the pane a tab already lives in rather than moving it', () => {
-    let state = stateWith('a', 'b');
-    const left = state.layout.focusedPaneId;
-    state = tabsReducer(state, { type: 'splitTab', tabId: 'b', paneId: left, edge: 'right' });
-    const right = state.layout.focusedPaneId;
-
-    state = tabsReducer(state, { type: 'select', tabId: 'a' });
-    expect(state.layout.focusedPaneId).toBe(left);
-    expect(paneOfTab(state.layout, 'a')?.id).toBe(left);
-
-    state = tabsReducer(state, { type: 'select', tabId: 'b' });
-    expect(state.layout.focusedPaneId).toBe(right);
-  });
-
-  it('closing the last tab in a pane collapses it', () => {
-    let state = stateWith('a', 'b');
-    state = tabsReducer(state, { type: 'splitTab', tabId: 'b', paneId: state.layout.focusedPaneId, edge: 'right' });
-    expect(panesOf(state.layout.grid)).toHaveLength(2);
-
-    state = tabsReducer(state, { type: 'close', tabId: 'b' });
-    expect(panesOf(state.layout.grid)).toHaveLength(1);
-    expect(state.tabs.map((t) => t.id)).toEqual(['a']);
-  });
-
-  it('removeFromPane takes a tab off the grid but keeps it open', () => {
-    let state = stateWith('a', 'b');
-    state = tabsReducer(state, { type: 'removeFromPane', tabId: 'b' });
-    expect(focusedPane(state.layout).tabIds).toEqual(['a']);
-    expect(state.tabs.map((t) => t.id)).toEqual(['a', 'b']); // still open
-  });
-
-  it('seam clamps so a pane never vanishes', () => {
-    let state = stateWith('a');
-    state = tabsReducer(state, { type: 'seam', axis: 'col', frac: 0.99 });
-    expect(state.layout.colFrac).toBe(0.85);
   });
 });
 
 describe('sessionModeOf', () => {
-  const readable = makeTab('a', { kind: 'claude', resumeSessionId: 'sess-1' });
+  const modes = new Map<string, SessionMode>([['a', 'split']]);
 
-  it('honours a stored mode for a readable tab', () => {
-    expect(sessionModeOf(readable, new Map<string, SessionMode>([['a', 'markdown']]), true)).toBe('markdown');
-    expect(sessionModeOf(readable, new Map<string, SessionMode>([['a', 'split']]), true)).toBe('split');
+  it('is terminal for a session with no transcript to read', () => {
+    const tab = makeTab('a', { kind: 'claude', resumeSessionId: null });
+    expect(sessionModeOf(tab, modes, true)).toBe('terminal');
   });
 
-  it('falls back to terminal when the tab cannot actually be read', () => {
-    // The blank-pane bug: App dropped a markdown-marked tab from the on-screen
-    // set while PaneView refused to render a transcript for it, so the pane
-    // showed neither. Both now ask this one question.
-    const stored = new Map<string, SessionMode>([['a', 'markdown']]);
-
-    // setting switched off
-    expect(sessionModeOf(readable, stored, false)).toBe('terminal');
-    // no transcript to read
-    expect(sessionModeOf(makeTab('a', { kind: 'claude', resumeSessionId: null }), stored, true)).toBe('terminal');
-    // not a Claude session at all
-    expect(sessionModeOf(makeTab('a', { kind: 'shell', resumeSessionId: 'sess-1' }), stored, true)).toBe('terminal');
-    // a file tab
-    expect(sessionModeOf(makeTab('a', { kind: 'file', path: '/p/a.md' }), stored, true)).toBe('terminal');
+  it('is terminal when the preference is off, whatever was stored', () => {
+    const tab = makeTab('a', { kind: 'claude', resumeSessionId: 'sess' });
+    expect(sessionModeOf(tab, modes, false)).toBe('terminal');
   });
 
-  it('is terminal for no tab and for an unmarked tab', () => {
-    expect(sessionModeOf(null, new Map(), true)).toBe('terminal');
-    expect(sessionModeOf(readable, new Map(), true)).toBe('terminal');
+  it('returns the stored mode for a readable session', () => {
+    const tab = makeTab('a', { kind: 'claude', resumeSessionId: 'sess' });
+    expect(sessionModeOf(tab, modes, true)).toBe('split');
+  });
+
+  it('defaults to terminal for a readable session with nothing stored', () => {
+    const tab = makeTab('b', { kind: 'claude', resumeSessionId: 'sess' });
+    expect(sessionModeOf(tab, modes, true)).toBe('terminal');
+  });
+
+  it('is terminal for nothing at all', () => {
+    expect(sessionModeOf(null, modes, true)).toBe('terminal');
   });
 });
 
-describe('learnSessionNames', () => {
-  const named = makeTab('t1', { kind: 'claude', name: 'Отладка settings', resumeSessionId: 'sess-1' });
-
-  it('records a claude tab\'s name against its session id', () => {
-    expect(learnSessionNames({}, [named])).toEqual({ 'sess-1': 'Отладка settings' });
+describe('the pane grid, through the reducer', () => {
+  it('brings a selected session to the front of the focused pane', () => {
+    const state = stateWith('a', 'b');
+    expect(activeTabId(tabsReducer(state, { type: 'select', tabId: 'a' }))).toBe('a');
   });
 
-  it('keeps names of sessions whose tabs are gone', () => {
-    // The whole reason this lives outside the tab list: History still has to
-    // name a session hours after its tab was closed.
-    expect(learnSessionNames({ 'sess-old': 'A closed session' }, [named])).toEqual({
-      'sess-old': 'A closed session',
-      'sess-1': 'Отладка settings',
+  it('splits a session into its own pane, and both stay on screen', () => {
+    let state = stateWith('a', 'b');
+    state = tabsReducer(state, { type: 'select', tabId: 'a' });
+    const paneId = state.layout.focusedPaneId;
+    state = tabsReducer(state, { type: 'splitTo', content: sessionContent('b'), paneId, edge: 'right' });
+
+    expect(panesOf(state.layout.grid)).toHaveLength(2);
+    expect([...visibleSessionIds(state.layout)].sort()).toEqual(['a', 'b']);
+    // Focus follows the tab you just placed.
+    expect(activeTabId(state)).toBe('b');
+  });
+
+  it('never shows one session in two panes at once', () => {
+    // A terminal's DOM node is singular: showing it twice would blank one.
+    let state = stateWith('a', 'b');
+    state = tabsReducer(state, { type: 'select', tabId: 'a' });
+    const first = state.layout.focusedPaneId;
+    state = tabsReducer(state, { type: 'splitTo', content: sessionContent('b'), paneId: first, edge: 'right' });
+    const second = state.layout.focusedPaneId;
+    state = tabsReducer(state, { type: 'showIn', content: sessionContent('a'), paneId: second });
+
+    expect([...visibleSessionIds(state.layout)]).toEqual(['a']);
+    // The pane 'a' left behind had nothing else to show, so it collapsed.
+    expect(panesOf(state.layout.grid)).toHaveLength(1);
+  });
+
+  it('closing a pane leaves its session open', () => {
+    let state = stateWith('a', 'b');
+    state = tabsReducer(state, { type: 'select', tabId: 'a' });
+    const first = state.layout.focusedPaneId;
+    state = tabsReducer(state, { type: 'splitTo', content: sessionContent('b'), paneId: first, edge: 'right' });
+    state = tabsReducer(state, { type: 'closePane', paneId: state.layout.focusedPaneId });
+
+    expect(panesOf(state.layout.grid)).toHaveLength(1);
+    expect(state.tabs.map((t) => t.id)).toEqual(['a', 'b']);
+  });
+
+  it('holds four sessions at once and no more', () => {
+    let state = stateWith('a', 'b', 'c', 'd', 'e');
+    state = tabsReducer(state, { type: 'select', tabId: 'a' });
+    const p1 = state.layout.focusedPaneId;
+    state = tabsReducer(state, { type: 'splitTo', content: sessionContent('b'), paneId: p1, edge: 'right' });
+    const p2 = state.layout.focusedPaneId;
+    state = tabsReducer(state, { type: 'splitTo', content: sessionContent('c'), paneId: p1, edge: 'bottom' });
+    state = tabsReducer(state, { type: 'splitTo', content: sessionContent('d'), paneId: p2, edge: 'bottom' });
+    expect(panesOf(state.layout.grid)).toHaveLength(4);
+    expect([...visibleSessionIds(state.layout)].sort()).toEqual(['a', 'b', 'c', 'd']);
+
+    // A fifth has nowhere to go, so it takes over the pane it was dropped on
+    // rather than failing. Degrading beats an error the UI has to explain.
+    state = tabsReducer(state, { type: 'splitTo', content: sessionContent('e'), paneId: p1, edge: 'right' });
+    expect(panesOf(state.layout.grid)).toHaveLength(4);
+    expect(visibleSessionIds(state.layout).has('e')).toBe(true);
+    expect(visibleSessionIds(state.layout).has('a')).toBe(false);
+  });
+
+  it('a seam is clamped so a pane can never be dragged to nothing', () => {
+    const state = tabsReducer(stateWith('a'), { type: 'seam', axis: 'col', frac: 0.99 });
+    expect(state.layout.colFrac).toBeLessThanOrEqual(0.85);
+  });
+});
+
+describe('a session in two panes at once', () => {
+  it('puts Claude and its own shell side by side', () => {
+    // The thing the grid is actually for. These are different ptys — `id` and
+    // `id::shell` — so they are different DOM and may both be on screen.
+    let state = stateWith('a');
+    state = tabsReducer(state, { type: 'select', tabId: 'a' });
+    const paneId = state.layout.focusedPaneId;
+    state = tabsReducer(state, { type: 'splitTo', content: sessionContent('a', 'shell'), paneId, edge: 'right' });
+
+    expect(panesOf(state.layout.grid)).toHaveLength(2);
+    expect(tabKeys(state.layout).sort()).toEqual(['session:a:claude', 'session:a:shell']);
+  });
+
+  it('a third pane can hold the same session’s files', () => {
+    let state = stateWith('a');
+    state = tabsReducer(state, { type: 'select', tabId: 'a' });
+    const p1 = state.layout.focusedPaneId;
+    state = tabsReducer(state, { type: 'splitTo', content: sessionContent('a', 'shell'), paneId: p1, edge: 'right' });
+    state = tabsReducer(state, { type: 'splitTo', content: sessionContent('a', 'files'), paneId: p1, edge: 'bottom' });
+
+    expect(panesOf(state.layout.grid)).toHaveLength(3);
+    expect(tabKeys(state.layout).sort())
+      .toEqual(['session:a:claude', 'session:a:files', 'session:a:shell']);
+    // Still one session, so still one row in the sidebar.
+    expect([...visibleSessionIds(state.layout)]).toEqual(['a']);
+  });
+});
+
+describe('the workspace as a canvas', () => {
+  const file = { kind: 'file' as const, dir: '/proj', path: '/proj/src/App.tsx' };
+
+  it('holds a file that belongs to no session', () => {
+    // The thing "drag it out of the explorer onto the workspace" needs: a file
+    // is content in its own right, not a property of whatever it sits beside.
+    let state = stateWith('a');
+    state = tabsReducer(state, { type: 'select', tabId: 'a' });
+    state = tabsReducer(state, { type: 'addToWorkspace', content: file });
+
+    // Added as a tab of the pane you were in — not a split, which is what
+    // dragging is for.
+    expect(panesOf(state.layout.grid)).toHaveLength(1);
+    expect(tabKeys(state.layout)).toEqual(['session:a:claude', 'file:/proj/src/App.tsx']);
+    // A file is not a session, so nothing about the session list changes. It
+    // is the active tab now, so no session is painted.
+    expect([...visibleSessionIds(state.layout)]).toEqual([]);
+  });
+
+  it('places things without being asked where', () => {
+    // "Add to workspace" is one click and costs no geometry: it becomes a tab
+    // of the pane you're in. Splitting is what dragging is for.
+    let state = stateWith('a', 'b');
+    state = tabsReducer(state, { type: 'select', tabId: 'a' });
+    state = tabsReducer(state, { type: 'addToWorkspace', content: file });
+
+    expect(panesOf(state.layout.grid)).toHaveLength(1);
+    expect(tabKeys(state.layout)).toEqual([
+      'session:a:claude', 'session:b:claude', 'file:/proj/src/App.tsx',
+    ]);
+  });
+
+  it('brings back what is already open instead of duplicating it', () => {
+    let state = stateWith('a');
+    state = tabsReducer(state, { type: 'select', tabId: 'a' });
+    state = tabsReducer(state, { type: 'addToWorkspace', content: file });
+    state = tabsReducer(state, { type: 'select', tabId: 'a' });
+    state = tabsReducer(state, { type: 'addToWorkspace', content: file });
+
+    expect(tabKeys(state.layout)).toEqual(['session:a:claude', 'file:/proj/src/App.tsx']);
+    expect(contentKey(activeContent(findPane(state.layout, state.layout.focusedPaneId))))
+      .toBe('file:/proj/src/App.tsx');
+  });
+
+  it('a file outlives the session it was opened next to', () => {
+    let state = stateWith('a');
+    state = tabsReducer(state, { type: 'select', tabId: 'a' });
+    state = tabsReducer(state, { type: 'addToWorkspace', content: file });
+    state = tabsReducer(state, { type: 'close', tabId: 'a' });
+
+    expect(panesOf(state.layout.grid)).toHaveLength(1);
+    expect(tabKeys(state.layout)).toEqual(['file:/proj/src/App.tsx']);
+  });
+});
+
+describe('tabs in a strip', () => {
+  it('a session opened from the sidebar becomes a tab of the focused pane', () => {
+    let state = stateWith('a');
+    state = tabsReducer(state, { type: 'select', tabId: 'a' });
+    const paneId = state.layout.focusedPaneId;
+    state = tabsReducer(state, { type: 'showIn', content: sessionContent('a', 'shell'), paneId });
+
+    expect(panesOf(state.layout.grid)).toHaveLength(1);
+    expect(tabKeys(state.layout)).toEqual(['session:a:claude', 'session:a:shell']);
+  });
+
+  it('a tab dropped before another lands in that position', () => {
+    let state = stateWith('a', 'b', 'c');
+    const paneId = state.layout.focusedPaneId;
+    state = tabsReducer(state, {
+      type: 'showIn', content: sessionContent('c'), paneId, beforeKey: 'session:a:claude',
     });
+    expect(tabKeys(state.layout))
+      .toEqual(['session:c:claude', 'session:a:claude', 'session:b:claude']);
   });
 
-  it('ignores the unnamed placeholder, shell tabs, and tabs with no session yet', () => {
-    const fresh = makeTab('t2', { kind: 'claude', name: 'Claude', resumeSessionId: 'sess-2' });
-    const shell = makeTab('t3', { name: 'PowerShell', resumeSessionId: 'sess-3' });
-    const pending = makeTab('t4', { kind: 'claude', name: 'Real name', resumeSessionId: null });
-    expect(learnSessionNames({}, [fresh, shell, pending])).toEqual({});
+  it('closing a tab leaves the session open', () => {
+    let state = stateWith('a', 'b');
+    state = tabsReducer(state, { type: 'closeTab', key: 'session:a:claude' });
+    expect(tabKeys(state.layout)).toEqual(['session:b:claude']);
+    // The session is still in the list, still running.
+    expect(state.tabs.map((t) => t.id)).toEqual(['a', 'b']);
   });
 
-  it('returns the same object when nothing is new, so state does not churn', () => {
-    const prev = { 'sess-1': 'Отладка settings' };
-    expect(learnSessionNames(prev, [named])).toBe(prev);
-  });
+  it('dragging a tab out of a one-tab pane collapses that pane', () => {
+    let state = stateWith('a', 'b');
+    state = tabsReducer(state, { type: 'select', tabId: 'a' });
+    const left = state.layout.focusedPaneId;
+    state = tabsReducer(state, { type: 'splitTo', content: sessionContent('b'), paneId: left, edge: 'right' });
+    expect(panesOf(state.layout.grid)).toHaveLength(2);
 
-  it('a rename overwrites the old name', () => {
-    const renamed = makeTab('t1', { kind: 'claude', name: 'New name', resumeSessionId: 'sess-1' });
-    expect(learnSessionNames({ 'sess-1': 'Old name' }, [renamed])).toEqual({ 'sess-1': 'New name' });
+    // Drag it back into the left pane's strip: the right pane has nothing
+    // left to show, so it goes.
+    state = tabsReducer(state, { type: 'showIn', content: sessionContent('b'), paneId: left });
+    expect(panesOf(state.layout.grid)).toHaveLength(1);
+    expect(tabKeys(state.layout)).toEqual(['session:a:claude', 'session:b:claude']);
   });
 });

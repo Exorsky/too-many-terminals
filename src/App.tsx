@@ -1,23 +1,38 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { CheckSquare, PanelLeft, Search, SquareTerminal } from 'lucide-react';
 import CommandPalette from '@/components/CommandPalette';
 import FileExplorerPanel, { FilesEdge } from '@/components/FileExplorerPanel';
 import HomeScreen from '@/components/HomeScreen';
-import PaneView from '@/components/PaneView';
-import Seam from '@/components/Seam';
-import { type MarkdownView, type SessionMode, type SplitDirection } from '@/components/SessionControls';
+import PaneFile from '@/components/PaneFile';
+import PaneSessionMenu from '@/components/PaneSessionMenu';
+import PaneTabs from '@/components/PaneTabs';
+import PaneDropZones from '@/components/PaneDropZones';
 import SessionHistoryPanel from '@/components/SessionHistoryPanel';
+import SessionInspector from '@/components/SessionInspector';
 import SessionReader from '@/components/SessionReader';
+import Seam from '@/components/Seam';
+import SessionWorkspace from '@/components/SessionWorkspace';
+import SessionsSidebar, { type NewSessionKind, type RecentEntry } from '@/components/SessionsSidebar';
 import SettingsView from '@/components/SettingsView';
-import Sidebar from '@/components/Sidebar';
+import TaskInspector from '@/components/TaskInspector';
+import TodoView from '@/components/TodoView';
+import SessionControls, { type MarkdownView, type SessionMode, type SplitDirection } from '@/components/SessionControls';
 import { disposeTerminal, writeToTerminal } from '@/components/terminalCache';
 import * as ipc from '@/lib/ipc';
-import { isPaneDrag, TAB_MIME, type FileDragPayload } from '@/lib/dnd';
-import { findPane, paneRect, panesOf, seamBands, visibleTabIds, type Edge, type Pane } from '@/lib/panes';
+import { isPaneDrag, FILE_MIME, TAB_MIME, VIEW_MIME, type FileDragPayload, type ViewDragPayload } from '@/lib/dnd';
+import {
+  activeContent, contentKey, findPane, paneRect, panesOf, seamBands, sessionContent,
+  visibleSessionIds, type Edge, type Pane, type PaneContent,
+} from '@/lib/panes';
+import {
+  learnSessionNames, restoreTab, shellPtyId, toSavedTab, UNNAMED_SESSION,
+} from '@/lib/sessions';
 import { useSettings } from '@/lib/settings-store';
-import { activeTabId, initialTabsState, learnSessionNames, sessionModeOf, tabsReducer, UNNAMED_TAB } from '@/lib/tabs';
+import { addTask, linkSession, loadTasks, updateTask, useTasks } from '@/lib/tasks';
+import { activeTabId, initialTabsState, sessionModeOf, tabsReducer } from '@/lib/tabs';
 import { useDragValue } from '@/lib/use-drag-value';
-import { cn } from '@/lib/utils';
-import type { SavedTab, SessionHistoryEntry, ShellOption, Tab, TabKind, TabStatus } from '@/types';
+import { cn, ICON_BUTTON } from '@/lib/utils';
+import type { AppView, SessionHistoryEntry, SessionTool, ShellOption, Tab, TabStatus, Task } from '@/types';
 
 const INITIAL_COLS = 120;
 const INITIAL_ROWS = 40;
@@ -25,148 +40,222 @@ const SAVE_DEBOUNCE_MS = 300;
 // How often we scan for idle background sessions to auto-sleep. The threshold
 // itself is user-configurable (settings.autoSleepMinutes; 0 disables).
 const SLEEP_CHECK_MS = 60 * 1000;
+/** macOS gets the overlay title bar, so the nav row has to clear the native
+ *  traffic lights. Read off the user agent rather than the OS plugin: it only
+ *  decides a padding, and this way it costs no IPC round trip at first paint. */
+const IS_MAC = typeof navigator !== 'undefined' && /Mac/i.test(navigator.userAgent);
 
-/** Would splitting this pane off `tabId` leave it with nothing? Then there is
- *  no split to make — the pane would empty and collapse back immediately. */
-function splitWouldEmpty(pane: Pane, tabId: string | null | undefined): boolean {
-  return !!tabId && pane.tabIds.length === 1 && pane.tabIds[0] === tabId;
+const MIN_SIDEBAR = 240;
+const MAX_SIDEBAR = 420;
+
+/** Would splitting this pane off what's being dragged leave it with nothing?
+ *  Then there is no split to make — the pane would empty and collapse straight
+ *  back. Only true when that tab is the pane's *only* tab. */
+function splitWouldEmpty(pane: Pane, content: PaneContent | null | undefined): boolean {
+  return !!content && pane.contents.length === 1
+    && contentKey(pane.contents[0]) === contentKey(content);
+}
+
+/** What a drag is carrying, as pane content. Three sources, one shape: a
+ *  sidebar row sends a bare session id (meaning its Claude view), a tool tab
+ *  sends the session/tool pair, and the file explorer sends a path. */
+function readDragContent(dt: DataTransfer): PaneContent | null {
+  const view = dt.getData(VIEW_MIME);
+  if (view) {
+    try {
+      const { sessionId, tool } = JSON.parse(view) as ViewDragPayload;
+      return { kind: 'session', sessionId, tool };
+    } catch {
+      return null; // a malformed payload can only come from another app
+    }
+  }
+  const file = dt.getData(FILE_MIME);
+  if (file) {
+    try {
+      const { dir, path } = JSON.parse(file) as FileDragPayload;
+      return { kind: 'file', dir, path };
+    } catch {
+      return null;
+    }
+  }
+  const sessionId = dt.getData(TAB_MIME);
+  return sessionId ? sessionContent(sessionId) : null;
+}
+
+/** Wraps text in the terminal's bracketed-paste markers, so a multi-line block
+ *  lands in Claude Code's prompt as one paste instead of one submitted line per
+ *  newline. This is what makes "start a session from a task" hand over the task
+ *  *without* pressing Enter for you — see docs/features/todo.md. */
+function bracketedPaste(text: string): string {
+  return `\x1b[200~${text}\x1b[201~`;
+}
+
+/** The task, as the session receives it. Deliberately just the task: a title
+ *  line and whatever you wrote, with no invented instructions around it. */
+function taskPrompt(task: Task): string {
+  return task.description.trim()
+    ? `Task: ${task.title}\n\n${task.description.trim()}`
+    : `Task: ${task.title}`;
+}
+
+/** Past Claude sessions for a set of directories, and when each was last
+ *  written. One read answers both of the list's date questions: which sessions
+ *  to offer under Recent, and how old each open session is. */
+function useSessionHistory(dirs: string[], refreshKey: number) {
+  const [entries, setEntries] = useState<{ dir: string; entry: SessionHistoryEntry }[]>([]);
+  const key = dirs.join(' ');
+
+  useEffect(() => {
+    let alive = true;
+    Promise.all(dirs.map((dir) =>
+      ipc.listSessions(dir).then((list) => list.map((entry) => ({ dir, entry }))).catch(() => []),
+    ))
+      .then((lists) => { if (alive) setEntries(lists.flat()); })
+      .catch(() => {});
+    return () => { alive = false; };
+    // `key` stands in for `dirs`, which is a fresh array on some renders.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, refreshKey]);
+
+  const lastUsed = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const { entry } of entries) {
+      const ms = new Date(entry.lastUsedIso).getTime();
+      if (!Number.isNaN(ms)) map.set(entry.sessionId, ms);
+    }
+    return map;
+  }, [entries]);
+
+  return { entries, lastUsed };
 }
 
 export default function App() {
   const [state, dispatch] = useReducer(tabsReducer, initialTabsState);
   const [shellOptions, setShellOptions] = useState<ShellOption[]>([]);
   const [projects, setProjects] = useState<string[]>([]);
-  // Session id → name, accumulated from every tab that ever carried a real
-  // name and persisted with the workspace. Outlives the tab, which is the whole
-  // point: a closed session keeps its name in History, and resuming it gets
-  // that name back instead of a fresh one cut from the transcript.
+  // Session id → name, accumulated from every session that ever carried a real
+  // name and persisted with the workspace. Outlives the session, which is the
+  // point: a closed one keeps its name in History, and resuming it gets that
+  // name back instead of a fresh one cut from the transcript.
   const [sessionNames, setSessionNames] = useState<Record<string, string>>({});
   const [homeDir, setHomeDir] = useState<string | null>(null);
-  const [showHistory, setShowHistory] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
-  // Three states, not two. `peek` lays the panel over the terminal instead of
-  // beside it, which is the whole point: docking it is a layout change, so
-  // every open and every close runs main through `ResizeObserver` →
-  // `fitAddon.fit()` → `pty_resize` and the terminal rewraps every line it is
-  // showing. An overlay costs none of that.
-  // See docs/features/file-explorer.md.
-  const [filesMode, setFilesMode] = useState<'hidden' | 'peek' | 'pinned'>('pinned');
-  const [filesPanelWidth, setFilesPanelWidth] = useState(260);
-  const filesPinned = filesMode === 'pinned';
-  const filesPanelRef = useRef<HTMLDivElement>(null);
-  // Home is the resting screen: implicit when no tab is open, reachable any time
-  // from the sidebar wordmark, and where every launch starts — a restored
-  // workspace opens on the city, not on whichever tab happened to be last.
-  const [showHome, setShowHome] = useState(true);
-  const [readerTarget, setReaderTarget] = useState<{ projectDir: string; entry: SessionHistoryEntry } | null>(null);
-  const [collapsed, setCollapsed] = useState(false);
-  const [paletteOpen, setPaletteOpen] = useState(false);
   const [workspaceLoaded, setWorkspaceLoaded] = useState(false);
   const settings = useSettings();
-  // Per-tab in-place view mode: absent = plain terminal; 'markdown' = full
-  // markdown reader; 'split' = terminal + markdown side by side. Remembered per
-  // tab (terminal is the default, so it isn't stored).
+  const tasks = useTasks();
+
+  // --- navigation ---------------------------------------------------------
+  const [view, setView] = useState<AppView>('sessions');
+  const [showSettings, setShowSettings] = useState(false);
+  const [showArchive, setShowArchive] = useState(false);
+  const [readerTarget, setReaderTarget] = useState<{ projectDir: string; entry: SessionHistoryEntry } | null>(null);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarWidth, setSidebarWidth] = useState(248);
+  const [inspectorOpen, setInspectorOpen] = useState(false);
+  // Three states, not two. `peek` lays the explorer over the grid instead of
+  // beside it, which is the whole point: docking it is a layout change, so
+  // every open and close resizes every terminal on screen. An overlay costs
+  // none of that — and peeking is what you do to grab one file and go.
+  const [filesMode, setFilesMode] = useState<'hidden' | 'peek' | 'pinned'>('hidden');
+  const [filesWidth, setFilesWidth] = useState(260);
+  const filesPanelRef = useRef<HTMLDivElement>(null);
+  const filesPinned = filesMode === 'pinned';
+  const [focusMode, setFocusMode] = useState(false);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [historyKey, setHistoryKey] = useState(0);
+
+  // --- per-session view state ---------------------------------------------
+  // Which tool is showing is a property of the *pane*, not of the session —
+  // that is what lets one pane show Claude while another shows the same
+  // session's shell. It lives in `state.layout`.
   const [mdTabs, setMdTabs] = useState<Map<string, SessionMode>>(new Map());
   const [mdView, setMdView] = useState<MarkdownView>('rendered');
-  // Which edge a tab's transcript opens against. A window-level preference —
-  // "how I like to look at things" — not session state, so it's shared by every
-  // pane rather than stored per tab.
-  // ponytail: one shared transcript direction; per-pane would need transcripts
-  // to become their own tab kind, which is a separate refactor.
   const [splitDirection, setSplitDirection] = useState<SplitDirection>('right');
-  const { layout } = state;
-  const gridRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     ipc.listShells().then(setShellOptions).catch(() => {});
     ipc.homeDir().then(setHomeDir).catch(() => {});
+    void loadTasks();
   }, []);
 
-  const handleAddProject = useCallback(() => {
-    ipc.pickFolder(projects[projects.length - 1] ?? homeDir).then((picked) => {
-      if (picked) setProjects((prev) => (prev.includes(picked) ? prev : [...prev, picked]));
-    }).catch(() => {});
-  }, [projects, homeDir]);
+  const currentTabId = activeTabId(state);
+  const activeTab = state.tabs.find((t) => t.id === currentTabId) ?? null;
+  const overlaysUp = showSettings || showArchive || readerTarget !== null;
+  const onSessions = view === 'sessions' && !overlaysUp;
 
-  const handleRemoveProject = useCallback((dir: string) => {
-    const tabsInDir = state.tabs.filter((t) => t.cwd === dir);
-    const dirtyCount = tabsInDir.filter((t) => t.dirty).length;
-    if (dirtyCount > 0 && !window.confirm(
-      `${dirtyCount} file${dirtyCount === 1 ? '' : 's'} in this folder ${dirtyCount === 1 ? 'has' : 'have'} unsaved changes. Remove folder without saving?`,
-    )) return;
-    for (const tab of tabsInDir) {
-      ipc.killPty(tab.id);
-      disposeTerminal(tab.id);
-      dispatch({ type: 'close', tabId: tab.id });
-    }
-    setProjects((prev) => prev.filter((p) => p !== dir));
-    ipc.uninstallHooks(dir).catch(() => {});
-  }, [state.tabs]);
+  // Every directory that might hold a transcript we care about: the open
+  // projects, plus each session's own cwd (which is how a scratch session's
+  // history is found — its directory is its own).
+  const historyDirs = useMemo(() => {
+    const dirs = new Set(projects);
+    for (const tab of state.tabs) if (tab.kind === 'claude') dirs.add(tab.cwd);
+    return [...dirs];
+  }, [projects, state.tabs]);
+  const { entries, lastUsed } = useSessionHistory(historyDirs, historyKey);
 
-  const handleReorderProject = useCallback((sourceDir: string, targetDir: string, position: 'before' | 'after') => {
-    setProjects((prev) => {
-      if (sourceDir === targetDir) return prev;
-      const from = prev.indexOf(sourceDir);
-      if (from === -1 || !prev.includes(targetDir)) return prev;
-      const next = [...prev];
-      next.splice(from, 1);
-      const at = next.indexOf(targetDir);
-      next.splice(position === 'after' ? at + 1 : at, 0, sourceDir);
-      return next;
-    });
-  }, []);
+  /** Past sessions that aren't open right now, newest first — the Recent group.
+   *  A session you already have open belongs in its own group, not here. */
+  const recent = useMemo<RecentEntry[]>(() => {
+    const open = new Set(state.tabs.map((t) => t.resumeSessionId).filter(Boolean));
+    return entries
+      .filter(({ entry }) => !open.has(entry.sessionId))
+      .map(({ dir, entry }) => ({
+        dir,
+        entry,
+        name: sessionNames[entry.sessionId] || entry.preview.slice(0, 40) || UNNAMED_SESSION,
+        at: new Date(entry.lastUsedIso).getTime() || 0,
+      }))
+      .sort((a, b) => b.at - a.at);
+  }, [entries, state.tabs, sessionNames]);
 
-  // Tabs whose pty we intentionally killed to put them to sleep — their
-  // incoming pty-exit is expected and must not mark the tab as exited.
+  // --- pty lifecycle (unchanged from before the redesign) -----------------
+
   const sleepingRef = useRef<Set<string>>(new Set());
-  // Per-tab timestamp of when it first became eligible for auto-sleep (idle +
-  // backgrounded); cleared as soon as it stops being eligible.
   const idleSinceRef = useRef<Map<string, number>>(new Map());
+  const spawnedRef = useRef<Set<string>>(new Set());
+  /** Text queued for a session that isn't live yet — flushed by the status
+   *  listener once Claude Code's SessionStart hook says it's up. */
+  const pendingPromptRef = useRef<Map<string, string>>(new Map());
 
   useEffect(() => {
     const unlisten = ipc.onPtyExit((tabId) => {
-      // A kill we issued for sleep — swallow it; the tab lives on as dormant.
+      // A kill we issued for sleep — swallow it; the session lives on dormant.
       if (sleepingRef.current.delete(tabId)) return;
+      // A session's shell tool exiting is not the session exiting.
+      if (tabId.endsWith('::shell')) { spawnedRef.current.delete(tabId); return; }
       dispatch({ type: 'exited', tabId });
     });
     return () => { unlisten.then((fn) => fn()); };
-  }, []);
+  }, [dispatch]);
 
   useEffect(() => {
-    const unlisten = ipc.onClaudeSessionResolved((tabId, sessionId) =>
-      dispatch({ type: 'sessionResolved', tabId, sessionId }));
+    const unlisten = ipc.onClaudeSessionResolved((tabId, sessionId) => {
+      dispatch({ type: 'sessionResolved', tabId, sessionId });
+      // A brand-new transcript means Recent and the age column are stale.
+      setHistoryKey((k) => k + 1);
+    });
     return () => { unlisten.then((fn) => fn()); };
-  }, []);
+  }, [dispatch]);
 
-  // Latest tabs + notification pref, read by the once-registered status
-  // listener below without re-subscribing on every change.
   const tabsRef = useRef(state.tabs);
   tabsRef.current = state.tabs;
   const notificationsRef = useRef(settings.notificationsEnabled);
   notificationsRef.current = settings.notificationsEnabled;
-  // Auto-sleep threshold (ms), read live by the interval below without tearing
-  // it down on every settings change. 0 → auto-sleep disabled.
   const autoSleepMsRef = useRef(0);
   autoSleepMsRef.current = settings.autoSleepMinutes * 60 * 1000;
-  // Last status we saw per tab, to detect the transition (not just the state).
   const prevStatusRef = useRef<Map<string, TabStatus>>(new Map());
-  // The tab the user is actually looking at right now (active, app focused, no
-  // overlay covering it) — the one case where a notification is redundant.
-  // Which tabs are on screen right now, as a set — read by the notification
-  // guard and the auto-sleep sweep, both of which run off a timer and so need
-  // the live value rather than a render-time closure.
+  /** The session on screen right now, as a set of one — read by the
+   *  notification guard and the auto-sleep sweep, both of which run off a
+   *  timer and so need the live value rather than a render-time closure. */
   const visibleTabIdsRef = useRef<Set<string>>(new Set());
 
-  // Ask for notification permission once, up front, if the pref is on.
   useEffect(() => {
     if (settings.notificationsEnabled) void ipc.ensureNotificationPermission();
   }, [settings.notificationsEnabled]);
 
   /** Notify on a real transition — Claude asking for input, or finishing a run
-   *  (working → idle) — unless you're already looking right at that tab (app
-   *  focused and it's the visible tab), where the status dot says it all. A
-   *  background tab still notifies even while you work in another tab. Skips the
-   *  first status of a tab so restoring a workspace doesn't fire a burst. */
+   *  — unless you're already looking right at that session. Skips the first
+   *  status of a session so restoring a workspace doesn't fire a burst. */
   const maybeNotify = useCallback((tabId: string, prev: TabStatus | undefined, status: TabStatus) => {
     if (!notificationsRef.current || prev === undefined) return;
     if (document.hasFocus() && visibleTabIdsRef.current.has(tabId)) return;
@@ -175,29 +264,29 @@ export default function App() {
     else if (status === 'idle' && prev === 'working') void ipc.notify(name, 'Finished');
   }, []);
 
-  // Claude Code's own hooks report live tab state (idle/working/awaiting
-  // input) and, once the first prompt is submitted, a generated title.
   useEffect(() => {
     const unlisten = ipc.onTabStatus((tabId, status, detail) => {
       const prev = prevStatusRef.current.get(tabId);
       prevStatusRef.current.set(tabId, status);
       dispatch({ type: 'status', tabId, status, detail });
       maybeNotify(tabId, prev, status);
+      // Claude is up and listening: hand over anything queued for it.
+      const pending = pendingPromptRef.current.get(tabId);
+      if (pending !== undefined) {
+        pendingPromptRef.current.delete(tabId);
+        ipc.writeToPty(tabId, bracketedPaste(pending));
+      }
     });
     return () => { unlisten.then((fn) => fn()); };
-  }, [maybeNotify]);
+  }, [maybeNotify, dispatch]);
 
   useEffect(() => {
     const unlisten = ipc.onTabNamed((tabId, name) => dispatch({ type: 'rename', tabId, name }));
     return () => { unlisten.then((fn) => fn()); };
-  }, []);
+  }, [dispatch]);
 
-  // Tabs whose pty has actually been spawned this session. Guards the lazy
-  // wake effect (and dormant restore) against spawning the same pty twice.
-  const spawnedRef = useRef<Set<string>>(new Set());
-
-  /** Spawns the pty for an existing tab (idempotent). Used both for freshly
-   *  created tabs and to lazily wake a dormant, restored tab on first view. */
+  /** Spawns the pty for an existing session (idempotent). Used both for freshly
+   *  created sessions and to lazily wake a dormant, restored one on first view. */
   const startPty = useCallback((tab: Tab) => {
     if (spawnedRef.current.has(tab.id)) return;
     spawnedRef.current.add(tab.id);
@@ -210,119 +299,167 @@ export default function App() {
       rows: INITIAL_ROWS,
       onData: (data) => writeToTerminal(tab.id, data),
     }).catch(() => dispatch({ type: 'exited', tabId: tab.id }));
-  }, []);
+  }, [dispatch]);
 
-  /** Puts an idle background tab to sleep: kills its pty (freeing the process)
-   *  but keeps the tab as dormant, so the lazy-wake effect respawns it via
-   *  `--resume` the next time it's shown. The kept xterm buffer keeps its last
-   *  output visible. */
+  /** Spawns a session's shell tool: a second pty in the same directory, with
+   *  no session record of its own. Idempotent via the same `spawnedRef`. */
+  const startShell = useCallback((tab: Tab) => {
+    const id = shellPtyId(tab.id);
+    if (spawnedRef.current.has(id)) return;
+    const shell = shellOptions[0];
+    if (!shell) return;
+    spawnedRef.current.add(id);
+    ipc.spawnPty({
+      tabId: id,
+      kind: shell.id,
+      cwd: tab.cwd,
+      cols: INITIAL_COLS,
+      rows: INITIAL_ROWS,
+      onData: (data) => writeToTerminal(id, data),
+    }).catch(() => { spawnedRef.current.delete(id); });
+  }, [shellOptions]);
+
   const sleepTab = useCallback((tabId: string) => {
     sleepingRef.current.add(tabId);
     spawnedRef.current.delete(tabId);
     idleSinceRef.current.delete(tabId);
     dispatch({ type: 'sleep', tabId });
     ipc.killPty(tabId);
-  }, []);
+  }, [dispatch]);
 
-  /** Spawns a tab at an explicit project folder — used for user-initiated new
-   *  sessions and for resuming a past session; the pty starts immediately. */
-  const spawnTabAt = useCallback(
-    (atCwd: string, kind: TabKind, shellId: string | null, name: string, resumeSessionId?: string | null) => {
+  /** Opens a session: adds it, selects it, leaves every overlay. `prompt`, if
+   *  given, is handed to Claude once its hooks report the session is up. */
+  const spawnSessionAt = useCallback(
+    (
+      atCwd: string,
+      kind: 'claude' | 'shell',
+      shellId: string | null,
+      name: string,
+      opts: { projectDir?: string | null; resumeSessionId?: string | null; prompt?: string } = {},
+    ): Tab => {
       const tab: Tab = {
         id: crypto.randomUUID(),
         kind,
         name,
         shellId,
         cwd: atCwd,
-        resumeSessionId: resumeSessionId ?? null,
+        projectDir: opts.projectDir ?? null,
+        resumeSessionId: opts.resumeSessionId ?? null,
         exited: false,
         status: 'new',
         createdAt: Date.now(),
       };
+      if (opts.prompt) pendingPromptRef.current.set(tab.id, opts.prompt);
       dispatch({ type: 'add', tab });
-      setShowHistory(false);
+      setView('sessions');
       setShowSettings(false);
-      setShowHome(false);
+      setShowArchive(false);
+      setReaderTarget(null);
       startPty(tab);
+      return tab;
     },
-    [startPty],
+    [startPty, dispatch],
   );
 
-  // Restore the previous workspace (projects + open tabs) once on startup.
-  // Restored tabs are added *dormant* — no pty is spawned until a tab is first
-  // shown as a live terminal (see the lazy-wake effect below), so reopening the
-  // app with N sessions doesn't launch N claude/shell processes at once.
+  /** Starts a session, optionally with its shell already beside it.
+   *
+   *  `dir` null means a scratch session: a working directory is made for this
+   *  session alone, and it lands in the Inbox because it isn't filed anywhere
+   *  — which is a state, not a placeholder. ⌘N is this with both defaults, so
+   *  the common case stays one keystroke with no modal and no folder picker.
+   *  See docs/features/scratch-sessions.md. */
+  const newSession = useCallback(async (dir: string | null, kind: NewSessionKind = 'claude') => {
+    const cwd = dir ?? await ipc.createScratchDir(crypto.randomUUID().slice(0, 8)).catch(() => null);
+    if (!cwd) return;
+
+    if (kind === 'shell') {
+      const shell = shellOptions[0];
+      if (!shell) return;
+      spawnSessionAt(cwd, 'shell', shell.id, shell.label, { projectDir: dir });
+      return;
+    }
+
+    const tab = spawnSessionAt(cwd, 'claude', null, UNNAMED_SESSION, { projectDir: dir });
+    // "Claude + Shell" is the layout decided up front: the second pane is put
+    // there now rather than being something you go and add afterwards.
+    if (kind === 'both') {
+      startShell(tab);
+      dispatch({ type: 'addToWorkspace', content: sessionContent(tab.id, 'shell') });
+    }
+  }, [spawnSessionAt, shellOptions, startShell, dispatch]);
+
+  // Restore the previous workspace once on startup. Restored sessions are
+  // added *dormant* — no pty until one is first shown.
   useEffect(() => {
     let cancelled = false;
     ipc.loadWorkspace().then((ws) => {
       if (cancelled) return;
-      setCollapsed(ws.collapsed);
+      setSidebarOpen(!ws.collapsed);
       setProjects(ws.projects);
       setSessionNames(ws.sessionNames ?? {});
       for (const saved of ws.tabs) {
-        dispatch({
-          type: 'add',
-          tab: {
-            id: crypto.randomUUID(),
-            kind: saved.kind,
-            name: saved.name,
-            shellId: saved.shellId,
-            cwd: saved.cwd,
-            resumeSessionId: saved.resumeSessionId,
-            exited: false,
-            status: 'new',
-            dormant: true,
-            pinned: saved.pinned,
-          },
-        });
+        dispatch({ type: 'add', tab: restoreTab(saved), select: false });
       }
     }).catch(() => {}).finally(() => {
       if (!cancelled) setWorkspaceLoaded(true);
     });
     return () => { cancelled = true; };
     // Runs once on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Learn every session's name as soon as a tab carries one, so it's already
-  // recorded by the time that tab is closed. Runs on tab changes rather than in
-  // the rename action because a name can also arrive with a restored tab.
   useEffect(() => {
     setSessionNames((prev) => learnSessionNames(prev, state.tabs));
   }, [state.tabs]);
 
-  // Persist the workspace (debounced) whenever it changes, once the initial
-  // load has finished — otherwise this would overwrite the saved state with
-  // the empty pre-load state.
+  // Persist the workspace (debounced) once the initial load has finished —
+  // otherwise this would overwrite the saved state with the empty pre-load one.
   useEffect(() => {
     if (!workspaceLoaded) return;
     const timer = setTimeout(() => {
-      const tabs: SavedTab[] = state.tabs
-        // File tabs aren't restored across restarts yet (no path in SavedTab).
-        .filter((t) => !t.exited && t.kind !== 'file')
-        .map((t) => ({ kind: t.kind, name: t.name, shellId: t.shellId, resumeSessionId: t.resumeSessionId, cwd: t.cwd, pinned: t.pinned }));
-      ipc.saveWorkspace({ projects, collapsed, tabs, sessionNames }).catch(() => {});
+      const tabs = state.tabs.filter((t) => !t.exited && t.kind !== 'file').map(toSavedTab);
+      ipc.saveWorkspace({ projects, collapsed: !sidebarOpen, tabs, sessionNames }).catch(() => {});
     }, SAVE_DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [workspaceLoaded, state.tabs, projects, collapsed, sessionNames]);
+  }, [workspaceLoaded, state.tabs, projects, sidebarOpen, sessionNames]);
 
-  const handleNewClaudeTab = useCallback(
-    (dir: string) => spawnTabAt(dir, 'claude', null, 'Claude'),
-    [spawnTabAt],
-  );
+  // --- projects -----------------------------------------------------------
 
-  const handleNewShellTab = useCallback(
-    (dir: string, shellId: string) => {
-      const label = shellOptions.find((s) => s.id === shellId)?.label ?? shellId;
-      spawnTabAt(dir, 'shell', shellId, label);
-    },
-    [spawnTabAt, shellOptions],
-  );
+  const handleAddProject = useCallback(() => {
+    ipc.pickFolder(projects[projects.length - 1] ?? homeDir).then((picked) => {
+      if (picked) setProjects((prev) => (prev.includes(picked) ? prev : [...prev, picked]));
+    }).catch(() => {});
+  }, [projects, homeDir]);
 
-  const handleCloseTab = useCallback((tabId: string) => {
-    const tab = state.tabs.find((t) => t.id === tabId);
-    if (tab?.dirty && !window.confirm(`“${tab.name}” has unsaved changes. Close without saving?`)) return;
+  /** Removing a project unfiles its sessions rather than killing them. The
+   *  sessions are still running and their transcripts still exist; closing the
+   *  folder is a statement about the *sidebar*, not about the work. They land
+   *  in the Inbox, where anything unfiled lives. */
+  const handleRemoveProject = useCallback((dir: string) => {
+    for (const tab of state.tabs) {
+      if (tab.projectDir === dir) dispatch({ type: 'setProject', tabId: tab.id, projectDir: null });
+    }
+    setProjects((prev) => prev.filter((p) => p !== dir));
+    ipc.uninstallHooks(dir).catch(() => {});
+  }, [state.tabs, dispatch]);
+
+  // --- session actions ----------------------------------------------------
+
+  const handleSelect = useCallback((tabId: string) => {
+    setView('sessions');
+    setShowSettings(false);
+    setShowArchive(false);
+    setReaderTarget(null);
+    dispatch({ type: 'select', tabId });
+  }, [dispatch]);
+
+  const handleClose = useCallback((tabId: string) => {
     ipc.killPty(tabId);
+    ipc.killPty(shellPtyId(tabId));
     disposeTerminal(tabId);
+    disposeTerminal(shellPtyId(tabId));
+    spawnedRef.current.delete(tabId);
+    spawnedRef.current.delete(shellPtyId(tabId));
     setMdTabs((prev) => {
       if (!prev.has(tabId)) return prev;
       const next = new Map(prev);
@@ -330,45 +467,192 @@ export default function App() {
       return next;
     });
     dispatch({ type: 'close', tabId });
+  }, [dispatch]);
+
+  /** Archiving frees the process and takes the session out of the list. It
+   *  keeps its transcript, its name and its place in the workspace file, so
+   *  unarchiving resumes exactly where it stopped. */
+  const handleArchive = useCallback((tabId: string, archived: boolean) => {
+    if (archived) {
+      sleepingRef.current.add(tabId);
+      spawnedRef.current.delete(tabId);
+      ipc.killPty(tabId);
+      ipc.killPty(shellPtyId(tabId));
+    }
+    dispatch({ type: 'archive', tabId, archived });
+  }, [dispatch]);
+
+  const handleOpenInVscode = useCallback((tabId: string) => {
+    const tab = state.tabs.find((t) => t.id === tabId);
+    if (!tab?.resumeSessionId) return;
+    sleepTab(tabId);
+    ipc.openInVscode(tab.cwd, tab.resumeSessionId);
+  }, [state.tabs, sleepTab]);
+
+  const handleResumeRecent = useCallback((r: RecentEntry) => {
+    setReaderTarget(null);
+    // A resumed session is filed where its directory says it belongs: under
+    // that project if the folder is open, else the Inbox.
+    spawnSessionAt(r.dir, 'claude', null, r.name, {
+      projectDir: projects.includes(r.dir) ? r.dir : null,
+      resumeSessionId: r.entry.sessionId,
+    });
+  }, [spawnSessionAt, projects]);
+
+  const handleResumeSession = useCallback((dir: string, entry: SessionHistoryEntry) => {
+    const name = sessionNames[entry.sessionId] || entry.preview.slice(0, 30) || UNNAMED_SESSION;
+    handleResumeRecent({ dir, entry, name, at: 0 });
+  }, [handleResumeRecent, sessionNames]);
+
+  const handleImportSession = useCallback(async (dir: string) => {
+    const sessionId = await ipc.importSession(dir).catch((e) => { window.alert(String(e)); return null; });
+    if (sessionId) {
+      spawnSessionAt(dir, 'claude', null, UNNAMED_SESSION, {
+        projectDir: projects.includes(dir) ? dir : null,
+        resumeSessionId: sessionId,
+      });
+    }
+  }, [spawnSessionAt, projects]);
+
+  // --- To-Do ↔ session bridge ---------------------------------------------
+
+  /** Hands a task's own text to a session. A live session gets it now; a
+   *  dormant one is woken and gets it as soon as its hooks report in. Never
+   *  submitted — the text lands in the prompt and you decide. */
+  const deliverPrompt = useCallback((tab: Tab, text: string) => {
+    if (tab.dormant || !spawnedRef.current.has(tab.id)) {
+      pendingPromptRef.current.set(tab.id, text);
+      startPty(tab);
+      dispatch({ type: 'wake', tabId: tab.id });
+    } else {
+      ipc.writeToPty(tab.id, bracketedPaste(text));
+    }
+  }, [startPty, dispatch]);
+
+  /** ⋯ → Start Claude session. A task with a project starts there; one without
+   *  gets a scratch session, exactly like ⌘N. The task is linked and marked in
+   *  progress — never completed, which stays your call. */
+  const handleStartSessionFromTask = useCallback(async (task: Task) => {
+    const cwd = task.projectDir
+      ?? await ipc.createScratchDir(crypto.randomUUID().slice(0, 8)).catch(() => null);
+    if (!cwd) return;
+    const tab = spawnSessionAt(cwd, 'claude', null, task.title.slice(0, 40) || UNNAMED_SESSION, {
+      projectDir: task.projectDir,
+      prompt: taskPrompt(task),
+    });
+    linkSession(task.id, tab.id);
+    if (!task.inProgress) updateTask(task.id, { inProgress: true });
+  }, [spawnSessionAt]);
+
+  const handleAddTaskToSession = useCallback((task: Task, sessionId: string) => {
+    const tab = state.tabs.find((t) => t.id === sessionId);
+    if (!tab) return;
+    linkSession(task.id, tab.id);
+    if (!task.inProgress) updateTask(task.id, { inProgress: true });
+    deliverPrompt(tab, taskPrompt(task));
+    handleSelect(tab.id);
+  }, [state.tabs, deliverPrompt, handleSelect]);
+
+  /** The inverse: capture something you noticed mid-session as a task, without
+   *  leaving the session's context behind — it arrives pre-filed under the
+   *  session's project and linked back to it. */
+  const handleCreateTaskFromSession = useCallback((tabId: string) => {
+    const tab = state.tabs.find((t) => t.id === tabId);
+    if (!tab) return;
+    const task = addTask({ title: '', projectDir: tab.projectDir, sessionIds: [tab.id] });
+    setSelectedTaskId(task.id);
+    setView('todo');
   }, [state.tabs]);
 
-  /** The strip's ×: a session only *leaves the strip* — it's still open, still
-   *  running, still in the sidebar, which is what owns a session's life. A file
-   *  has no such home, so closing its tab really closes the file. */
-  const handleCloseBarTab = useCallback((tabId: string) => {
-    const tab = state.tabs.find((t) => t.id === tabId);
-    if (!tab || tab.kind === 'file') { handleCloseTab(tabId); return; }
-    // The neighbour that takes its place — and collapsing the pane if that was
-    // its last tab — is `closePaneTab`'s job, in lib/panes.ts.
-    dispatch({ type: 'removeFromPane', tabId });
-  }, [state.tabs, handleCloseTab]);
+  // --- visibility, waking, auto-sleep -------------------------------------
 
-  /** Set a tab's view mode: terminal (default), full markdown, or split. */
-  const setTabMode = useCallback((tabId: string, mode: SessionMode) => {
-    setMdTabs((prev) => {
-      const next = new Map(prev);
-      if (mode === 'terminal') next.delete(tabId);
-      else next.set(tabId, mode);
-      return next;
-    });
-  }, []);
+  /** Every session with a live terminal on screen — one per pane, not just the
+   *  focused one. A session reading its transcript full-screen is excluded: its
+   *  terminal is hidden and needs no live process behind it. */
+  const visible = useMemo(() => {
+    if (!onSessions) return new Set<string>();
+    const ids = visibleSessionIds(state.layout);
+    for (const id of ids) {
+      const tab = state.tabs.find((t) => t.id === id);
+      if (!tab || tab.archived) { ids.delete(id); continue; }
+      if (sessionModeOf(tab, mdTabs, settings.showMarkdownToggle) === 'markdown') ids.delete(id);
+    }
+    return ids;
+  }, [onSessions, state.layout, state.tabs, mdTabs, settings.showMarkdownToggle]);
+  visibleTabIdsRef.current = visible;
 
-  const handleSelectTab = useCallback((tabId: string) => {
-    setShowHistory(false);
-    setShowSettings(false);
-    setShowHome(false);
-    // A tab already on the grid gets its pane focused rather than moved; one
-    // that isn't opens in the focused pane. See `activateTab` in lib/panes.ts.
-    dispatch({ type: 'select', tabId });
-  }, []);
+  useEffect(() => {
+    for (const id of visible) {
+      const tab = state.tabs.find((t) => t.id === id);
+      if (!tab?.dormant) continue;
+      startPty(tab);
+      dispatch({ type: 'wake', tabId: id });
+    }
+  }, [visible, state.tabs, startPty, dispatch]);
 
-  /** Opens a file from the explorer as a read-only tab — reuses the tab if
-   *  that file is already open instead of duplicating it. No pty involved. */
-  // A peek closes on losing focus — Escape or a click outside it — and never
-  // on the pointer leaving. Reaching a file deep in the tree walks the cursor
-  // past the panel's edges, and a mouseleave rule would cancel the errand
-  // halfway through. This is the line between a hover menu and a tool window;
-  // JetBrains calls the same mode Dock Unpinned and hides it the same way.
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const threshold = autoSleepMsRef.current;
+      if (threshold <= 0) {
+        idleSinceRef.current.clear();
+        return;
+      }
+      const now = Date.now();
+      const onScreen = visibleTabIdsRef.current;
+      for (const tab of tabsRef.current) {
+        const eligible =
+          tab.kind === 'claude' && !tab.dormant && !tab.exited && !tab.archived &&
+          tab.status === 'idle' && !!tab.resumeSessionId && !onScreen.has(tab.id);
+        if (!eligible) {
+          idleSinceRef.current.delete(tab.id);
+          continue;
+        }
+        const since = idleSinceRef.current.get(tab.id);
+        if (since === undefined) idleSinceRef.current.set(tab.id, now);
+        else if (now - since >= threshold) sleepTab(tab.id);
+      }
+    }, SLEEP_CHECK_MS);
+    return () => clearInterval(timer);
+  }, [sleepTab]);
+
+  // --- keyboard -----------------------------------------------------------
+
+  // Capture phase, so these fire before the focused xterm swallows the key.
+  // Every binding here was checked against the existing map (⌘F find-in-reader,
+  // ⌘⇧V preview, Ctrl+V paste, Esc interrupt) — see docs/features/command-palette.md.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      const key = e.key.toLowerCase();
+      if (key === 'n' && !e.shiftKey) { e.preventDefault(); void newSession(null); }
+      // ⌘⇧P kept as an alias: it was the palette's key before ⌘K, and muscle
+      // memory outlives a release note.
+      else if (key === 'k' || (key === 'p' && e.shiftKey)) { e.preventDefault(); setPaletteOpen((v) => !v); }
+      else if (key === 'b' && !e.shiftKey) { e.preventDefault(); setSidebarOpen((v) => !v); }
+      else if (key === 'i' && !e.shiftKey) { e.preventDefault(); setInspectorOpen((v) => !v); }
+      else if (key === 'f' && e.shiftKey) { e.preventDefault(); setFocusMode((v) => !v); }
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [newSession]);
+
+  // Escape leaves focus mode. Not registered in capture: a bare Escape belongs
+  // to the terminal (it interrupts Claude), so this only runs if nothing else
+  // claimed it — which is the case exactly when the terminal isn't focused.
+  useEffect(() => {
+    if (!focusMode) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !document.querySelector('.xterm-helper-textarea:focus')) {
+        setFocusMode(false);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [focusMode]);
+
+  // A peek closes on losing focus — Escape or a click outside — and never on
+  // the pointer leaving. Reaching a file deep in the tree walks the cursor past
+  // the panel's edges, and a mouseleave rule would cancel the errand halfway.
   useEffect(() => {
     if (filesMode !== 'peek') return;
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setFilesMode('hidden'); };
@@ -386,244 +670,76 @@ export default function App() {
     };
   }, [filesMode]);
 
-  const handleOpenFile = useCallback((
-    dir: string,
-    path: string,
-    /** Where to put it. Omitted (the explorer's own click) means the focused
-     *  pane; a drop names the pane and, for an edge, splits it off there. */
-    target?: { paneId: string; edge: Edge | null },
-  ) => {
-    // Opening a file is the peek's own ending — look, take, gone. Pinning is
-    // what you do when you want the panel to stay.
-    setFilesMode((m) => (m === 'peek' ? 'hidden' : m));
-    const place = (tabId: string) => {
-      if (!target) return;
-      dispatch(target.edge
-        ? { type: 'splitTab', tabId, paneId: target.paneId, edge: target.edge }
-        : { type: 'moveTab', tabId, paneId: target.paneId });
-    };
-    const existing = state.tabs.find((t) => t.kind === 'file' && t.path === path);
-    if (existing) {
-      if (target) place(existing.id);
-      else handleSelectTab(existing.id);
-      return;
-    }
-    const tab: Tab = {
-      id: crypto.randomUUID(),
-      kind: 'file',
-      name: path.split(/[/\\]/).pop() || path,
-      shellId: null,
-      cwd: dir,
-      resumeSessionId: null,
-      exited: false,
-      status: 'new',
-      createdAt: Date.now(),
-      path,
-    };
-    dispatch({ type: 'add', tab });
-    // `add` lands it in the focused pane; a drop then moves it where it was
-    // actually dropped.
-    place(tab.id);
-    setShowHistory(false);
-    setShowSettings(false);
-    setShowHome(false);
-  }, [state.tabs, handleSelectTab]);
-
-  // Command palette — Ctrl/Cmd+Shift+P from anywhere. Capture phase so it fires
-  // before the focused xterm swallows the key; Shift+P (not Ctrl+K) to avoid
-  // colliding with readline's kill-to-end-of-line inside a shell.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'P' || e.key === 'p')) {
-        e.preventDefault();
-        setPaletteOpen((v) => !v);
-      }
-    };
-    window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
-  }, []);
-
-  const handleRenameTab = useCallback((tabId: string, name: string) => {
-    dispatch({ type: 'rename', tabId, name });
-  }, []);
-
-  const handleTogglePin = useCallback((tabId: string) => {
-    const tab = state.tabs.find((t) => t.id === tabId);
-    if (tab) dispatch({ type: 'pin', tabId, pinned: !tab.pinned });
-  }, [state.tabs]);
-
-  const handleOpenDirectory = useCallback((dir: string) => {
-    ipc.openDirectory(dir);
-  }, []);
-
-  /** Hands a live tab off to the VS Code Claude Code extension. Sleeps the
-   *  tab first (frees the pty) so only one `claude` process is ever
-   *  appending to the transcript — clicking the tab again later wakes it
-   *  with `--resume` and picks up whatever happened in VS Code. */
-  const handleOpenInVscode = useCallback(
-    (tabId: string) => {
-      const tab = state.tabs.find((t) => t.id === tabId);
-      if (!tab?.resumeSessionId) return;
-      sleepTab(tabId);
-      ipc.openInVscode(tab.cwd, tab.resumeSessionId);
+  const [draggingFilesSeam, startFilesSeam] = useDragValue(
+    (e) => {
+      const panel = filesPanelRef.current;
+      if (!panel) return null;
+      return panel.getBoundingClientRect().right - e.clientX;
     },
-    [state.tabs, sleepTab],
+    (width) => setFilesWidth(Math.min(480, Math.max(200, width))),
   );
 
-  const handleResumeSession = useCallback(
-    (dir: string, entry: SessionHistoryEntry) => {
-      // The name History showed for this row, so the tab you get back is the
-      // one you picked. Only sessions never named at all fall back to the
-      // transcript's opening line.
-      const name = sessionNames[entry.sessionId] || entry.preview.slice(0, 30) || UNNAMED_TAB;
-      setReaderTarget(null);
-      spawnTabAt(dir, 'claude', null, name, entry.sessionId);
-    },
-    [spawnTabAt, sessionNames],
+  const [draggingSidebar, startSidebarSeam] = useDragValue(
+    (e) => e.clientX,
+    (x) => setSidebarWidth(Math.min(MAX_SIDEBAR, Math.max(MIN_SIDEBAR, x))),
   );
 
-  const handleReadSession = useCallback(
-    (dir: string, entry: SessionHistoryEntry) => setReaderTarget({ projectDir: dir, entry }),
-    [],
-  );
+  // --- the pane grid ------------------------------------------------------
 
-  /** Imports a transcript file a colleague exported from another machine into
-   *  `dir`, then opens it as a resumed tab — see docs/features/session-transfer.md.
-   *  The tab starts unnamed (the sender's name lives in their workspace, not the
-   *  transcript); History shows the real preview and you can rename. */
-  const handleImportSession = useCallback(
-    async (dir: string) => {
-      const sessionId = await ipc.importSession(dir).catch((e) => { window.alert(String(e)); return null; });
-      if (sessionId) spawnTabAt(dir, 'claude', null, UNNAMED_TAB, sessionId);
-    },
-    [spawnTabAt],
-  );
+  const { layout } = state;
+  const focusedPaneContent = activeContent(findPane(layout, layout.focusedPaneId));
+  const gridRef = useRef<HTMLDivElement>(null);
+  const panes = panesOf(layout.grid).length;
 
-  const currentTabId = activeTabId(state);
-  const activeTab = state.tabs.find((t) => t.id === currentTabId) ?? null;
-  const overlaysUp = showHistory || showSettings || readerTarget !== null;
-  const fileUp = !!activeTab && activeTab.kind === 'file';
-  // Home covers the grid too, but unlike the overlays it *is* the resting
-  // state when nothing is open, so it gets its own flag.
-  const homeUp = showHome || state.tabs.length === 0;
-
-  /** Every tab genuinely on screen — one per pane, not just the focused one.
-   *  This is the thing the grid changed: with up to four terminals visible,
-   *  "is this tab on screen" stopped being a single id. A tab reading as full
-   *  markdown is excluded: its terminal is hidden and needs no live process. */
-  const visible = useMemo(() => {
-    if (overlaysUp || homeUp) return new Set<string>();
-    const ids = visibleTabIds(layout);
-    for (const id of ids) {
-      const tab = state.tabs.find((t) => t.id === id);
-      if (sessionModeOf(tab, mdTabs, settings.showMarkdownToggle) === 'markdown') ids.delete(id);
-    }
-    return ids;
-  }, [overlaysUp, homeUp, layout, mdTabs, state.tabs, settings.showMarkdownToggle]);
-  visibleTabIdsRef.current = visible;
-
-  // Lazily spawn a dormant (restored) tab's pty the first time it's actually
-  // shown as a live terminal — now for every pane, since a tab can be on screen
-  // in a pane you aren't typing into. `startPty` is idempotent via `spawnedRef`.
-  useEffect(() => {
-    for (const id of visible) {
-      const tab = state.tabs.find((t) => t.id === id);
-      if (!tab?.dormant) continue;
-      startPty(tab);
-      dispatch({ type: 'wake', tabId: id });
-    }
-  }, [visible, state.tabs, startPty]);
-
-  // Auto-sleep idle background Claude sessions. Every tick, a resumable Claude
-  // tab that's been idle and off-screen for the configured threshold is put to
-  // sleep. The tab on screen, shell tabs, and sessions without a resume id are
-  // never touched. Reads live tabs/visibility/threshold from refs so the
-  // interval isn't torn down and rebuilt on every state change.
-  useEffect(() => {
-    const timer = setInterval(() => {
-      const threshold = autoSleepMsRef.current;
-      if (threshold <= 0) {
-        idleSinceRef.current.clear(); // disabled — drop any pending timers
-        return;
-      }
-      const now = Date.now();
-      const onScreen = visibleTabIdsRef.current;
-      for (const tab of tabsRef.current) {
-        const eligible =
-          tab.kind === 'claude' &&
-          !tab.dormant &&
-          !tab.exited &&
-          tab.status === 'idle' &&
-          !!tab.resumeSessionId &&
-          // Any pane you can see counts as on screen, not just the focused one.
-          !onScreen.has(tab.id);
-        if (!eligible) {
-          idleSinceRef.current.delete(tab.id);
-          continue;
-        }
-        const since = idleSinceRef.current.get(tab.id);
-        if (since === undefined) {
-          idleSinceRef.current.set(tab.id, now);
-        } else if (now - since >= threshold) {
-          sleepTab(tab.id);
-        }
-      }
-    }, SLEEP_CHECK_MS);
-    return () => clearInterval(timer);
-  }, [sleepTab]);
-
-  // What's being dragged right now, if anything — one listener for the whole
-  // window rather than a flag threaded through every drag source. The drop
-  // zones only mount while this is set, so they never sit between the pointer
-  // and the terminal. `tabId` is null for a file drag.
+  // What's being dragged right now, if anything — one window listener rather
+  // than a flag threaded through every drag source. The drop zones only mount
+  // while this is set, so they never sit between the pointer and a terminal.
   //
-  // `dragstart` must be BUBBLE phase. React attaches its handlers at the root
-  // container, so a source only calls `setData` as the event bubbles; a
-  // capture-phase listener here runs first, reads an empty `types`, and leaves
-  // every pane with no drop target and no visible sign why. `getData` *is*
-  // readable during dragstart (unlike dragover), so the payload can be read
-  // here too.
-  const [drag, setDrag] = useState<{ tabId: string | null } | null>(null);
-  const endDrag = useCallback(() => setDrag(null), []);
+  // `dragstart` must be BUBBLE phase: React attaches its handlers at the root
+  // container, so a source only calls `setData` as the event bubbles, and a
+  // capture-phase listener here would read an empty `types`.
+  const [drag, setDrag] = useState<PaneContent | null>(null);
+  const dragging = drag !== null;
   useEffect(() => {
     const onStart = (e: DragEvent) => {
       if (!e.dataTransfer || !isPaneDrag(e.dataTransfer.types)) return;
-      setDrag({ tabId: e.dataTransfer.getData(TAB_MIME) || null });
+      setDrag(readDragContent(e.dataTransfer));
     };
+    const onEnd = () => setDrag(null);
     window.addEventListener('dragstart', onStart);
-    window.addEventListener('dragend', endDrag, true);
+    window.addEventListener('dragend', onEnd, true);
     return () => {
       window.removeEventListener('dragstart', onStart);
-      window.removeEventListener('dragend', endDrag, true);
+      window.removeEventListener('dragend', onEnd, true);
     };
-  }, [endDrag]);
+  }, []);
 
-  /** A tab dropped on a pane: an edge splits it off, the centre just moves it
-   *  into that pane's strip. `splitPane` itself degrades to a move when the
-   *  pane has no room, so there is nothing to check here.
-   *
-   *  Ends the drag here rather than from a window `drop` listener: the tab
-   *  strip stops propagation on its own drops, so a listener up there would
-   *  miss them and leave the zones on screen. */
-  const handleDropTab = useCallback((tabId: string, paneId: string, zone: Edge | 'center') => {
-    endDrag();
-    const pane = findPane(layout, paneId);
-    // Splitting a pane off its own only tab would empty it and collapse it
-    // right back — the same pane, a new id, and every terminal in it remounted
-    // and rewrapped for nothing. Leave it alone.
-    if (zone !== 'center' && pane && splitWouldEmpty(pane, tabId)) return;
+  /** A view dropped on a pane: an edge splits it off, the centre shows it in
+   *  that pane instead. `splitPane` degrades to a plain show when the pane has
+   *  no room, so there is nothing to check for here. */
+  const handleDropView = useCallback((content: PaneContent, paneId: string, zone: Edge | 'center') => {
+    setDrag(null);
+    setFilesMode((m) => (m === 'peek' ? 'hidden' : m));
+    const pane = findPane(state.layout, paneId);
+    // Splitting a pane off the very thing it is showing would empty it and
+    // collapse it right back — the same pane, a new id, and its terminal
+    // remounted for nothing.
+    if (zone !== 'center' && pane && splitWouldEmpty(pane, content)) return;
     dispatch(zone === 'center'
-      ? { type: 'moveTab', tabId, paneId }
-      : { type: 'splitTab', tabId, paneId, edge: zone });
-  }, [endDrag, layout]);
+      ? { type: 'showIn', content, paneId }
+      : { type: 'splitTo', content, paneId, edge: zone });
+  }, [state.layout, dispatch]);
 
-  const handleDropFile = useCallback((payload: FileDragPayload, paneId: string, zone: Edge | 'center') => {
-    endDrag();
-    handleOpenFile(payload.dir, payload.path, { paneId, edge: zone === 'center' ? null : zone });
-  }, [handleOpenFile, endDrag]);
+  /** "Put this on the workspace", with no question about where. The menus use
+   *  this; drag is for when you care about the geometry. */
+  const addToWorkspace = useCallback((content: PaneContent) => {
+    setView('sessions');
+    setShowSettings(false);
+    setShowArchive(false);
+    setFilesMode((m) => (m === 'peek' ? 'hidden' : m));
+    dispatch({ type: 'addToWorkspace', content });
+  }, [dispatch]);
 
-  // The grid's two seams and the file panel's, all on one hook — they were the
-  // same twenty lines of window-tracked mousemove three times over.
   const [draggingCol, startColSeam] = useDragValue(
     (e) => {
       const g = gridRef.current;
@@ -642,14 +758,6 @@ export default function App() {
     },
     (frac) => dispatch({ type: 'seam', axis: 'row', frac }),
   );
-  const [draggingFilesSeam, startFilesSeam] = useDragValue(
-    (e) => {
-      const panel = filesPanelRef.current;
-      if (!panel) return null;
-      return panel.getBoundingClientRect().right - e.clientX;
-    },
-    (width) => setFilesPanelWidth(Math.min(480, Math.max(200, width))),
-  );
 
   // An L-shaped grid splits only one of its rows, so the vertical seam has to
   // stop at the row that isn't split (and vice versa).
@@ -657,53 +765,127 @@ export default function App() {
   const colSeamShown = bands.vertical[0] || bands.vertical[1];
   const rowSeamShown = bands.horizontal[0] || bands.horizontal[1];
 
-  return (
-    <div className="relative flex h-screen bg-background text-foreground">
-      <Sidebar
-        tabs={state.tabs}
-        activeTabId={currentTabId}
-        shellOptions={shellOptions}
-        showHistory={showHistory}
-        showSettings={showSettings}
-        showFiles={filesPinned}
-        projects={projects}
-        collapsed={collapsed}
-        onSelectTab={handleSelectTab}
-        onCloseTab={handleCloseTab}
-        onOpenDirectory={handleOpenDirectory}
-        onOpenInVscode={handleOpenInVscode}
-        onNewClaudeTab={handleNewClaudeTab}
-        onNewShellTab={handleNewShellTab}
-        onRenameTab={handleRenameTab}
-        onTogglePin={handleTogglePin}
-        onOpenSearch={() => setPaletteOpen(true)}
-        onToggleHistory={() => { setShowHistory((v) => !v); setShowSettings(false); setShowHome(false); }}
-        onToggleSettings={() => { setShowSettings((v) => !v); setShowHistory(false); setShowHome(false); }}
-        onToggleFiles={() => setFilesMode((m) => (m === 'pinned' ? 'hidden' : 'pinned'))}
-        showHome={homeUp}
-        onGoHome={() => { setShowHome((v) => !v); setShowHistory(false); setShowSettings(false); }}
-        onAddProject={handleAddProject}
-        onRemoveProject={handleRemoveProject}
-        onImportSession={handleImportSession}
-        onReorderProject={handleReorderProject}
-        onToggleCollapse={() => setCollapsed((v) => !v)}
-      />
-      <main className="relative flex-1 min-w-0 flex flex-col" data-terminal-area>
-        <div className="relative flex-1 min-h-0">
-          {/* The pane grid. Up to four panes on a 2x2 of cells, each owning its
-              own tab strip; a pane spanning several cells just spans grid
-              tracks. Both rows share one column seam and both columns share one
-              row seam — that's what makes it a grid rather than a pane tree.
-              See docs/features/panes.md.
+  const selectedTask = tasks.find((t) => t.id === selectedTaskId) ?? null;
+  const linkedTasks = useMemo(
+    () => (currentTabId ? tasks.filter((t) => t.sessionIds.includes(currentTabId)) : []),
+    [tasks, currentTabId],
+  );
+  const sessions = useMemo(() => state.tabs.filter((t) => t.kind !== 'file'), [state.tabs]);
+  /** Which file the explorer should mark as open — the focused pane's, if it
+   *  is showing one. */
+  const activeFilePath = focusedPaneContent?.kind === 'file' ? focusedPaneContent.path : null;
+  const sidebarShown = sidebarOpen && !focusMode;
+  const inspectorShown = inspectorOpen && !focusMode && activeTab !== null && onSessions;
 
-              Hidden here, never unmounted: dropping the grid would unmount
-              every <Terminal>, and coming back would re-attach and rewrap all
-              of them. Their own `isVisible` is already false while an overlay
-              or Home is up, so the ResizeObserver is disconnected and
-              display:none costs no fit. */}
+  return (
+    <div className="relative flex flex-col h-screen bg-background text-foreground">
+      {/* Two modes, one line, 32px — and on macOS this line *is* the title bar
+          (`titleBarStyle: Overlay`), so the window costs one 32px row of chrome
+          instead of two. The left pad clears the native traffic lights, which
+          stay real: drawing fake ones is how a desktop app starts feeling like
+          a web page wearing a costume. Projects are deliberately absent — they
+          organize what's in a mode, they aren't one. */}
+      {!focusMode && (
+        <nav
+          data-tauri-drag-region
+          className={cn(
+            'relative flex items-center gap-1 h-[38px] px-2 shrink-0 border-b border-border bg-background',
+            IS_MAC && 'pl-[76px]',
+          )}
+        >
+          <button
+            type="button"
+            aria-label={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
+            title={`${sidebarOpen ? 'Hide' : 'Show'} sidebar  ⌘B`}
+            className={cn(ICON_BUTTON, 'w-6 h-6')}
+            onClick={() => setSidebarOpen((v) => !v)}
+          >
+            <PanelLeft size={13} />
+          </button>
+
+          {/* Centred, and centred on the window rather than on the space left
+              over — otherwise it drifts as the left and right runs change. */}
+          <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-0.5 p-0.5 rounded-sm bg-hover">
+            <NavTab
+              icon={SquareTerminal}
+              label="Sessions"
+              active={view === 'sessions'}
+              onClick={() => { setView('sessions'); setShowSettings(false); setShowArchive(false); }}
+            />
+            <NavTab
+              icon={CheckSquare}
+              label="To-Do"
+              active={view === 'todo'}
+              count={tasks.filter((t) => !t.done).length}
+              onClick={() => { setView('todo'); setShowSettings(false); setShowArchive(false); }}
+            />
+          </div>
+
+          <button
+            type="button"
+            aria-label="Search sessions"
+            title="Go to session  ⌘K"
+            className={cn(ICON_BUTTON, 'ml-auto h-6 w-auto gap-1.5 px-1.5')}
+            onClick={() => setPaletteOpen(true)}
+          >
+            <Search size={12} />
+            <span className="text-[9.5px] text-faint">⌘K</span>
+          </button>
+        </nav>
+      )}
+
+      <div className="flex flex-1 min-h-0">
+        {sidebarShown && (
+          <>
+            <div style={{ width: sidebarWidth }} className="shrink-0 min-w-0">
+              <SessionsSidebar
+                tabs={state.tabs}
+                selectedId={onSessions ? currentTabId : null}
+                projects={projects}
+                recent={recent}
+                lastUsed={lastUsed}
+                showSettings={showSettings}
+                showArchive={showArchive}
+                onNewSession={(dir, kind) => { void newSession(dir, kind); }}
+                onSelect={handleSelect}
+                onClose={handleClose}
+                onRename={(tabId, name) => dispatch({ type: 'rename', tabId, name })}
+                onSetProject={(tabId, projectDir) => dispatch({ type: 'setProject', tabId, projectDir })}
+                onArchive={handleArchive}
+                onTogglePin={(tabId) => {
+                  const tab = state.tabs.find((t) => t.id === tabId);
+                  if (tab) dispatch({ type: 'pin', tabId, pinned: !tab.pinned });
+                }}
+                onOpenDirectory={(dir) => ipc.openDirectory(dir)}
+                onOpenInVscode={handleOpenInVscode}
+                onCreateTask={handleCreateTaskFromSession}
+                onOpenInWorkspace={(tabId, tool) => addToWorkspace(sessionContent(tabId, tool))}
+                onOpenPalette={() => setPaletteOpen(true)}
+                onAddProject={handleAddProject}
+                onRemoveProject={handleRemoveProject}
+                onImportSession={handleImportSession}
+                onResumeRecent={handleResumeRecent}
+                onToggleArchive={() => { setShowArchive((v) => !v); setShowSettings(false); setView('sessions'); }}
+                onToggleSettings={() => { setShowSettings((v) => !v); setShowArchive(false); setView('sessions'); }}
+              />
+            </div>
+            <Seam
+              orientation="vertical"
+              dragging={draggingSidebar}
+              onStart={startSidebarSeam}
+              className="relative shrink-0"
+            />
+          </>
+        )}
+
+        <main className="relative flex flex-1 min-w-0 min-h-0" data-terminal-area>
+          {/* The pane grid. Each pane shows ONE session — there is no tab strip
+              above it, because the sidebar is the only list of sessions. Drag a
+              session onto a pane's edge to split, or onto its middle to show it
+              there. See docs/features/panes.md. */}
           <div
             ref={gridRef}
-            className={cn('absolute inset-0 grid', (overlaysUp || homeUp) && 'hidden')}
+            className={cn('absolute inset-0 grid', !onSessions && 'hidden')}
             style={{
               gridTemplateColumns: `${layout.colFrac}fr ${1 - layout.colFrac}fr`,
               gridTemplateRows: `${layout.rowFrac}fr ${1 - layout.rowFrac}fr`,
@@ -713,47 +895,138 @@ export default function App() {
               const pane = findPane(layout, paneId);
               if (!pane) return null;
               const rect = paneRect(layout.grid, paneId);
+              const focused = paneId === layout.focusedPaneId;
+              const active = activeContent(pane);
+              const activeSession = active?.kind === 'session'
+                ? state.tabs.find((t) => t.id === active.sessionId) ?? null
+                : null;
+              const canRead = settings.showMarkdownToggle && activeSession?.kind === 'claude'
+                && !!activeSession.resumeSessionId && active?.kind === 'session'
+                && active.tool === 'claude';
+
               return (
-                <PaneView
+                <div
                   key={paneId}
-                  pane={pane}
-                  tabs={state.tabs}
-                  focused={paneId === layout.focusedPaneId}
-                  visible={visible}
-                  showMarkdownToggle={settings.showMarkdownToggle}
-                  mdTabs={mdTabs}
-                  splitDirection={splitDirection}
-                  mdView={mdView}
-                  onSetMdView={setMdView}
-                  onSetMode={setTabMode}
-                  onSetSplitDirection={setSplitDirection}
-                  onSelectTab={handleSelectTab}
-                  onCloseBarTab={handleCloseBarTab}
-                  onReorderTab={(tabId, targetTabId, position) =>
-                    dispatch({ type: 'moveTab', tabId, paneId, targetTabId, position })}
-                  onFocus={() => dispatch({ type: 'focusPane', paneId })}
-                  onInterrupt={(tabId) => dispatch({ type: 'interrupt', tabId })}
-                  onDirtyChange={(tabId, dirty) => dispatch({ type: 'dirty', tabId, dirty })}
-                  onOpenFile={handleOpenFile}
-                  onSplitTab={(tabId, edge) => dispatch({ type: 'splitTab', tabId, paneId, edge })}
-                  dragging={drag !== null}
-                  onDropTab={(tabId, zone) => handleDropTab(tabId, paneId, zone)}
-                  onDropInStrip={(tabId) => { endDrag(); dispatch({ type: 'moveTab', tabId, paneId }); }}
-                  onDropFile={(payload, zone) => handleDropFile(payload, paneId, zone)}
-                  // A pane one cell wide can't split sideways again, and one
-                  // cell tall can't split down. Nor can a pane be split off its
-                  // own only tab: the tab would leave, the pane would empty and
-                  // collapse straight back. Saying so here is what keeps the
-                  // drop highlight from promising a split that won't happen.
-                  canSplit={{
-                    vertical: rect.colSpan > 1 && !splitWouldEmpty(pane, drag?.tabId),
-                    horizontal: rect.rowSpan > 1 && !splitWouldEmpty(pane, drag?.tabId),
-                  }}
+                  data-pane={paneId}
+                  className={cn(
+                    'relative flex flex-col min-w-0 min-h-0 overflow-hidden',
+                    panes > 1 && 'border-r border-b border-border',
+                  )}
                   style={{
                     gridRow: `${rect.row + 1} / span ${rect.rowSpan}`,
                     gridColumn: `${rect.col + 1} / span ${rect.colSpan}`,
                   }}
-                />
+                  onMouseDownCapture={() => dispatch({ type: 'focusPane', paneId })}
+                >
+                  {/* Focus mode keeps the strip — it is the only thing left
+                      saying which session you are in — and drops its trailing
+                      controls, which is the part that was chrome. */}
+                  {pane.contents.length > 0 && (
+                    <PaneTabs
+                      contents={pane.contents}
+                      activeKey={pane.activeKey}
+                      tabs={state.tabs}
+                      paneFocused={focused}
+                      onActivate={(key) => dispatch({ type: 'activateTab', paneId, key })}
+                      onClose={(key) => dispatch({ type: 'closeTab', key })}
+                      onDrop={(dropped, beforeKey) =>
+                        dispatch({ type: 'showIn', content: dropped, paneId, beforeKey })}
+                      trailing={focusMode ? undefined : (
+                        <>
+                          {canRead && activeSession && (
+                            <SessionControls
+                              mode={sessionModeOf(activeSession, mdTabs, settings.showMarkdownToggle)}
+                              splitDirection={splitDirection}
+                              onSetMode={(mode) => setMdTabs((prev) => {
+                                const next = new Map(prev);
+                                if (mode === 'terminal') next.delete(activeSession.id);
+                                else next.set(activeSession.id, mode);
+                                return next;
+                              })}
+                              onSetSplitDirection={setSplitDirection}
+                            />
+                          )}
+                          {activeSession && (
+                            <PaneSessionMenu
+                              session={activeSession}
+                              projects={projects}
+                              onAddTool={(tool: SessionTool) => addToWorkspace(sessionContent(activeSession.id, tool))}
+                              onSetProject={(projectDir: string | null) =>
+                                dispatch({ type: 'setProject', tabId: activeSession.id, projectDir })}
+                              onArchive={() => handleArchive(activeSession.id, true)}
+                              onCloseSession={() => handleClose(activeSession.id)}
+                              onOpenInVscode={() => handleOpenInVscode(activeSession.id)}
+                              onOpenDirectory={() => ipc.openDirectory(activeSession.cwd)}
+                              onCreateTask={() => handleCreateTaskFromSession(activeSession.id)}
+                              inspectorOpen={inspectorShown && focused}
+                              onToggleInspector={() => setInspectorOpen((v) => !v)}
+                            />
+                          )}
+                        </>
+                      )}
+                    />
+                  )}
+
+                  <div className="relative flex-1 min-h-0">
+                    {pane.contents.length === 0 ? (
+                      <div className="absolute inset-0">
+                        <HomeScreen projects={projects} onAddProject={handleAddProject} />
+                      </div>
+                    ) : (
+                      // Every tab stays mounted and the inactive ones hide:
+                      // unmounting one would drop its xterm buffer and re-wrap
+                      // the whole scrollback on the way back.
+                      pane.contents.map((content) => {
+                        const key = contentKey(content)!;
+                        const shown = key === contentKey(active);
+                        return (
+                          <div
+                            key={key}
+                            className={cn('absolute inset-0 flex', !shown && 'invisible pointer-events-none')}
+                          >
+                            {content.kind === 'file' ? (
+                              <PaneFile
+                                content={content}
+                                active={onSessions && shown}
+                                onOpenFile={(dir, path) =>
+                                  dispatch({ type: 'showIn', content: { kind: 'file', dir, path }, paneId })}
+                              />
+                            ) : (
+                              (() => {
+                                const session = state.tabs.find((t) => t.id === content.sessionId);
+                                if (!session) return null;
+                                return (
+                                  <SessionWorkspace
+                                    session={session}
+                                    tool={content.tool}
+                                    active={onSessions && shown}
+                                    paneFocused={focused}
+                                    mode={sessionModeOf(session, mdTabs, settings.showMarkdownToggle)}
+                                    splitDirection={splitDirection}
+                                    mdView={mdView}
+                                    onSetMdView={setMdView}
+                                    showMarkdownToggle={settings.showMarkdownToggle}
+                                    onInterrupt={() => dispatch({ type: 'interrupt', tabId: session.id })}
+                                    onNeedShell={() => startShell(session)}
+                                  />
+                                );
+                              })()
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
+                    {dragging && (
+                      <PaneDropZones
+                        canSplit={{
+                          vertical: rect.colSpan > 1 && !splitWouldEmpty(pane, drag),
+                          horizontal: rect.rowSpan > 1 && !splitWouldEmpty(pane, drag),
+                        }}
+                        onDropContent={(dropped, zone) => handleDropView(dropped, paneId, zone)}
+                      />
+                    )}
+                  </div>
+                </div>
               );
             })}
 
@@ -787,16 +1060,38 @@ export default function App() {
               <div className={cn('fixed inset-0 z-50', draggingCol ? 'cursor-col-resize' : 'cursor-row-resize')} />
             )}
           </div>
-          {/* Home is the resting screen, so it covers the grid rather than
-              living in a pane — with nothing open there is no pane to put it in. */}
-          {homeUp && !overlaysUp && (
-            <div className="absolute inset-0 bg-background">
-              <HomeScreen projects={projects} onAddProject={handleAddProject} />
+
+          {view === 'todo' && !overlaysUp && (
+            <div className="absolute inset-0 flex bg-background">
+              <TodoView
+                projects={projects}
+                sessions={sessions}
+                selectedTaskId={selectedTaskId}
+                onSelectTask={setSelectedTaskId}
+                onStartSession={(task) => { void handleStartSessionFromTask(task); }}
+                onAddToSession={handleAddTaskToSession}
+              />
+              {selectedTask && (
+                <TaskInspector
+                  task={selectedTask}
+                  projects={projects}
+                  sessions={sessions}
+                  onClose={() => setSelectedTaskId(null)}
+                  onOpenSession={handleSelect}
+                  onStartSession={() => { void handleStartSessionFromTask(selectedTask); }}
+                />
+              )}
             </div>
           )}
-          {showHistory && projects.length > 0 && (
+
+          {showArchive && (
             <div className="absolute inset-0 bg-background">
-              <SessionHistoryPanel projects={projects} sessionNames={sessionNames} onResume={handleResumeSession} onRead={handleReadSession} />
+              <SessionHistoryPanel
+                projects={historyDirs}
+                sessionNames={sessionNames}
+                onResume={handleResumeSession}
+                onRead={(dir, entry) => setReaderTarget({ projectDir: dir, entry })}
+              />
             </div>
           )}
           {readerTarget && (
@@ -814,63 +1109,109 @@ export default function App() {
               <SettingsView />
             </div>
           )}
-        </div>
-      </main>
-      {/* Not pinned: the edge keeps a way back without taking a column. It
-          stays under the overlay while peeking, so the pointer never has to
-          cross a gap between the two. */}
-      {!filesPinned && <FilesEdge onPeek={() => setFilesMode('peek')} />}
+        </main>
 
-      {filesPinned && (
-        <>
-          <Seam
-            orientation="vertical"
-            dragging={draggingFilesSeam}
-            onStart={startFilesSeam}
-            className="relative shrink-0"
+        {inspectorShown && activeTab && (
+          <SessionInspector
+            session={activeTab}
+            projects={projects}
+            lastUsedAt={activeTab.resumeSessionId ? lastUsed.get(activeTab.resumeSessionId) : undefined}
+            linkedTasks={linkedTasks}
+            onClose={() => setInspectorOpen(false)}
+            onRename={(name) => dispatch({ type: 'rename', tabId: activeTab.id, name })}
+            onSetProject={(projectDir) => dispatch({ type: 'setProject', tabId: activeTab.id, projectDir })}
+            onArchive={() => handleArchive(activeTab.id, true)}
+            onCloseSession={() => handleClose(activeTab.id)}
+            onOpenInVscode={() => handleOpenInVscode(activeTab.id)}
+            onOpenDirectory={() => ipc.openDirectory(activeTab.cwd)}
+            onCreateTask={() => handleCreateTaskFromSession(activeTab.id)}
+            onOpenTask={(taskId) => { setSelectedTaskId(taskId); setView('todo'); }}
           />
-          <div
-            ref={filesPanelRef}
-            data-files-panel
-            style={{ width: filesPanelWidth }}
-            className="shrink-0 border-l border-border overflow-hidden"
-          >
-            <FileExplorerPanel
-              projects={projects}
-              activePath={fileUp ? activeTab?.path ?? null : null}
-              onOpenFile={handleOpenFile}
-              pinned
-              onTogglePin={() => setFilesMode('peek')}
+        )}
+        {/* The file explorer, back on the right edge where it was. Docked it
+            takes a column; peeked it lays over the grid, which is the mode
+            that matters — you come here to grab one file and drag it into a
+            pane, and the terminal must not rewrap for that. */}
+        {!filesPinned && onSessions && <FilesEdge onPeek={() => setFilesMode('peek')} />}
+        {filesPinned && (
+          <>
+            <Seam
+              orientation="vertical"
+              dragging={draggingFilesSeam}
+              onStart={startFilesSeam}
+              className="relative shrink-0"
             />
-          </div>
-        </>
-      )}
+            <div
+              ref={filesPanelRef}
+              data-files-panel
+              style={{ width: filesWidth }}
+              className="shrink-0 border-l border-border overflow-hidden"
+            >
+              <FileExplorerPanel
+                projects={projects}
+                activePath={activeFilePath}
+                onOpenFile={(dir, path) => addToWorkspace({ kind: 'file', dir, path })}
+                pinned
+                onTogglePin={() => setFilesMode('peek')}
+              />
+            </div>
+          </>
+        )}
+      </div>
 
-      {/* Peeking: absolutely placed, so main never changes width and the
-          terminal never rewraps. No resize seam — the width you drag in the
-          docked mode is the width this uses. */}
       {filesMode === 'peek' && (
         <div
           data-files-panel
-          style={{ width: filesPanelWidth }}
-          className="absolute right-0 top-0 bottom-0 z-40 border-l border-border overflow-hidden shadow-[-18px_0_34px_-18px_rgba(0,0,0,0.9)]"
+          style={{ width: filesWidth }}
+          className="absolute right-0 top-0 bottom-0 z-40 border-l border-border bg-card overflow-hidden shadow-[-18px_0_34px_-18px_rgba(0,0,0,0.9)]"
         >
           <FileExplorerPanel
             projects={projects}
-            activePath={fileUp ? activeTab?.path ?? null : null}
-            onOpenFile={handleOpenFile}
+            activePath={activeFilePath}
+            onOpenFile={(dir, path) => addToWorkspace({ kind: 'file', dir, path })}
             pinned={false}
             onTogglePin={() => setFilesMode('pinned')}
           />
         </div>
       )}
       {draggingFilesSeam && <div className="fixed inset-0 z-50 cursor-col-resize" />}
+      {draggingSidebar && <div className="fixed inset-0 z-50 cursor-col-resize" />}
       <CommandPalette
         open={paletteOpen}
-        tabs={state.tabs}
+        tabs={sessions}
         onClose={() => setPaletteOpen(false)}
-        onSelectTab={handleSelectTab}
+        onSelectTab={handleSelect}
       />
     </div>
+  );
+}
+
+function NavTab({ icon: Icon, label, active, count, onClick }: {
+  icon: typeof SquareTerminal;
+  label: string;
+  active: boolean;
+  count?: number;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      className={cn(
+        'relative flex items-center gap-1.5 h-[26px] px-3 rounded-sm border-none cursor-pointer font-inherit text-[12px] font-medium',
+        // The accent underline is the only thing in the chrome that says "you
+        // are here". A background tint alone read as one more hover state.
+        active
+          ? 'bg-selected text-foreground after:absolute after:inset-x-1.5 after:-bottom-px after:h-px after:bg-primary'
+          : 'bg-transparent text-muted-foreground hover:text-foreground hover:bg-raised',
+      )}
+      onClick={onClick}
+    >
+      <Icon size={12} className="shrink-0" />
+      {label}
+      {count !== undefined && count > 0 && (
+        <span className="text-[9.5px] font-mono tabular-nums text-muted-foreground">{count}</span>
+      )}
+    </button>
   );
 }

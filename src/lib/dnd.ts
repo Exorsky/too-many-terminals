@@ -1,12 +1,20 @@
 import type { Edge } from './panes';
 
-/** Typed drag payloads. The tab strip's own reorder used bare `text/plain`,
- *  which is why it had to ignore every drag that didn't start inside it: there
- *  was no way to tell one apart from a text selection. A custom type makes a
- *  drop target able to decide from `dataTransfer.types` alone — readable during
- *  `dragover`, where `getData` is blocked — so a tab can be dropped into a pane
- *  it didn't come from. */
+/** Typed drag payloads. A custom type lets a drop target decide from
+ *  `dataTransfer.types` alone — readable during `dragover`, where `getData` is
+ *  blocked — so a session dragged out of the sidebar can be told apart from a
+ *  text selection without inspecting the payload. */
 export const TAB_MIME = 'application/x-tmt-tab';
+/** JSON `{ sessionId, tool }` — a session's Claude/Shell/Files view, dragged
+ *  from the workspace's own tool strip so it can be dropped into a pane of its
+ *  own. A bare `TAB_MIME` means the session's Claude view, which is what the
+ *  sidebar's rows send. */
+export const VIEW_MIME = 'application/x-tmt-view';
+
+export interface ViewDragPayload {
+  sessionId: string;
+  tool: 'claude' | 'shell' | 'files';
+}
 /** JSON `{ dir, path }` — a file dragged out of the explorer. */
 export const FILE_MIME = 'application/x-tmt-file';
 
@@ -18,7 +26,7 @@ export interface FileDragPayload {
 /** True when a drag carries something a pane can accept. */
 export function isPaneDrag(types: readonly string[] | DOMStringList): boolean {
   for (const t of Array.from(types)) {
-    if (t === TAB_MIME || t === FILE_MIME) return true;
+    if (t === TAB_MIME || t === VIEW_MIME || t === FILE_MIME) return true;
   }
   return false;
 }
@@ -27,7 +35,7 @@ export function isPaneDrag(types: readonly string[] | DOMStringList): boolean {
 const EDGE = 0.25;
 
 /** Which of a pane's five drop zones a pointer is in: one of the four edges, or
- *  the centre, which means "put it in this pane's strip" rather than split.
+ *  the centre, which means "show it in this pane" rather than split it.
  *
  *  Nearest edge wins, so a corner resolves to whichever edge it's actually
  *  closer to instead of to whichever was tested first. A degenerate rect can't
@@ -48,7 +56,7 @@ export function dropZone(point: { clientX: number; clientY: number }, rect: DOMR
 
 /** Where the drop highlight should sit: the literal shape the pane becomes.
  *  A split with no room in that axis shows the whole pane, because that's what
- *  `splitPane` will actually do with it — open it here as a tab. */
+ *  `splitPane` will actually do with it — show it here instead. */
 export function zoneRect(
   zone: Edge | 'center',
   canSplit: { vertical: boolean; horizontal: boolean },

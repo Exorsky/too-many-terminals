@@ -1,5 +1,15 @@
 export type TabKind = 'claude' | 'shell' | 'file';
 
+/** The two product modes. Projects are deliberately not one of them — a
+ *  project organizes sessions and tasks, it isn't a place you navigate to.
+ *  See docs/architecture.md. */
+export type AppView = 'sessions' | 'todo';
+
+/** The tools that belong to the session you're in. Not sessions-as-tabs: one
+ *  session owns a Claude process, a shell in the same directory, and a view of
+ *  its files. See docs/features/session-workspace.md. */
+export type SessionTool = 'claude' | 'shell' | 'files';
+
 /** How a tab is being shown: the terminal alone, its transcript alone, or both
  *  side by side. Lives here rather than on SessionControls because App and
  *  PaneView both have to agree on it — see `sessionModeOf` in lib/tabs.ts. */
@@ -16,7 +26,19 @@ export interface Tab {
   name: string;
   /** Shell id from ShellOption (e.g. "powershell", "cmd") — null for claude tabs. */
   shellId: string | null;
+  /** Where the process actually runs. A project session runs in the project
+   *  folder; a scratch session runs in its own directory under `~/.tmt/scratch`. */
   cwd: string;
+  /** Which project this session is filed under — `null` is the Inbox.
+   *
+   *  Deliberately separate from `cwd`: filing a scratch session under a project
+   *  must not move a live working directory, because Claude Code keys a
+   *  transcript by that path and moving it would orphan the conversation.
+   *  See docs/features/scratch-sessions.md. */
+  projectDir: string | null;
+  /** Out of the main list but not gone: still in the workspace, resumable from
+   *  the sidebar's Archived group. Its pty is killed when it's archived. */
+  archived?: boolean;
   /** Claude session id when resuming a past session. */
   resumeSessionId: string | null;
   /** True once the underlying pty process has exited. */
@@ -147,13 +169,20 @@ export interface TranscriptTurn {
 // --- Workspace persistence (restores open tabs across app launches) ---
 
 export interface SavedTab {
+  /** Stable across restarts, so a To-Do that links a session still points at
+   *  it next launch. Absent in files written before it existed. */
+  id?: string;
   kind: TabKind;
   name: string;
   shellId: string | null;
   resumeSessionId: string | null;
-  /** Which open project this tab belongs to. */
+  /** The session's working directory. */
   cwd: string;
-  /** User-pinned to the sidebar's Pinned section. */
+  /** Which project it's filed under; `null`/absent is the Inbox. Absent means
+   *  the file predates the field, and `restoreTab` derives one from `cwd`. */
+  projectDir?: string | null;
+  archived?: boolean;
+  /** User-pinned to the top of its group. */
   pinned?: boolean;
 }
 
@@ -167,6 +196,33 @@ export interface WorkspaceState {
    *  resumed tab all read the same name. Absent in files saved before it
    *  existed, hence optional. */
   sessionNames?: Record<string, string>;
+}
+
+// --- To-Dos (docs/features/todo.md) ---
+
+export type TaskPriority = 'low' | 'medium' | 'high';
+
+/** A thing you want to do. Deliberately not a work item: no assignee, no
+ *  status workflow, no estimate. `sessionIds` is the only Claude-shaped field
+ *  and it's optional — a task never has to become a session. */
+export interface Task {
+  id: string;
+  title: string;
+  description: string;
+  done: boolean;
+  /** Epoch ms, or null for "no date" (the Later group). */
+  dueAt: number | null;
+  /** Which project it belongs to; null is "No project". */
+  projectDir: string | null;
+  tags: string[];
+  priority: TaskPriority;
+  /** Set when a session is started from this task, cleared by hand. Completion
+   *  stays an explicit decision — nothing Claude does ever sets `done`. */
+  inProgress: boolean;
+  createdAt: number;
+  updatedAt: number;
+  /** Ids of sessions started from, or linked to, this task. */
+  sessionIds: string[];
 }
 
 // --- App settings (theme selection + custom themes) ---
@@ -186,8 +242,7 @@ export interface AppSettings {
   autoSleepMinutes: number;
   /** How often the sidebar re-reads token usage from disk, in seconds. */
   usageRefreshSeconds: number;
-  /** Hide the sidebar's search field and status chips, leaving the session
-   *  list and a 4px spectrum of what everything is doing. For someone who
-   *  knows their sessions by name and filters from the command palette. */
+  /** Hide the session list's secondary line (project, activity, elapsed),
+   *  leaving one name per row. For someone who knows their sessions by name. */
   compactList: boolean;
 }

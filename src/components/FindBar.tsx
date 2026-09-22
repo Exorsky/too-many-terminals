@@ -114,27 +114,27 @@ export default function FindBar({ scrollRef }: { scrollRef: React.RefObject<HTML
         }}
         className="w-40 bg-transparent border-none outline-none text-[12px] text-foreground placeholder:text-muted-foreground"
       />
-      <span className={cn('shrink-0 tabular-nums text-[11px] mr-0.5', total === 0 && query ? 'text-warning' : 'text-muted-foreground')}>
+      <span className={cn('shrink-0 font-mono tabular-nums text-[11px] mr-0.5', total === 0 && query ? 'text-warning' : 'text-muted-foreground')}>
         {query ? `${total ? index + 1 : 0}/${total}` : ''}
       </span>
       <button
         onClick={() => step(-1)}
         title="Previous (Shift+Enter)"
-        className="flex items-center justify-center w-6 h-6 rounded text-muted-foreground hover:text-foreground hover:bg-white/[0.07] cursor-pointer bg-transparent border-none"
+        className="flex items-center justify-center w-6 h-6 rounded text-muted-foreground hover:text-foreground hover:bg-selected cursor-pointer bg-transparent border-none"
       >
         <ChevronUp size={13} />
       </button>
       <button
         onClick={() => step(1)}
         title="Next (Enter)"
-        className="flex items-center justify-center w-6 h-6 rounded text-muted-foreground hover:text-foreground hover:bg-white/[0.07] cursor-pointer bg-transparent border-none"
+        className="flex items-center justify-center w-6 h-6 rounded text-muted-foreground hover:text-foreground hover:bg-selected cursor-pointer bg-transparent border-none"
       >
         <ChevronDown size={13} />
       </button>
       <button
         onClick={close}
         title="Close (Esc)"
-        className="flex items-center justify-center w-6 h-6 rounded text-muted-foreground hover:text-foreground hover:bg-white/[0.07] cursor-pointer bg-transparent border-none"
+        className="flex items-center justify-center w-6 h-6 rounded text-muted-foreground hover:text-foreground hover:bg-selected cursor-pointer bg-transparent border-none"
       >
         <X size={13} />
       </button>

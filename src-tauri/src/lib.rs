@@ -13,6 +13,7 @@ mod session_stats;
 mod session_transfer;
 mod session_usage;
 mod settings;
+mod tasks;
 mod shell;
 mod workspace;
 
@@ -68,6 +69,9 @@ pub fn run() {
             commands::get_session_usage_stats,
             commands::load_workspace,
             commands::save_workspace,
+            commands::create_scratch_dir,
+            commands::load_tasks,
+            commands::save_tasks,
             commands::load_settings,
             commands::save_settings,
             commands::uninstall_hooks,

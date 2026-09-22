@@ -120,7 +120,7 @@ function TestNotificationButton() {
       <div className="flex items-center gap-3">
         <button
           onClick={send}
-          className="px-2.5 py-1.5 rounded-sm border border-border bg-card text-foreground text-[11px] cursor-pointer hover:bg-white/5 hover:border-border-hover font-inherit"
+          className="px-2.5 py-1.5 rounded-sm border border-border bg-card text-foreground text-[11px] cursor-pointer hover:bg-raised hover:border-border-hover font-inherit"
         >
           Send a test notification
         </button>
@@ -163,7 +163,7 @@ function InterfaceCategory() {
       />
       <SettingRow
         title="Compact session list"
-        description="Drop the sidebar's search field and status chips. A 4px spectrum above the list keeps the proportion of waiting, running and sleeping sessions; filter from the command palette instead."
+        description="One line per session in the sidebar: the name and its status dot, with no second line for what Claude is doing right now."
         checked={settings.compactList}
         onChange={(v) => patchSettings({ compactList: v })}
       />
@@ -236,7 +236,7 @@ export default function SettingsView() {
                 className={cn(
                   'relative flex items-center gap-2 w-[calc(100%-12px)] mx-1.5 mb-0.5 px-2.5 py-1.5 rounded-sm text-[11.5px] cursor-pointer',
                   'bg-transparent border-none font-inherit transition-colors duration-100',
-                  isActive ? 'text-foreground bg-white/6' : 'text-muted-foreground hover:text-foreground hover:bg-white/4',
+                  isActive ? 'text-foreground bg-raised' : 'text-muted-foreground hover:text-foreground hover:bg-hover',
                 )}
                 onClick={() => setCategory(id)}
               >

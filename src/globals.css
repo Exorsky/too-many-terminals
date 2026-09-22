@@ -30,6 +30,22 @@
   --color-warning-foreground: var(--warning-foreground);
   --color-attention: var(--attention);
   --color-usage: var(--usage);
+  /* The text ladder below `foreground`. Four tiers, no ad-hoc opacities:
+     dim = row titles and body, muted-foreground = metadata, faint = the
+     punctuation between metadata (never a word you have to read). */
+  --color-dim: var(--dim);
+  --color-faint: var(--faint);
+  /* The three row states. Every hoverable row, button and tab uses these and
+     nothing else — before this there were fourteen slightly different whites. */
+  --color-hover: var(--hover);
+  --color-selected: var(--selected);
+  --color-selected-hover: var(--selected-hover);
+  --color-raised: var(--raised);
+  /* Two faces now, where there used to be one. The chrome moved to the system
+     sans so the terminal is the only monospaced thing on screen — numbers that
+     have to line up (timestamps, counts, paths) opt back in with `font-mono`. */
+  --font-sans: ui-sans-serif, -apple-system, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, monospace;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -38,32 +54,41 @@
 
 :root {
   --radius: 0.25rem;
-  --background: #0c0d10;
-  --foreground: #e7e8ec;
-  --card: #121319;
-  --card-foreground: #e7e8ec;
-  --popover: #121319;
-  --popover-foreground: #e7e8ec;
-  --primary: #7c9eff;
-  --primary-foreground: #0c0d10;
-  --secondary: #1a1c22;
-  --secondary-foreground: #e7e8ec;
-  --muted: #15161b;
-  --muted-foreground: #666b78;
-  --accent: #181a20;
-  --accent-foreground: #e7e8ec;
-  --destructive: #ff6b6b;
-  --destructive-foreground: #0c0d10;
-  --border: #23252d;
-  --border-hover: #33363f;
-  --input: #23252d;
-  --ring: #7c9eff;
-  --success: #8bd17c;
-  --success-foreground: #0c0d10;
-  --warning: #f0b357;
-  --warning-foreground: #0c0d10;
-  --attention: #ff9f5a;
-  --usage: #7c9eff;
+  --background: #0a0a0c;
+  --foreground: #e9e9ee;
+  --card: #101014;
+  --card-foreground: #e9e9ee;
+  --popover: #101014;
+  --popover-foreground: #e9e9ee;
+  --primary: #8b7df7;
+  --primary-foreground: #0a0a0c;
+  --secondary: #18181a;
+  --secondary-foreground: #e9e9ee;
+  --muted: #131315;
+  --muted-foreground: #7c7c87;
+  --accent: #161618;
+  --accent-foreground: #e9e9ee;
+  --destructive: #e5534b;
+  --destructive-foreground: #0a0a0c;
+  --border: #1e1e24;
+  --border-hover: #303036;
+  --input: #1e1e24;
+  --ring: #8b7df7;
+  --success: #45b96a;
+  --success-foreground: #0a0a0c;
+  --warning: #d9a441;
+  --warning-foreground: #0a0a0c;
+  --attention: #df7c46;
+  --usage: #8b7df7;
+  /* Derived by `cssVars()` per theme; these are the Default theme's values, so
+     the shell is correct before `applyTheme` runs. Keep them in step with
+     DEFAULT_THEME — `themes.test.ts` asserts the pair. */
+  --dim: #ababaf;
+  --faint: #494950;
+  --hover: rgba(255, 255, 255, 0.04);
+  --selected: rgba(255, 255, 255, 0.075);
+  --selected-hover: rgba(255, 255, 255, 0.095);
+  --raised: rgba(255, 255, 255, 0.055);
 
   /* Project tint (set from React based on active project) */
   --project-hue: 0;
@@ -75,7 +100,8 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-family: ui-monospace, 'Cascadia Code', 'JetBrains Mono', Consolas, monospace;
+    font-family: var(--font-sans);
+    font-size: 13px;
     height: 100vh;
     overflow: hidden;
     margin: 0;
@@ -86,21 +112,43 @@
   body.tab-dragging [data-terminal-area] {
     pointer-events: none;
   }
+  /* Keyboard focus is restyled, never removed. Inset by 1px so a ring on a
+     26px row doesn't clip against the row above it. A component that wants a
+     different treatment still opts out with `outline-none` — utilities win
+     over base. */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: -1px;
+  }
 }
 
+/* Quiet scrollbars: a 3px inset keeps the thumb visually thin without
+   shrinking the hit target, and it only gains contrast once you're over the
+   list it belongs to. A sidebar of 40 sessions shouldn't advertise its own
+   scrollbar. */
 .scrollbar-thin {
   scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
+  scrollbar-color: var(--raised) transparent;
+}
+.scrollbar-thin:hover {
+  scrollbar-color: var(--border-hover) transparent;
 }
 .scrollbar-thin::-webkit-scrollbar {
-  width: 8px;
+  width: 9px;
+  height: 9px;
 }
 .scrollbar-thin::-webkit-scrollbar-thumb {
-  background-color: var(--border);
-  border-radius: 8px;
+  background-color: var(--raised);
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: 9px;
+}
+.scrollbar-thin:hover::-webkit-scrollbar-thumb {
+  background-color: var(--border-hover);
 }
 .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-  background-color: var(--border-hover);
+  background-color: var(--muted-foreground);
+  border-width: 2px;
 }
 .scrollbar-thin::-webkit-scrollbar-track {
   background: transparent;

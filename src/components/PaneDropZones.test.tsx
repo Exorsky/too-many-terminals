@@ -2,16 +2,30 @@ import { cleanup, createEvent, fireEvent, render, screen } from '@testing-librar
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Tab } from '@/types';
 import PaneDropZones from './PaneDropZones';
-import TabBar from './TabBar';
-import { isPaneDrag, FILE_MIME, TAB_MIME } from '@/lib/dnd';
+import { isPaneDrag, FILE_MIME, TAB_MIME, VIEW_MIME } from '@/lib/dnd';
 
 afterEach(cleanup);
 
 function makeTab(id: string): Tab {
   return {
     id, kind: 'shell', name: id, shellId: 'powershell', cwd: `/proj/${id}`,
-    resumeSessionId: null, exited: false, status: 'new',
+    projectDir: `/proj/${id}`, resumeSessionId: null, exited: false, status: 'new',
   };
+}
+
+/** A drag source shaped like the sidebar's session row: a React `onDragStart`
+ *  that calls `setData`. Standing in for the real row rather than importing it
+ *  keeps this test about event *phase*, which is the thing that broke. */
+function DragSource({ tab }: { tab: Tab }) {
+  return (
+    <div
+      draggable
+      title={tab.cwd}
+      onDragStart={(e) => e.dataTransfer.setData(TAB_MIME, tab.id)}
+    >
+      {tab.name}
+    </div>
+  );
 }
 
 /** A dataTransfer whose `types` grows as `setData` is called, like the real one. */
@@ -40,15 +54,7 @@ describe('drag start propagation', () => {
     window.addEventListener('dragstart', onCapture, true);
     window.addEventListener('dragstart', onBubble, false);
 
-    render(
-      <TabBar
-        tabs={[makeTab('a')]}
-        activeTabId="a"
-        onSelectTab={vi.fn()}
-        onCloseTab={vi.fn()}
-        onReorderTab={vi.fn()}
-      />,
-    );
+    render(<DragSource tab={makeTab('a')} />);
     fireEvent.dragStart(screen.getByTitle('/proj/a'), { dataTransfer });
 
     window.removeEventListener('dragstart', onCapture, true);
@@ -63,16 +69,15 @@ describe('PaneDropZones', () => {
   const canSplit = { vertical: true, horizontal: true };
 
   function setup(props: Partial<React.ComponentProps<typeof PaneDropZones>> = {}) {
-    const onDropTab = vi.fn();
-    const onDropFile = vi.fn();
+    const onDropContent = vi.fn();
     const { container } = render(
-      <PaneDropZones canSplit={canSplit} onDropTab={onDropTab} onDropFile={onDropFile} {...props} />,
+      <PaneDropZones canSplit={canSplit} onDropContent={onDropContent} {...props} />,
     );
     const zone = container.firstElementChild as HTMLElement;
     Object.defineProperty(zone, 'getBoundingClientRect', {
       value: () => ({ left: 0, top: 0, width: 400, height: 200, right: 400, bottom: 200 }),
     });
-    return { zone, onDropTab, onDropFile, container };
+    return { zone, onDropContent, container };
   }
 
   const drag = (zone: HTMLElement, type: 'dragOver' | 'drop', x: number, y: number, dataTransfer: unknown) => {
@@ -82,18 +87,30 @@ describe('PaneDropZones', () => {
     fireEvent(zone, event);
   };
 
-  it('splits on an edge drop and moves on a centre drop', () => {
-    const { zone, onDropTab } = setup();
+  it('splits on an edge drop and shows it here on a centre drop', () => {
+    const { zone, onDropContent } = setup();
     const dataTransfer = fakeDataTransfer({ [TAB_MIME]: 'tab-7' });
 
     drag(zone, 'dragOver', 390, 100, dataTransfer);
     drag(zone, 'drop', 390, 100, dataTransfer);
-    expect(onDropTab).toHaveBeenCalledWith('tab-7', 'right');
+    expect(onDropContent).toHaveBeenCalledWith({ kind: 'session', sessionId: 'tab-7', tool: 'claude' }, 'right');
 
-    onDropTab.mockClear();
+    onDropContent.mockClear();
     drag(zone, 'dragOver', 200, 100, dataTransfer);
     drag(zone, 'drop', 200, 100, dataTransfer);
-    expect(onDropTab).toHaveBeenCalledWith('tab-7', 'center');
+    expect(onDropContent).toHaveBeenCalledWith({ kind: 'session', sessionId: 'tab-7', tool: 'claude' }, 'center');
+  });
+
+  it('carries the tool when a tool tab is what was dragged', () => {
+    // This is what makes "Claude here, its shell next door" expressible: the
+    // pane is given a view, not a session.
+    const { zone, onDropContent } = setup();
+    const dataTransfer = fakeDataTransfer({
+      [VIEW_MIME]: JSON.stringify({ sessionId: 'tab-7', tool: 'shell' }),
+    });
+    drag(zone, 'dragOver', 390, 100, dataTransfer);
+    drag(zone, 'drop', 390, 100, dataTransfer);
+    expect(onDropContent).toHaveBeenCalledWith({ kind: 'session', sessionId: 'tab-7', tool: 'shell' }, 'right');
   });
 
   it('highlights the half the pane will become', () => {
@@ -116,35 +133,33 @@ describe('PaneDropZones', () => {
   });
 
   it('asks for an effect the drag source actually allows', () => {
-    // effectAllowed='copy' from the file explorer against dropEffect='move'
-    // makes the browser cancel the drop: no drop event, just a no-drop cursor.
-    // Files never reached a pane because of exactly this.
+    // A source that set effectAllowed='copy' against dropEffect='move' makes
+    // the browser cancel the drop outright: no drop event, just a no-drop
+    // cursor. Every pane drag is a move, so this is now unconditional.
     const { zone } = setup();
-
-    const tabDrag = fakeDataTransfer({ [TAB_MIME]: 'tab-7' });
-    drag(zone, 'dragOver', 200, 100, tabDrag);
-    expect(tabDrag.dropEffect).toBe('move');
-
-    const fileDrag = fakeDataTransfer({ [FILE_MIME]: '{}' });
-    drag(zone, 'dragOver', 200, 100, fileDrag);
-    expect(fileDrag.dropEffect).toBe('copy');
+    const viewDrag = fakeDataTransfer({ [TAB_MIME]: 'tab-7' });
+    drag(zone, 'dragOver', 200, 100, viewDrag);
+    expect(viewDrag.dropEffect).toBe('move');
   });
 
-  it('opens a dropped file, carrying its project folder', () => {
-    const { zone, onDropFile } = setup();
+  it('takes a file dragged out of the explorer, carrying its project folder', () => {
+    // A file is pane content in its own right, not a property of a session —
+    // which is what lets it sit next to a terminal it has nothing to do with.
+    const { zone, onDropContent } = setup();
     const dataTransfer = fakeDataTransfer({
       [FILE_MIME]: JSON.stringify({ dir: '/proj', path: '/proj/src/App.tsx' }),
     });
     drag(zone, 'dragOver', 10, 100, dataTransfer);
     drag(zone, 'drop', 10, 100, dataTransfer);
-    expect(onDropFile).toHaveBeenCalledWith({ dir: '/proj', path: '/proj/src/App.tsx' }, 'left');
+    expect(onDropContent).toHaveBeenCalledWith(
+      { kind: 'file', dir: '/proj', path: '/proj/src/App.tsx' }, 'left',
+    );
   });
 
   it('ignores a malformed payload instead of throwing', () => {
-    const { zone, onDropFile, onDropTab } = setup();
-    const dataTransfer = fakeDataTransfer({ [FILE_MIME]: 'not json' });
+    const { zone, onDropContent } = setup();
+    const dataTransfer = fakeDataTransfer({ [VIEW_MIME]: 'not json' });
     expect(() => drag(zone, 'drop', 200, 100, dataTransfer)).not.toThrow();
-    expect(onDropFile).not.toHaveBeenCalled();
-    expect(onDropTab).not.toHaveBeenCalled();
+    expect(onDropContent).not.toHaveBeenCalled();
   });
 });

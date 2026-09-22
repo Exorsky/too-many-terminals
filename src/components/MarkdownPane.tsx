@@ -69,7 +69,7 @@ export default function MarkdownPane({
           </span>
         )}
         {turnsCount !== null && (
-          <span className="font-mono text-[10px] text-muted-foreground tabular-nums">{turnsCount} turns</span>
+          <span className="font-mono text-[10px] text-muted-foreground font-mono tabular-nums">{turnsCount} turns</span>
         )}
         <span className="flex-1" />
         <div className="flex items-center gap-0.5 p-0.5 rounded-md border border-border bg-background">
@@ -93,7 +93,7 @@ export default function MarkdownPane({
         <button
           onClick={onRefresh}
           title="Re-read (a live session keeps growing)"
-          className="flex items-center justify-center w-[26px] h-[26px] rounded-md text-muted-foreground hover:text-foreground hover:bg-white/[0.07] cursor-pointer bg-card border border-border"
+          className="flex items-center justify-center w-[26px] h-[26px] rounded-md text-muted-foreground hover:text-foreground hover:bg-selected cursor-pointer bg-card border border-border"
         >
           <RefreshCw size={12} />
         </button>

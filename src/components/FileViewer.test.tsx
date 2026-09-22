@@ -19,6 +19,7 @@ function makeTab(path: string, overrides: Partial<Tab> = {}): Tab {
     name: path.split('/').pop()!,
     shellId: null,
     cwd: '/proj',
+    projectDir: '/proj',
     resumeSessionId: null,
     exited: false,
     status: 'new',

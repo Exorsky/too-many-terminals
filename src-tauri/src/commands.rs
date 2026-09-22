@@ -355,6 +355,29 @@ pub fn save_workspace(state: WorkspaceState) -> Result<(), String> {
     workspace::save_workspace(&root, &state)
 }
 
+/// Creates (idempotently) this session's own scratch working directory —
+/// the one ⌘N spawns Claude in when there's no project involved. See
+/// docs/features/scratch-sessions.md.
+#[tauri::command(async)]
+pub fn create_scratch_dir(session_id: String) -> Result<String, String> {
+    let home = dirs::home_dir().ok_or("could not resolve home directory")?;
+    workspace::create_scratch_dir(&home, &session_id)
+}
+
+#[tauri::command(async)]
+pub fn load_tasks() -> Vec<serde_json::Value> {
+    let Some(root) = workspace::config_dir() else {
+        return Vec::new();
+    };
+    crate::tasks::load_tasks(&root)
+}
+
+#[tauri::command(async)]
+pub fn save_tasks(tasks: Vec<serde_json::Value>) -> Result<(), String> {
+    let root = workspace::config_dir().ok_or("could not resolve config directory")?;
+    crate::tasks::save_tasks(&root, &tasks)
+}
+
 #[tauri::command(async)]
 pub fn load_settings() -> AppSettings {
     let Some(root) = workspace::config_dir() else {

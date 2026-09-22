@@ -145,7 +145,7 @@ export default function Markdown({ source, onOpenLink }: MarkdownProps) {
     },
 
     code: ({ children }) => (
-      <code className="font-mono text-[0.85em] px-1 py-px rounded-[3px] bg-white/[0.05] border border-border text-[#c792ea]">
+      <code className="font-mono text-[0.85em] px-1 py-px rounded-[3px] bg-raised border border-border text-[#c792ea]">
         {children}
       </code>
     ),
@@ -195,7 +195,7 @@ export default function Markdown({ source, onOpenLink }: MarkdownProps) {
         <table className="w-full border-collapse text-[13px]">{children}</table>
       </div>
     ),
-    thead: ({ children }) => <thead className="bg-white/[0.03]">{children}</thead>,
+    thead: ({ children }) => <thead className="bg-hover">{children}</thead>,
     tr: ({ children }) => <tr className="border-b border-border last:border-b-0">{children}</tr>,
     th: ({ children, style }) => (
       <th style={style} className="px-3 py-1.5 font-semibold text-foreground whitespace-nowrap text-left">

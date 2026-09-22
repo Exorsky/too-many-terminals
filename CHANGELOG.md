@@ -11,6 +11,47 @@ listed here; see `git log` for the full history.
 
 ## [Unreleased]
 
+### Changed
+
+- **The interface has a second typeface.** Chrome moved to the system sans;
+  the terminal — and anything that lines up in a column, so timestamps, counts,
+  durations, paths and key hints — stays monospace. Making the terminal the only
+  monospaced surface is what marks it as the content. Nothing about terminal
+  rendering changed.
+- **A new default palette.** Darker ground (`#0a0a0c`), violet accent
+  (`#8b7df7`). The blue palette the app shipped with through 0.24 is still
+  there as the **Classic blue** preset in Settings → Customize, and any theme
+  you made yourself is untouched.
+- **On macOS the mode row is now the title bar.** Sessions/To-Do sit centred in
+  it, with the sidebar toggle on the left and ⌘K on the right, so the window
+  spends one 32px row on chrome instead of two. The traffic lights stay native.
+  Windows and Linux keep their normal window frame.
+
+- **The chrome reads as three tiers instead of one.** Session and task names now
+  sit a step above their own timestamps, counts and status text, so a long list
+  scans by name rather than as a wall of equal-weight text. The row states that
+  carry selection and hover were fourteen slightly different shades of white
+  across the app; they're four now, shared by every row, button and tab, and
+  they follow whichever theme you have on.
+- **Empty To-Do lists answer the filter you're looking at** — "Nothing due
+  today" under Today, "No unassigned tasks" under No project — instead of
+  reading the filter's own name back at you. The state sits centred in the list
+  with one way out.
+- **The active mode is marked, not just tinted.** Sessions and To-Do carry an
+  accent underline when they're the one you're on; a background tint alone
+  looked like one more hover state.
+- **Scrollbars stay out of the way.** Thin and nearly invisible until you're
+  over the list they belong to, so a sidebar of forty sessions stops
+  advertising its own scrollbar.
+
+### Fixed
+
+- **Keyboard focus is visible again throughout.** Custom buttons and rows drew
+  no focus ring at all, which made the app unusable without a mouse in places;
+  everything now gets the accent ring unless it deliberately styles its own.
+- **Muted text meets contrast minimums.** Metadata, counts and section labels
+  were drawn at opacities that fell as low as 1.7:1 against the background.
+
 ## [0.24.0] - 2026-09-14
 
 ### Added

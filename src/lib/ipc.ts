@@ -226,6 +226,23 @@ export function saveWorkspace(state: WorkspaceState): Promise<void> {
   return invoke('save_workspace', { state });
 }
 
+/** Creates (idempotently) a scratch session's own working directory under
+ *  `~/.tmt/scratch`, returning its absolute path — see
+ *  docs/features/scratch-sessions.md. */
+export function createScratchDir(sessionId: string): Promise<string> {
+  return invoke('create_scratch_dir', { sessionId });
+}
+
+/** To-Dos, stored opaquely by the backend — the shape is owned by
+ *  `src/lib/tasks.ts`, which validates on load. */
+export function loadTasks(): Promise<unknown[]> {
+  return invoke('load_tasks');
+}
+
+export function saveTasks(tasks: unknown[]): Promise<void> {
+  return invoke('save_tasks', { tasks });
+}
+
 export function loadSettings(): Promise<AppSettings> {
   return invoke('load_settings');
 }

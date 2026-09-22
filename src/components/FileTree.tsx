@@ -1,8 +1,8 @@
 import { useEffect, useState, type DragEvent } from 'react';
 import { ChevronRight, File, Folder } from 'lucide-react';
+import { FILE_MIME } from '@/lib/dnd';
 import { cn } from '@/lib/utils';
 import * as ipc from '@/lib/ipc';
-import { FILE_MIME } from '@/lib/dnd';
 import type { DirEntry } from '@/lib/ipc';
 import { usePollWhileFocused } from '@/lib/use-poll';
 
@@ -14,16 +14,16 @@ function sameListing(a: DirEntry[], b: DirEntry[]): boolean {
     && a.every((entry, i) => entry.path === b[i].path && entry.isDir === b[i].isDir);
 }
 
-/** Marks a file row as draggable into a pane. Directories aren't draggable —
- *  there is nothing to open. The payload carries the project folder as well as
- *  the path, because a file tab needs a cwd and the drop target has no way to
- *  work out which project a path belongs to. */
+/** Marks a file row as draggable onto the workspace. Directories aren't
+ *  draggable — there is nothing to open. The payload carries the project
+ *  folder as well as the path, because the pane that receives it has no way
+ *  to work out which project a path belongs to. */
 function fileDragProps(rootDir: string, path: string, isDir: boolean) {
   if (isDir) return {};
   return {
     draggable: true,
     onDragStart: (e: DragEvent) => {
-      e.dataTransfer.effectAllowed = 'copy';
+      e.dataTransfer.effectAllowed = 'move';
       e.dataTransfer.setData(FILE_MIME, JSON.stringify({ dir: rootDir, path }));
     },
   };
@@ -64,13 +64,13 @@ function Node({ entry, depth, rootDir, defaultOpen, activePath, onOpen }: NodePr
     <>
       <button
         type="button"
-        {...fileDragProps(rootDir, entry.path, entry.isDir)}
         className={cn(
           'flex items-center gap-1.5 w-[calc(100%-8px)] mx-1 my-0.5 px-1.5 py-[3px] rounded-sm text-left',
-          'text-[11px] text-muted-foreground hover:text-foreground hover:bg-white/4 border-none bg-transparent cursor-pointer font-inherit',
-          entry.path === activePath && 'text-foreground bg-white/8',
+          'text-[11px] text-muted-foreground hover:text-foreground hover:bg-hover border-none bg-transparent cursor-pointer font-inherit',
+          entry.path === activePath && 'text-foreground bg-selected',
         )}
         style={{ paddingLeft: 6 + depth * 12 }}
+        {...fileDragProps(rootDir, entry.path, entry.isDir)}
         onClick={() => {
           if (!entry.isDir) { onOpen(entry.path); return; }
           setOpen((v) => {
@@ -84,7 +84,7 @@ function Node({ entry, depth, rootDir, defaultOpen, activePath, onOpen }: NodePr
         title={entry.name}
       >
         {entry.isDir ? (
-          <ChevronRight size={10} className={cn('shrink-0 text-muted-foreground/60 transition-transform duration-150', open && 'rotate-90')} />
+          <ChevronRight size={10} className={cn('shrink-0 text-muted-foreground transition-transform duration-150', open && 'rotate-90')} />
         ) : (
           <span className="w-[10px] shrink-0" />
         )}

@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { File, FolderTree, Pin, PinOff, Search } from 'lucide-react';
+import { FILE_MIME } from '@/lib/dnd';
 import { cn, folderName } from '@/lib/utils';
 import { searchFiles, type FileMatch } from '@/lib/file-search';
 import FileTree from './FileTree';
-import { FILE_MIME } from '@/lib/dnd';
 
 interface FileExplorerPanelProps {
   projects: string[];
@@ -84,7 +84,7 @@ export default function FileExplorerPanel({
             title={pinned ? 'Unpin files' : 'Pin files'}
             className={cn(
               'flex items-center justify-center w-5 h-5 ml-auto shrink-0 rounded-sm border-none cursor-pointer',
-              pinned ? 'text-primary bg-primary/15' : 'bg-transparent text-muted-foreground hover:text-foreground hover:bg-white/8',
+              pinned ? 'text-primary bg-primary/15' : 'bg-transparent text-muted-foreground hover:text-foreground hover:bg-selected',
             )}
             onClick={onTogglePin}
           >
@@ -98,7 +98,7 @@ export default function FileExplorerPanel({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Find files"
-          className="flex-1 min-w-0 bg-transparent border-none outline-none text-[11px] text-foreground placeholder:text-muted-foreground/70 font-inherit"
+          className="flex-1 min-w-0 bg-transparent border-none outline-none text-[11px] text-foreground placeholder:text-muted-foreground font-inherit"
         />
       </div>
       <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-thin py-1">
@@ -114,13 +114,13 @@ export default function FileExplorerPanel({
                 type="button"
                 draggable
                 onDragStart={(e) => {
-                  e.dataTransfer.effectAllowed = 'copy';
+                  e.dataTransfer.effectAllowed = 'move';
                   e.dataTransfer.setData(FILE_MIME, JSON.stringify({ dir: m.root, path: m.path }));
                 }}
                 className={cn(
                   'flex items-center gap-1.5 w-[calc(100%-8px)] mx-1 my-0.5 px-2 py-1 rounded-sm text-left',
-                  'text-[11px] text-muted-foreground hover:text-foreground hover:bg-white/4 border-none bg-transparent cursor-pointer font-inherit',
-                  m.path === activePath && 'text-foreground bg-white/8',
+                  'text-[11px] text-muted-foreground hover:text-foreground hover:bg-hover border-none bg-transparent cursor-pointer font-inherit',
+                  m.path === activePath && 'text-foreground bg-selected',
                 )}
                 onClick={() => onOpenFile(m.root, m.path)}
                 title={m.path}

@@ -43,7 +43,7 @@ export default function SessionControls({ mode, splitDirection, onSetMode, onSet
           'flex items-center justify-center w-6 h-6 rounded-sm cursor-pointer border-none font-inherit transition-colors',
           mode === 'markdown'
             ? 'bg-secondary text-[#6fd4c9]'
-            : 'bg-transparent text-muted-foreground hover:text-foreground hover:bg-white/[0.07]',
+            : 'bg-transparent text-muted-foreground hover:text-foreground hover:bg-selected',
           splitActive && 'opacity-35 cursor-not-allowed hover:bg-transparent hover:text-muted-foreground',
         )}
       >
@@ -60,7 +60,7 @@ export default function SessionControls({ mode, splitDirection, onSetMode, onSet
               'flex items-center justify-center w-6 h-6 rounded-sm cursor-pointer border-none font-inherit transition-colors',
               splitActive
                 ? 'bg-secondary text-[#6fd4c9]'
-                : 'bg-transparent text-muted-foreground hover:text-foreground hover:bg-white/[0.07]',
+                : 'bg-transparent text-muted-foreground hover:text-foreground hover:bg-selected',
             )}
           >
             <Columns2 size={13} />
