@@ -286,6 +286,25 @@ pub fn delete_session(project_dir: String, session_id: String) -> Result<(), Str
     crate::session_history::delete_session(&root, &project_dir, &session_id)
 }
 
+/// Full-text search across every transcript under ~/.claude/projects.
+///
+/// All projects, not just the open ones: the session you half-remember is
+/// usually in a folder you closed months ago, which is exactly when search
+/// beats scrolling. A flat scan — see `search_transcripts` for why there is no
+/// index.
+#[tauri::command(async)]
+pub fn search_transcripts(
+    query: String,
+    limit: Option<usize>,
+) -> Result<Vec<crate::session_history::TranscriptHit>, String> {
+    let root = projects_root().ok_or("could not resolve home directory")?;
+    Ok(crate::session_history::search_transcripts(
+        &root,
+        &query,
+        limit.unwrap_or(60),
+    ))
+}
+
 #[tauri::command(async)]
 pub fn read_transcript(
     project_dir: String,

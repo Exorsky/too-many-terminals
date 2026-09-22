@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowRight, CalendarDays, FileText, History, Loader2, Search, Trash2, Upload, X } from 'lucide-react';
-import { projectHue, type SessionHistoryEntry } from '@/types';
+import { projectHue, type SessionHistoryEntry, type TranscriptHit } from '@/types';
 import { relativeTime } from '@/lib/relative-time';
 import { calendarMonths, dayKey, type CalendarMark } from '@/lib/stats';
 import * as ipc from '@/lib/ipc';
@@ -8,6 +8,9 @@ import { cn, folderName } from '@/lib/utils';
 import SessionCalendar from './SessionCalendar';
 
 interface HistoryEntry extends SessionHistoryEntry {
+  /** Set when the query matched inside the transcript rather than its
+   *  metadata — the row then shows the matching text instead of the preview. */
+  hit?: TranscriptHit;
   /** Which open project this session belongs to. */
   projectDir: string;
 }
@@ -82,6 +85,12 @@ export default function SessionHistoryPanel({ projects, sessionNames, onResume, 
   const [dayFilter, setDayFilter] = useState<string | null>(null);
   const [showCalendar, setShowCalendar] = useState(true);
   const [activeIndex, setActiveIndex] = useState(-1);
+  // Content hits arrive separately from the metadata filter below: that one is
+  // instant and local, this one crosses to Rust and reads every transcript on
+  // disk. Keeping them apart is what lets the list respond on the first
+  // keystroke instead of waiting for the scan.
+  const [hits, setHits] = useState<TranscriptHit[]>([]);
+  const [searching, setSearching] = useState(false);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
   const rowRefs = useRef(new Map<string, HTMLDivElement>());
@@ -102,20 +111,64 @@ export default function SessionHistoryPanel({ projects, sessionNames, onResume, 
     return () => { cancelled = true; };
   }, [projects]);
 
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 2) {
+      setHits([]);
+      setSearching(false);
+      return;
+    }
+    let cancelled = false;
+    setSearching(true);
+    // Debounced, because every keystroke would otherwise re-read the corpus.
+    const timer = setTimeout(() => {
+      ipc.searchTranscripts(q)
+        .then((found) => { if (!cancelled) setHits(found); })
+        .catch(() => { if (!cancelled) setHits([]); })
+        .finally(() => { if (!cancelled) setSearching(false); });
+    }, 220);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [query]);
+
   // Split in two: the calendar draws `searched`, so picking a day never empties
   // the grid you picked it from, while the list draws that minus the day.
   const searched = useMemo(() => {
     if (!entries) return [];
     const q = query.trim().toLowerCase();
-    return entries.filter((entry) => {
-      if (projectFilter !== 'all' && entry.projectDir !== projectFilter) return false;
-      if (!q) return true;
-      const name = sessionNames[entry.sessionId];
-      return entry.preview.toLowerCase().includes(q)
-        || folderName(entry.projectDir).toLowerCase().includes(q)
-        || !!name?.toLowerCase().includes(q);
-    });
-  }, [entries, query, projectFilter, sessionNames]);
+    const byId = new Map(hits.map((h) => [h.sessionId, h]));
+
+    const matched = entries
+      .map((entry): HistoryEntry => {
+        const hit = byId.get(entry.sessionId);
+        return hit ? { ...entry, hit } : entry;
+      })
+      .filter((entry) => {
+        if (projectFilter !== 'all' && entry.projectDir !== projectFilter) return false;
+        if (!q) return true;
+        const name = sessionNames[entry.sessionId];
+        return !!entry.hit
+          || entry.preview.toLowerCase().includes(q)
+          || folderName(entry.projectDir).toLowerCase().includes(q)
+          || !!name?.toLowerCase().includes(q);
+      });
+
+    // A hit can name a project that isn't open, and those are the ones worth
+    // finding — the session you half-remember usually lives in a folder you
+    // closed months ago. Carry them in as first-class rows.
+    const known = new Set(entries.map((e) => e.sessionId));
+    const foreign = hits
+      .filter((h) => !known.has(h.sessionId))
+      .filter((h) => projectFilter === 'all' || h.projectDir === projectFilter)
+      .map((h): HistoryEntry => ({
+        sessionId: h.sessionId,
+        projectDir: h.projectDir,
+        preview: h.snippet,
+        lastUsedIso: h.lastUsedIso,
+        hit: h,
+      }));
+
+    return [...matched, ...foreign].sort((a, b) => b.lastUsedIso.localeCompare(a.lastUsedIso));
+  }, [entries, hits, query, projectFilter, sessionNames]);
 
   const filteredEntries = useMemo(
     () => (dayFilter ? searched.filter((e) => dayKey(e.lastUsedIso) === dayFilter) : searched),
@@ -268,11 +321,16 @@ export default function SessionHistoryPanel({ projects, sessionNames, onResume, 
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search sessions or folders…"
+              placeholder="Search names, folders and transcripts…"
               autoComplete="off"
               spellCheck={false}
               className="flex-1 min-w-0 bg-transparent border-none outline-none text-[12px] text-foreground placeholder:text-muted-foreground font-inherit"
             />
+            {!searching && hits.length > 0 && (
+              <span className="shrink-0 font-mono tabular-nums text-[10px] text-muted-foreground">
+                {hits.length} in text
+              </span>
+            )}
             {query && (
               <button
                 className="text-muted-foreground hover:text-foreground bg-transparent border-none cursor-pointer p-0.5 rounded-sm shrink-0"
@@ -330,6 +388,24 @@ export default function SessionHistoryPanel({ projects, sessionNames, onResume, 
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {/* The transcript scan is the one thing here that isn't instant, and while
+          it runs the list shows only the metadata matches — so without this the
+          honest reading of a thin list is "nothing else exists", not "still
+          looking". An indeterminate bar rather than a percentage: the scan has
+          no meaningful progress to report. */}
+      {searching && (
+        <div
+          className="flex items-center gap-2 px-4 py-1.5 border-b border-border shrink-0 overflow-hidden"
+          role="status"
+          aria-live="polite"
+        >
+          <span className="relative w-6 h-px shrink-0 bg-border overflow-hidden">
+            <span className="absolute inset-y-0 w-1/2 bg-primary animate-[history-scan_1s_ease-in-out_infinite]" />
+          </span>
+          <span className="text-[11px] text-muted-foreground">Searching transcripts…</span>
         </div>
       )}
 
@@ -435,6 +511,14 @@ export default function SessionHistoryPanel({ projects, sessionNames, onResume, 
                       )}>
                         {highlightMatch(entry.preview, query)}
                       </div>
+                      {entry.hit && entry.hit.snippet !== entry.preview && (
+                        <div className="flex gap-2 min-w-0">
+                          <span className="w-px shrink-0 bg-primary/40" aria-hidden="true" />
+                          <div className="min-w-0 text-[11px] leading-[1.45] text-muted-foreground line-clamp-2 break-words">
+                            {highlightMatch(entry.hit.snippet, query)}
+                          </div>
+                        </div>
+                      )}
                       <div className="flex items-center gap-1.5 text-[10.5px] text-muted-foreground min-w-0">
                         {projects.length > 1 && (
                           <>
@@ -452,6 +536,14 @@ export default function SessionHistoryPanel({ projects, sessionNames, onResume, 
                         <span className="shrink-0 font-mono tabular-nums" title={fullTimestamp(entry.lastUsedIso)}>
                           {relativeTime(entry.lastUsedIso)} · {absoluteLabel(entry.lastUsedIso, group)}
                         </span>
+                        {entry.hit && (
+                          <>
+                            <span className="shrink-0 opacity-50">·</span>
+                            <span className="shrink-0 text-primary" title={`Matched inside the transcript (${entry.hit.role})`}>
+                              {entry.hit.matchCount} in text
+                            </span>
+                          </>
+                        )}
                       </div>
                     </div>
 

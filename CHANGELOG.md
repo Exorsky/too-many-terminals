@@ -11,6 +11,16 @@ listed here; see `git log` for the full history.
 
 ## [Unreleased]
 
+### Added
+
+- **Search inside your past sessions.** The history panel's search box now reads
+  the full text of every transcript on disk, not just each session's first
+  message, and covers every project rather than only the folders you have open —
+  a hit from a project you closed months ago is carried into the list with the
+  matching text and a count. Matching happens in Rust and takes about half a
+  second over a couple of hundred megabytes, with a `Searching transcripts…`
+  status row while it runs.
+
 ### Changed
 
 - **The interface has a second typeface.** Chrome moved to the system sans;

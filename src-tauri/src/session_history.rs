@@ -16,6 +16,11 @@ const TRANSCRIPT_MAX_TURNS: usize = 4000;
 /// One-line tool argument summaries (e.g. a file path or command) are clipped
 /// to this so a chip stays a chip.
 const TOOL_DETAIL_MAX_CHARS: usize = 600;
+/// Characters of context shown around a search hit.
+const SNIPPET_MAX_CHARS: usize = 160;
+/// Stop counting matches inside one transcript past this — the exact number
+/// beyond "lots" changes no decision, and counting costs a full read.
+const MATCHES_PER_SESSION_CAP: usize = 50;
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -59,16 +64,22 @@ pub fn projects_root() -> Option<PathBuf> {
     dirs::home_dir().map(|h| h.join(".claude").join("projects"))
 }
 
-pub(crate) fn extract_text(content: &Value) -> Option<&str> {
+/// Every text block of a message, in order. A turn can carry several; the
+/// preview only ever wanted the first, but search has to see all of them.
+pub(crate) fn text_blocks(content: &Value) -> Vec<&str> {
     match content {
-        Value::String(s) => Some(s),
-        Value::Array(blocks) => blocks.iter().find_map(|b| {
-            (b.get("type").and_then(Value::as_str) == Some("text"))
-                .then(|| b.get("text").and_then(Value::as_str))
-                .flatten()
-        }),
-        _ => None,
+        Value::String(s) => vec![s.as_str()],
+        Value::Array(blocks) => blocks
+            .iter()
+            .filter(|b| b.get("type").and_then(Value::as_str) == Some("text"))
+            .filter_map(|b| b.get("text").and_then(Value::as_str))
+            .collect(),
+        _ => Vec::new(),
     }
+}
+
+pub(crate) fn extract_text(content: &Value) -> Option<&str> {
+    text_blocks(content).into_iter().next()
 }
 
 /// True for Too Many Terminals / Claude Code's own synthetic wrapper messages
@@ -362,6 +373,187 @@ pub fn read_transcript(
     Ok(turns)
 }
 
+/// One session whose transcript contains the query.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct TranscriptHit {
+    pub session_id: String,
+    /// The directory Claude was started in — recovered, not guessed, so the hit
+    /// can be resumed and read through the same commands as any other session.
+    pub project_dir: String,
+    pub snippet: String,
+    /// "user" or "assistant" — which side of the conversation matched.
+    pub role: String,
+    pub match_count: usize,
+    pub last_used_iso: String,
+}
+
+/// Case-insensitive search over a char slice. Used only to place a snippet
+/// around a hit we already know is there, so the quadratic shape is bounded by
+/// one message; the cheap `contains` below does the filtering.
+fn find_ci(hay: &[char], needle: &[char]) -> Option<usize> {
+    if needle.is_empty() || needle.len() > hay.len() {
+        return None;
+    }
+    (0..=hay.len() - needle.len()).find(|&i| {
+        hay[i..i + needle.len()]
+            .iter()
+            .zip(needle)
+            .all(|(a, b)| a.to_lowercase().eq(b.to_lowercase()))
+    })
+}
+
+/// A window of text around the match. Indexes by `char`, never by byte — a
+/// transcript is full of non-ASCII and byte slicing panics mid-codepoint.
+fn snippet_around(text: &str, needle: &str) -> String {
+    let flat: Vec<char> = text.split_whitespace().collect::<Vec<_>>().join(" ").chars().collect();
+    let needle_chars: Vec<char> = needle.chars().collect();
+    let Some(at) = find_ci(&flat, &needle_chars) else {
+        return flat.iter().take(SNIPPET_MAX_CHARS).collect();
+    };
+    // Budget the window so the whole snippet honours SNIPPET_MAX_CHARS, rather
+    // than the match sitting between two full-size halves.
+    let half = SNIPPET_MAX_CHARS.saturating_sub(needle_chars.len()) / 2;
+    let start = at.saturating_sub(half);
+    let end = (at + needle_chars.len() + half).min(flat.len());
+    let mut out = String::new();
+    if start > 0 {
+        out.push('…');
+    }
+    out.extend(&flat[start..end]);
+    if end < flat.len() {
+        out.push('…');
+    }
+    out
+}
+
+/// The real directory behind one of Claude Code's encoded folder names.
+///
+/// The encoding maps `/`, `\` and `:` all to `-`, so it cannot be inverted —
+/// but a transcript records the `cwd` it ran in, and the folder is always that
+/// path or one of its ancestors. Walking up until the encodings agree recovers
+/// it exactly. Uses `Path::parent` rather than splitting on a separator, so it
+/// works the same on Windows, and compares case-insensitively because both
+/// Windows and macOS hand back paths whose case may not match what was encoded.
+fn recover_project_dir(folder: &str, cwd: &str) -> Option<String> {
+    let mut candidate = cwd;
+    loop {
+        // Full Unicode case folding, not `eq_ignore_ascii_case`: project folders
+        // are named by people, and a Cyrillic or accented one would fold to
+        // itself under the ASCII version and silently never match. A false
+        // positive here is implausible (we are comparing a path against the
+        // folder Claude derived from that same path); a false negative means the
+        // hit is dropped on the floor.
+        if encode_project_dir(candidate).to_lowercase() == folder.to_lowercase() {
+            return Some(candidate.to_string());
+        }
+        // Trim one segment on either separator. Deliberately not `Path::parent`:
+        // that is host-aware, and on Unix it does not treat '\' as a separator
+        // at all, so a transcript recorded on Windows would be one opaque
+        // component and never resolve. Transcripts travel between machines, so
+        // the parsing must not depend on which machine is reading.
+        let cut = candidate.rfind(['/', '\\'])?;
+        if cut == 0 {
+            return None;
+        }
+        candidate = &candidate[..cut];
+    }
+}
+
+/// Searches every transcript under `root` for `query`, newest session first.
+///
+/// A plain streaming scan, no index: the whole corpus is a couple of hundred
+/// megabytes and reads in well under a second, and an index would need
+/// invalidating on every turn Claude writes. Revisit if that stops being true.
+pub fn search_transcripts(root: &Path, query: &str, limit: usize) -> Vec<TranscriptHit> {
+    let needle = query.trim().to_lowercase();
+    if needle.len() < 2 {
+        return Vec::new();
+    }
+    let Ok(folders) = fs::read_dir(root) else {
+        return Vec::new();
+    };
+
+    let mut hits: Vec<TranscriptHit> = Vec::new();
+    for folder in folders.flatten().filter(|f| f.path().is_dir()) {
+        let folder_name = folder.file_name().to_string_lossy().into_owned();
+        let Ok(files) = fs::read_dir(folder.path()) else { continue };
+        for file in files.flatten() {
+            let path = file.path();
+            if path.extension().is_none_or(|ext| ext != "jsonl") {
+                continue;
+            }
+            if let Some(hit) = search_one(&path, &folder_name, &needle) {
+                hits.push(hit);
+            }
+        }
+    }
+    hits.sort_by(|a, b| b.last_used_iso.cmp(&a.last_used_iso));
+    hits.truncate(limit);
+    hits
+}
+
+/// The best hit in one transcript, plus how many more there were. Returns
+/// `None` when the file holds no match at all.
+fn search_one(path: &Path, folder: &str, needle: &str) -> Option<TranscriptHit> {
+    let file = fs::File::open(path).ok()?;
+    let reader = BufReader::new(file);
+
+    let mut best: Option<(String, String)> = None; // (snippet, role)
+    let mut matches = 0usize;
+    let mut cwd: Option<String> = None;
+
+    for line in reader.lines() {
+        let Ok(line) = line else { break };
+        if line.trim().is_empty() {
+            continue;
+        }
+        let Ok(record) = serde_json::from_str::<Value>(&line) else { continue };
+
+        if cwd.is_none() {
+            if let Some(found) = record.get("cwd").and_then(Value::as_str) {
+                cwd = Some(found.to_string());
+            }
+        }
+
+        let Some(message) = record.get("message") else { continue };
+        let role = message.get("role").and_then(Value::as_str).unwrap_or("");
+        if role != "user" && role != "assistant" {
+            continue;
+        }
+        let Some(content) = message.get("content") else { continue };
+
+        for text in text_blocks(content) {
+            if looks_synthetic(text) {
+                continue;
+            }
+            if !text.to_lowercase().contains(needle) {
+                continue;
+            }
+            matches += 1;
+            if best.is_none() {
+                best = Some((snippet_around(text, needle), role.to_string()));
+            }
+            if matches >= MATCHES_PER_SESSION_CAP {
+                break;
+            }
+        }
+        if matches >= MATCHES_PER_SESSION_CAP {
+            break;
+        }
+    }
+
+    let (snippet, role) = best?;
+    let session_id = path.file_stem()?.to_string_lossy().into_owned();
+    let project_dir = recover_project_dir(folder, cwd.as_deref()?)?;
+    let last_used_iso = fs::metadata(path).ok().and_then(|m| m.modified().ok()).map_or_else(
+        || String::from("1970-01-01T00:00:00Z"),
+        mtime_iso,
+    );
+
+    Some(TranscriptHit { session_id, project_dir, snippet, role, match_count: matches, last_used_iso })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -376,6 +568,121 @@ mod tests {
             writeln!(f, "{line}").unwrap();
         }
         path
+    }
+
+    fn msg(role: &str, text: &str, cwd: &str) -> String {
+        serde_json::json!({
+            "type": role, "cwd": cwd,
+            "message": { "role": role, "content": text }
+        })
+        .to_string()
+    }
+
+    #[test]
+    fn recovers_a_unix_project_dir_from_a_nested_cwd() {
+        // The folder is the directory Claude started in; cwd may be deeper.
+        let got = recover_project_dir("-home-x-proj", "/home/x/proj/src/deep");
+        assert_eq!(got.as_deref(), Some("/home/x/proj"));
+    }
+
+    #[test]
+    fn recovers_a_windows_project_dir() {
+        // Guards the one place this could quietly become POSIX-only: recovery
+        // walks with Path::parent rather than splitting on a separator.
+        let got = recover_project_dir(r"C--Users-x-proj", r"C:\Users\x\proj\src");
+        assert_eq!(got.as_deref(), Some(r"C:\Users\x\proj"));
+    }
+
+    #[test]
+    fn recovers_a_project_dir_whose_case_drifted() {
+        // Windows and macOS both hand back paths whose case needn't match.
+        let got = recover_project_dir("-home-X-Proj", "/home/x/proj/sub");
+        assert_eq!(got.as_deref(), Some("/home/x/proj"));
+    }
+
+    #[test]
+    fn recovers_a_project_dir_named_in_cyrillic() {
+        // ASCII-only case folding would drop this one on the floor.
+        let got = recover_project_dir("-home-x-Проект", "/home/x/проект/src");
+        assert_eq!(got.as_deref(), Some("/home/x/проект"));
+    }
+
+    #[test]
+    fn gives_up_rather_than_guessing_when_nothing_matches() {
+        assert_eq!(recover_project_dir("-home-other", "/home/x/proj"), None);
+    }
+
+    #[test]
+    fn snippets_centre_on_the_match_without_splitting_a_codepoint() {
+        // Byte slicing here would panic outright on Cyrillic.
+        let text = format!("{} ошибка 429 в логах {}", "п".repeat(300), "х".repeat(300));
+        let snip = snippet_around(&text, "429");
+        assert!(snip.contains("429"), "snippet lost the match: {snip}");
+        assert!(snip.starts_with('…') && snip.ends_with('…'));
+        assert!(snip.chars().count() <= SNIPPET_MAX_CHARS + 2);
+    }
+
+    #[test]
+    fn short_text_keeps_both_ends() {
+        let snip = snippet_around("rate limit exceeded", "limit");
+        assert_eq!(snip, "rate limit exceeded");
+    }
+
+    #[test]
+    fn finds_a_match_anywhere_in_the_transcript_not_just_the_preview() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_session(
+            tmp.path(),
+            "/home/x/proj",
+            "sess-1",
+            &[
+                &msg("user", "hello there", "/home/x/proj"),
+                &msg("assistant", "nothing yet", "/home/x/proj"),
+                &msg("user", "why do we keep getting 429 responses", "/home/x/proj"),
+            ],
+        );
+        let hits = search_transcripts(tmp.path(), "429", 10);
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].session_id, "sess-1");
+        assert_eq!(hits[0].project_dir, "/home/x/proj");
+        assert_eq!(hits[0].role, "user");
+        assert!(hits[0].snippet.contains("429"));
+    }
+
+    #[test]
+    fn counts_every_match_and_ignores_synthetic_turns() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_session(
+            tmp.path(),
+            "/home/x/proj",
+            "sess-1",
+            &[
+                &msg("user", "<command-name>429</command-name>", "/home/x/proj"),
+                &msg("user", "a 429 here", "/home/x/proj"),
+                &msg("assistant", "and a 429 there", "/home/x/proj"),
+            ],
+        );
+        let hits = search_transcripts(tmp.path(), "429", 10);
+        // The synthetic wrapper is not something the human wrote, so it neither
+        // counts nor becomes the snippet.
+        assert_eq!(hits[0].match_count, 2);
+        assert_eq!(hits[0].role, "user");
+        assert!(hits[0].snippet.starts_with("a 429"));
+    }
+
+    #[test]
+    fn matches_case_insensitively_and_ignores_a_one_character_query() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_session(
+            tmp.path(),
+            "/home/x/proj",
+            "sess-1",
+            &[&msg("user", "Rate Limit trouble", "/home/x/proj")],
+        );
+        assert_eq!(search_transcripts(tmp.path(), "rate limit", 10).len(), 1);
+        assert_eq!(search_transcripts(tmp.path(), "RATE", 10).len(), 1);
+        // One character would match nearly everything; not worth a full scan.
+        assert!(search_transcripts(tmp.path(), "r", 10).is_empty());
     }
 
     #[test]

@@ -128,6 +128,24 @@ export interface SessionHistoryEntry {
   lastUsedIso: string;
 }
 
+/** One past session whose transcript contains the search query.
+ *
+ *  Carries its own `projectDir` because a hit can come from a project that
+ *  isn't open — search covers every transcript on disk, not just the folders
+ *  currently in the sidebar. */
+export interface TranscriptHit {
+  sessionId: string;
+  /** The directory Claude was started in, recovered from the transcript. */
+  projectDir: string;
+  /** Text around the match, already whitespace-collapsed and clipped. */
+  snippet: string;
+  /** Which side of the conversation matched: 'user' or 'assistant'. */
+  role: string;
+  /** Matches in this session, capped — a bigger number only means "lots". */
+  matchCount: number;
+  lastUsedIso: string;
+}
+
 // --- Session stats (per-session aggregates for the Home dashboard, scanned
 // from the same transcripts session history reads) ---
 

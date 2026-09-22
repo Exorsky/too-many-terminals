@@ -194,3 +194,14 @@
 @media (prefers-reduced-motion: reduce) {
   .dash-mark, .dash-grow { animation: none; }
 }
+
+/* The history panel's transcript scan: an indeterminate sweep, because the
+   scan has no progress worth reporting. See SessionHistoryPanel. */
+@keyframes history-scan {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(200%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-\[history-scan_1s_ease-in-out_infinite\] { animation: none; opacity: 0.6; }
+}

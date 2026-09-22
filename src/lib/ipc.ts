@@ -13,7 +13,7 @@ import {
   requestPermission,
   sendNotification,
 } from '@tauri-apps/plugin-notification';
-import type { AppSettings, SessionHistoryEntry, SessionStat, SessionUsageStats, ShellOption, TabStatus, TranscriptTurn, WorkspaceState } from '@/types';
+import type { AppSettings, SessionHistoryEntry, SessionStat, SessionUsageStats, ShellOption, TabStatus, TranscriptHit, TranscriptTurn, WorkspaceState } from '@/types';
 
 export interface DirEntry {
   name: string;
@@ -105,6 +105,11 @@ export async function pickFolder(defaultPath?: string | null): Promise<string | 
 
 export function listSessions(projectDir: string): Promise<SessionHistoryEntry[]> {
   return invoke('list_sessions', { projectDir });
+}
+
+/** Full-text search over every transcript on disk, newest session first. */
+export function searchTranscripts(query: string, limit?: number): Promise<TranscriptHit[]> {
+  return invoke('search_transcripts', { query, limit });
 }
 
 export function deleteSession(projectDir: string, sessionId: string): Promise<void> {

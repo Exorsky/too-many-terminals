@@ -63,6 +63,7 @@ pub fn run() {
             commands::list_sessions,
             commands::delete_session,
             commands::read_transcript,
+            commands::search_transcripts,
             commands::export_session,
             commands::import_session,
             commands::get_session_stats,

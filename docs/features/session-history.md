@@ -45,6 +45,52 @@ under `~/.claude/projects/<encoded-dir>/*.jsonl`. Read-only and offline; nothing
 - Panel UX: search across preview text, folder name, and the session's name if it has
   one (`/`), Today/Yesterday/Earlier day groups, ↑↓/Enter keyboard nav.
 
+## Searching inside transcripts
+
+The panel's search box covers session names, folder names — and the full text of
+every transcript on disk. That last part is the point: `preview` is only a
+session's *first* message, so before this the only way to find a conversation by
+something said in the middle of it was to ask Claude to go looking.
+
+`search_transcripts` (`session_history.rs`) streams every `*.jsonl` under
+`~/.claude/projects`, keeps the first match per session and counts the rest,
+and returns a whitespace-collapsed snippet around the hit. It runs over **all**
+projects, not just the folders open in the sidebar: the session you half-
+remember is usually in a project you closed months ago, which is exactly when
+search beats scrolling. A hit from a closed project is carried into the list as
+a first-class row.
+
+**No index, on purpose.** The corpus measured 253 files / 204 MB on a working
+machine and reads end to end in about half a second; an index would have to be
+invalidated on every turn Claude writes, which is a cache-coherency problem
+bought in exchange for nothing. Revisit if the numbers stop holding.
+
+The frontend keeps the two searches apart: the metadata filter is local and
+instant, the transcript scan is debounced by 220ms and crosses to Rust. That
+split is why the list reacts on the first keystroke. While the scan runs the
+panel shows a `Searching transcripts…` status row — without it, a short list
+reads as "there is nothing else" rather than "still looking". Queries shorter
+than two characters never start a scan.
+
+### Recovering a project directory
+
+Claude Code's folder names map `/`, `\` and `:` all onto `-`, so they can't be
+inverted. A transcript records the `cwd` it ran in, and the folder is always
+that path or one of its ancestors, so `recover_project_dir` walks up until the
+encodings agree. Two things that bite there, both covered by tests:
+
+- It trims segments on either separator rather than using `Path::parent`, which
+  is host-aware — on Unix `Path` doesn't treat `\` as a separator at all, so a
+  transcript recorded on Windows would be one opaque component and never
+  resolve. Transcripts travel between machines; the parsing must not care which
+  one is reading.
+- Comparison uses full Unicode case folding, not `eq_ignore_ascii_case`: people
+  name project folders, and a Cyrillic or accented one folds to itself under the
+  ASCII version and silently never matches.
+
+Snippets are sliced by `char`, never by byte — transcripts are full of non-ASCII
+and byte slicing panics mid-codepoint.
+
 ## Files
 
 - `src-tauri/src/session_history.rs` (+ unit tests on tempfile fixtures) — unchanged by
