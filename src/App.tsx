@@ -789,10 +789,30 @@ export default function App() {
         <nav
           data-tauri-drag-region
           className={cn(
-            'relative flex items-center gap-1 h-[38px] px-2 shrink-0 border-b border-border bg-background',
-            IS_MAC && 'pl-[76px]',
+            'relative flex items-center gap-1 px-2 shrink-0 border-b border-border bg-background',
+            // On macOS this row *is* the title bar. Its content sits on the
+            // same line as the traffic lights, the way a native toolbar does,
+            // but the row is tall enough to put real air above and below them —
+            // at 38px everything was jammed against the window edge and read as
+            // chrome bleeding into the frame. The left pad clears the lights.
+            IS_MAC ? 'h-[54px] pl-[86px]' : 'h-[38px]',
           )}
         >
+          {/* Both window-chrome controls lead the row, after the pad that clears
+              the traffic lights. Left is where the things they operate are —
+              the sidebar, and a palette that searches it — and it leaves the
+              whole trailing half free to be what a title bar mostly is:
+              somewhere to grab the window. */}
+          <button
+            type="button"
+            aria-label="Search sessions"
+            title="Go to session  ⌘K"
+            className={cn(ICON_BUTTON, 'h-6 w-auto gap-1.5 px-1.5')}
+            onClick={() => setPaletteOpen(true)}
+          >
+            <Search size={12} />
+            <span className="text-[9.5px] text-faint">⌘K</span>
+          </button>
           <button
             type="button"
             aria-label={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
@@ -821,16 +841,6 @@ export default function App() {
             />
           </div>
 
-          <button
-            type="button"
-            aria-label="Search sessions"
-            title="Go to session  ⌘K"
-            className={cn(ICON_BUTTON, 'ml-auto h-6 w-auto gap-1.5 px-1.5')}
-            onClick={() => setPaletteOpen(true)}
-          >
-            <Search size={12} />
-            <span className="text-[9.5px] text-faint">⌘K</span>
-          </button>
         </nav>
       )}
 

@@ -11,6 +11,23 @@ listed here; see `git log` for the full history.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The window can be dragged again on macOS.** The mode row became the title
+  bar in 0.25.0 and was marked as a drag region, but the capability that lets a
+  drag region actually start a drag isn't part of Tauri's default window
+  permissions — so the markup was right and the grant was missing, and the
+  window simply didn't move.
+
+### Changed
+
+- **The macOS title bar row has room to breathe.** It's taller, so its contents
+  sit on the same line as the traffic lights the way a native toolbar does
+  rather than jammed against the window edge, and there's a wider gap before the
+  first control so nothing butts up against the window buttons. ⌘K and the
+  sidebar toggle sit together at the leading edge, which leaves the whole
+  trailing half of the row free to grab the window by. ⌘B is unchanged.
+
 ## [0.25.0] - 2026-09-22
 
 ### Added
