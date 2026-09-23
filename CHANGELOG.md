@@ -11,8 +11,22 @@ listed here; see `git log` for the full history.
 
 ## [Unreleased]
 
+## [0.25.0] - 2026-09-22
+
 ### Added
 
+- **Sessions are organised, not just listed.** The tab strip is gone. Sessions
+  live in a sidebar under **Inbox** (anything unfiled) and **Projects**, each
+  with its own status dot and age, and the workspace shows one session's tools —
+  Claude, Shell, Files — laid out on the pane grid. Selecting a session opens an
+  inspector on the right rather than a row of buttons on every row.
+- **Scratch sessions.** ⌘N starts a session immediately in a temporary
+  directory, with no folder to choose first; file it into a project later, or
+  never.
+- **To-Do**, the app's second mode. A plain developer to-do list stored beside
+  your workspace: due dates, projects, tags, priority. It knows about Claude —
+  a task can start a session or be handed to a running one — but those live in
+  the ⋯ menu, because most of a real list is not work for Claude.
 - **A Completed filter in To-Do.** Finished tasks were written out of every
   view — the `Done` group existed but nothing could reach it — so ticking one
   off made it vanish. They now collect under **Completed**, most recently
@@ -40,7 +54,6 @@ listed here; see `git log` for the full history.
   it, with the sidebar toggle on the left and ⌘K on the right, so the window
   spends one 32px row on chrome instead of two. The traffic lights stay native.
   Windows and Linux keep their normal window frame.
-
 - **The chrome reads as three tiers instead of one.** Session and task names now
   sit a step above their own timestamps, counts and status text, so a long list
   scans by name rather than as a wall of equal-weight text. The row states that
@@ -410,7 +423,8 @@ listed here; see `git log` for the full history.
 - The transcript reader now renders pipe tables, nested/checkbox lists,
   italics, autolinks, and horizontal rules.
 
-[Unreleased]: https://github.com/Exorsky/too-many-terminals/compare/v0.24.0...HEAD
+[Unreleased]: https://github.com/Exorsky/too-many-terminals/compare/v0.25.0...HEAD
+[0.25.0]: https://github.com/Exorsky/too-many-terminals/compare/v0.24.0...v0.25.0
 [0.24.0]: https://github.com/Exorsky/too-many-terminals/compare/v0.23.1...v0.24.0
 [0.23.1]: https://github.com/Exorsky/too-many-terminals/compare/v0.23.0...v0.23.1
 [0.23.0]: https://github.com/Exorsky/too-many-terminals/compare/v0.22.0...v0.23.0
