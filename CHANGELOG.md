@@ -21,6 +21,11 @@ listed here; see `git log` for the full history.
 
 ### Changed
 
+- **Session status reads as a traffic light.** Green is a session that's alive
+  with nothing to do, amber is one that's working, red-amber is one that has
+  stopped to ask you something. This is the mapping the design notes always
+  described; the code had drifted to grey-for-idle and reused amber for both
+  working and asking, which are the two states most worth telling apart.
 - **The macOS title bar row has room to breathe.** It's taller, so its contents
   sit on the same line as the traffic lights the way a native toolbar does
   rather than jammed against the window edge, and there's a wider gap before the

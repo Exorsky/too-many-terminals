@@ -40,8 +40,7 @@ new screen is what each token is *for*:
 | `muted-foreground` | Metadata: timestamps, counts, section labels, folder chips | — |
 | `faint` | The punctuation *between* metadata — the `·` separators, an empty-slot placeholder. Never a word you have to read; `mix(background, mutedForeground, 0.55)` | — |
 | `hover` / `raised` / `selected` / `selected-hover` | The four row states, as white overlays at 4% / 5.5% / 7.5% / 9.5%. Every hoverable row, ghost button and tab uses these and nothing else | — |
-| `success` / `warning` / `destructive` | Session status only (working / needs-you / error) | **Never** — see [Status vocabulary](#status-vocabulary) |
-| `attention` | Despite the name, **not** a session-status colour: `STATE_DOT.attention` is `warning` plus a ring, so the state survives readers who can't separate green from yellow. One consumer today — the "notifications are blocked" line in Settings | — |
+| `success` / `warning` / `attention` / `destructive` | Session status only (idle / working / needs-you / error) — traffic-light order, see [Status vocabulary](#status-vocabulary) | **Never** |
 | `usage` | The usage-meter bar's color below the warning threshold. App chrome only, no ansi counterpart — kept separate from `primary` so a theme's accent and its "how much I've used" bar can differ | — |
 | project hue (`projectHue(index)`, `PROJECT_COLORS` in `types.ts`) | Cross-folder disambiguation — a small dot next to a folder-name chip in the Pinned/Attention strips, where several folders' sessions sit in one list and the color is doing real work. **Not** shown in the folder's own header (a neutral `Folder` glyph instead) — the name right there already identifies it; a second color badge on the same row would be decoration | Never a full tinted background (see [Shape](#shape)) |
 

@@ -63,15 +63,24 @@ export function sessionState(tab: Tab): SessionState {
  *  from the amber. Only `running` animates — one moving thing in a list is a
  *  signal, twenty is wallpaper. */
 export const STATE_DOT: Record<SessionState, string> = {
-  running: 'bg-success animate-pulse',
-  attention: 'bg-warning ring-2 ring-warning/30',
-  idle: 'bg-muted-foreground/70',
-  // The two hollow states are drawn off `muted-foreground`, not off `border`.
-  // Border tokens exist to separate surfaces and sit a hair above the
-  // background by design; a *dot* made of one is invisible rather than quiet.
-  // Measured against the app background: asleep 2.4:1, closed 1.8:1 — well
-  // below idle's 2.9:1 and nowhere near running (7.9:1) or attention (8.8:1),
-  // which is the intended order, but above the point of not being there.
+  // Traffic-light semantics, and the mapping docs/design.md always described:
+  // green is a session that is alive and has nothing to do, amber is one that
+  // is busy, red-amber is one that has stopped to ask you something. Reading
+  // it as a signal rather than a temperature is the point — you scan the list
+  // for the colour that means "your turn", and that colour is the warmest.
+  //
+  // `attention` is its own token (warning mixed halfway to destructive), not
+  // `warning` again: "working" and "asking" are the two states most likely to
+  // be confused at a glance, so they get different hues as well as different
+  // marks.
+  idle: 'bg-success',
+  running: 'bg-warning animate-pulse',
+  attention: 'bg-attention ring-2 ring-attention/30',
+  // A session with no live process behind it gets no colour at all — colour
+  // here means "a process is doing something", and a hollow ring says there
+  // is nothing to report. Drawn off `muted-foreground` rather than `border`:
+  // border tokens sit a hair above the background by design, so a *dot* made
+  // of one is invisible rather than quiet (asleep 2.4:1, closed 1.8:1).
   asleep: 'border border-muted-foreground/60 bg-transparent',
   muted: 'border border-muted-foreground/45 bg-transparent',
 };

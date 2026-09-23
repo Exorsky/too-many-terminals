@@ -174,10 +174,28 @@ describe('STATE_DOT', () => {
     }
   });
 
-  it('keeps the three quiet states in descending order', () => {
+  it('keeps the two hollow states in descending order', () => {
     const alpha = (cls: string) => Number(cls.match(/muted-foreground\/(\d+)/)?.[1]);
-    expect(alpha(STATE_DOT.idle)).toBeGreaterThan(alpha(STATE_DOT.asleep));
     expect(alpha(STATE_DOT.asleep)).toBeGreaterThan(alpha(STATE_DOT.muted));
+  });
+
+  it('gives the three live states three different hues', () => {
+    // Green alive, amber busy, red-amber asking. Reusing `warning` for two of
+    // them is the specific mistake this guards: "working" and "asking" are the
+    // pair most likely to be confused at a glance.
+    expect(STATE_DOT.idle).toContain('bg-success');
+    expect(STATE_DOT.running).toContain('bg-warning');
+    expect(STATE_DOT.attention).toContain('bg-attention');
+    const hues = [STATE_DOT.idle, STATE_DOT.running, STATE_DOT.attention]
+      .map((cls) => cls.match(/bg-([a-z-]+)/)?.[1]);
+    expect(new Set(hues).size).toBe(3);
+  });
+
+  it('spends no colour on a session with no process behind it', () => {
+    for (const state of ['asleep', 'muted'] as const) {
+      expect(STATE_DOT[state]).toContain('bg-transparent');
+      expect(STATE_DOT[state]).not.toMatch(/bg-(success|warning|attention|destructive)/);
+    }
   });
 
   it('gives the two loud states a second cue beyond hue', () => {
