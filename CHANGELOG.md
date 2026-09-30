@@ -11,6 +11,8 @@ listed here; see `git log` for the full history.
 
 ## [Unreleased]
 
+## [0.25.1] - 2026-09-30
+
 ### Fixed
 
 - **Markdown Preview works for Inbox sessions.** A scratch session lives in
@@ -452,7 +454,8 @@ listed here; see `git log` for the full history.
 - The transcript reader now renders pipe tables, nested/checkbox lists,
   italics, autolinks, and horizontal rules.
 
-[Unreleased]: https://github.com/Exorsky/too-many-terminals/compare/v0.25.0...HEAD
+[Unreleased]: https://github.com/Exorsky/too-many-terminals/compare/v0.25.1...HEAD
+[0.25.1]: https://github.com/Exorsky/too-many-terminals/compare/v0.25.0...v0.25.1
 [0.25.0]: https://github.com/Exorsky/too-many-terminals/compare/v0.24.0...v0.25.0
 [0.24.0]: https://github.com/Exorsky/too-many-terminals/compare/v0.23.1...v0.24.0
 [0.23.1]: https://github.com/Exorsky/too-many-terminals/compare/v0.23.0...v0.23.1
