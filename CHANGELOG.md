@@ -13,6 +13,13 @@ listed here; see `git log` for the full history.
 
 ### Fixed
 
+- **Markdown Preview works for Inbox sessions.** A scratch session lives in
+  `~/.tmt/scratch/<id>`, and Claude Code turns that dot into a hyphen when it
+  names the transcript folder; we kept the dot, looked in the wrong place, and
+  found nothing. The folder name now follows Claude Code's rule exactly, which
+  also fixes History, export and search for any folder with a dot, underscore
+  or space in its path. Moving a session between the Inbox and a project keeps
+  its preview.
 - **The window can be dragged again on macOS.** The mode row became the title
   bar in 0.25.0 and was marked as a drag region, but the capability that lets a
   drag region actually start a drag isn't part of Tauri's default window

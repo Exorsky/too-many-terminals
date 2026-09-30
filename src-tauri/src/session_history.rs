@@ -52,10 +52,13 @@ pub struct TranscriptTurn {
 }
 
 /// Mirrors the folder-naming scheme Claude Code itself uses under
-/// ~/.claude/projects — colons and path separators become hyphens, case kept as-is.
+/// ~/.claude/projects — every character that isn't an ASCII letter or digit
+/// becomes a hyphen, case kept as-is. Dots included: a scratch session's
+/// `~/.tmt/scratch/<id>` lands in `-Users-x--tmt-scratch-<id>`, and keeping the
+/// dot is what made Inbox sessions unreadable.
 pub fn encode_project_dir(dir: &str) -> String {
     dir.chars()
-        .map(|c| if c == ':' || c == '\\' || c == '/' { '-' } else { c })
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
         .collect()
 }
 
@@ -602,8 +605,9 @@ mod tests {
 
     #[test]
     fn recovers_a_project_dir_named_in_cyrillic() {
-        // ASCII-only case folding would drop this one on the floor.
-        let got = recover_project_dir("-home-x-Проект", "/home/x/проект/src");
+        // Claude Code hyphenates every non-ASCII-alphanumeric char, so the
+        // folder is all dashes where the Cyrillic name was.
+        let got = recover_project_dir("-home-x-------", "/home/x/проект/src");
         assert_eq!(got.as_deref(), Some("/home/x/проект"));
     }
 
@@ -690,6 +694,8 @@ mod tests {
         assert_eq!(encode_project_dir(r"C:\Users\x"), "C--Users-x");
         assert_eq!(encode_project_dir("/home/x"), "-home-x");
         assert_eq!(encode_project_dir("plain"), "plain");
+        assert_eq!(encode_project_dir("/Users/x/.tmt/scratch/ab12"), "-Users-x--tmt-scratch-ab12");
+        assert_eq!(encode_project_dir("/home/x/my_proj v2"), "-home-x-my-proj-v2");
     }
 
     #[test]
