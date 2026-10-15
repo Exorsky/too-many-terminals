@@ -1,10 +1,13 @@
-import { useEffect, useState, type DragEvent } from 'react';
-import { ChevronRight, File, Folder } from 'lucide-react';
+import { useEffect, useState, type DragEvent, type ReactNode } from 'react';
+import { ChevronRight, File, Folder, FolderOpen } from 'lucide-react';
 import { FILE_MIME } from '@/lib/dnd';
 import { cn } from '@/lib/utils';
 import * as ipc from '@/lib/ipc';
 import type { DirEntry } from '@/lib/ipc';
 import { usePollWhileFocused } from '@/lib/use-poll';
+import {
+  ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger,
+} from '@/components/ui/context-menu';
 
 /** Whether two listings of the same directory say the same thing. Compared by
  *  hand so an unchanged folder keeps its existing array: handing React a fresh
@@ -27,6 +30,22 @@ function fileDragProps(rootDir: string, path: string, isDir: boolean) {
       e.dataTransfer.setData(FILE_MIME, JSON.stringify({ dir: rootDir, path }));
     },
   };
+}
+
+/** Right-click → Show in Finder, for any row naming a file or folder on disk.
+ *  Reveal, not open: the folder that holds it, with it selected — the same for
+ *  a file and a folder, and what "where is this" means. */
+export function RevealMenu({ path, children }: { path: string; children: ReactNode }) {
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
+      <ContextMenuContent className="min-w-44">
+        <ContextMenuItem onSelect={() => ipc.revealInFileManager(path)}>
+          <FolderOpen size={13} /><span>Show in {ipc.fileManagerName()}</span>
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
+  );
 }
 
 interface NodeProps {
@@ -62,6 +81,7 @@ function Node({ entry, depth, rootDir, defaultOpen, activePath, onOpen }: NodePr
 
   return (
     <>
+      <RevealMenu path={entry.path}>
       <button
         type="button"
         className={cn(
@@ -91,6 +111,7 @@ function Node({ entry, depth, rootDir, defaultOpen, activePath, onOpen }: NodePr
         {entry.isDir ? <Folder size={12} className="shrink-0" /> : <File size={12} className="shrink-0" />}
         <span className="truncate">{entry.name}</span>
       </button>
+      </RevealMenu>
       {open && children?.map((child) => (
         <Node key={child.path} entry={child} depth={depth + 1} rootDir={rootDir} activePath={activePath} onOpen={onOpen} />
       ))}

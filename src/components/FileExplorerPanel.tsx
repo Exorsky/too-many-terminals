@@ -3,7 +3,7 @@ import { File, FolderTree, Pin, PinOff, Search } from 'lucide-react';
 import { FILE_MIME } from '@/lib/dnd';
 import { cn, folderName } from '@/lib/utils';
 import { searchFiles, type FileMatch } from '@/lib/file-search';
-import FileTree from './FileTree';
+import FileTree, { RevealMenu } from './FileTree';
 
 interface FileExplorerPanelProps {
   projects: string[];
@@ -109,8 +109,8 @@ export default function FileExplorerPanel({
             <div className="px-3 py-2 text-[11px] text-muted-foreground">No files match &ldquo;{query.trim()}&rdquo;.</div>
           ) : (
             results.map((m) => (
+              <RevealMenu key={m.path} path={m.path}>
               <button
-                key={m.path}
                 type="button"
                 draggable
                 onDragStart={(e) => {
@@ -128,6 +128,7 @@ export default function FileExplorerPanel({
                 <File size={12} className="shrink-0" />
                 <span className="truncate">{m.name}</span>
               </button>
+              </RevealMenu>
             ))
           )
         ) : projects.length === 0 ? (

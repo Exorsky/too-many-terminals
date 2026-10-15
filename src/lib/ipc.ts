@@ -6,7 +6,8 @@
  */
 import { invoke, Channel } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import { openUrl, openPath } from '@tauri-apps/plugin-opener';
+import { openUrl, openPath, revealItemInDir } from '@tauri-apps/plugin-opener';
+import { containingDir } from './utils';
 import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog';
 import {
   isPermissionGranted,
@@ -166,6 +167,27 @@ export function openExternal(url: string): void {
 /** Opens a directory in the OS file manager (Explorer/Finder/file manager). */
 export function openDirectory(dir: string): void {
   void openPath(dir);
+}
+
+/** Opens the folder holding `path` in the OS file manager, with `path`
+ *  selected — a file or a folder alike.
+ *
+ *  Selecting needs the platform's help (Finder, Explorer, or a Linux file
+ *  manager speaking org.freedesktop.FileManager1 / the desktop portal). A
+ *  bare window manager may offer neither, so a failed reveal still opens the
+ *  folder — the same way "Open directory" does — rather than doing nothing. */
+export function revealInFileManager(path: string): void {
+  revealItemInDir(path)
+    .catch(() => openPath(containingDir(path)))
+    .catch(() => {});
+}
+
+/** What the OS calls its file manager, for menu labels. */
+export function fileManagerName(): string {
+  const ua = navigator.userAgent;
+  if (ua.includes('Mac')) return 'Finder';
+  if (ua.includes('Windows')) return 'Explorer';
+  return 'file manager';
 }
 
 /** Hands a live session off to the VS Code Claude Code extension: opens/

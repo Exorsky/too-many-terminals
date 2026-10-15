@@ -1,5 +1,18 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { hasSelectionIn, isInterruptKeystroke, parentPath } from './utils';
+import { containingDir, hasSelectionIn, isInterruptKeystroke, parentPath } from './utils';
+
+describe('containingDir', () => {
+  it('cuts the last segment, in either separator style', () => {
+    expect(containingDir('/Users/x/proj/README.md')).toBe('/Users/x/proj');
+    expect(containingDir('/Users/x/proj/src/')).toBe('/Users/x/proj');
+    expect(containingDir('C:\\Users\\x\\a.txt')).toBe('C:\\Users\\x');
+  });
+
+  it('keeps a root a root', () => {
+    expect(containingDir('/etc')).toBe('/');
+    expect(containingDir('C:\\a.txt')).toBe('C:\\');
+  });
+});
 
 describe('parentPath', () => {
   it('shows the two nearest ancestors with an ellipsis when there are more above', () => {

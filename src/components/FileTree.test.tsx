@@ -1,4 +1,5 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/ipc');
@@ -86,6 +87,20 @@ describe('FileTree', () => {
     fireEvent.click(await screen.findByText('App.tsx'));
 
     expect(onOpen).toHaveBeenCalledWith('/proj/App.tsx');
+  });
+});
+
+describe('FileTree context menu', () => {
+  it('shows a file in the OS file manager, inside its folder', async () => {
+    vi.mocked(ipc.listDir).mockResolvedValue([{ name: 'README.md', path: '/proj/README.md', isDir: false }]);
+    vi.mocked(ipc.fileManagerName).mockReturnValue('Finder');
+    render(<FileTree root={ROOT} activePath={null} onOpen={vi.fn()} />);
+    fireEvent.click(screen.getByText('project'));
+
+    fireEvent.contextMenu(await screen.findByText('README.md'));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Show in Finder' }));
+
+    expect(ipc.revealInFileManager).toHaveBeenCalledWith('/proj/README.md');
   });
 });
 

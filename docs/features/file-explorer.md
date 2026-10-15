@@ -131,6 +131,11 @@ excluded from the sidebar's per-project session list and from the command palett
 
 ## Behavior
 
+- **Show in Finder** (Explorer on Windows, "file manager" on Linux): right-click
+  any file or folder in the tree. It opens the folder that holds the item with
+  the item selected — reveal rather than open, so a file and a folder behave the
+  same and you land on *where it is*. `ipc.revealInFileManager`, the opener
+  plugin's `revealItemInDir`, allowed by `opener:default`.
 - **Tree.** One lazily-loaded tree per open project folder. A directory fetches
   its own children (`list_dir`) the first time it's expanded — opening a
   project with a large `node_modules` never walks it up front. Collapsing a

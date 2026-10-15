@@ -43,6 +43,17 @@ export function folderName(dir: string): string {
   return dir.split(/[/\\]/).filter(Boolean).pop() ?? dir;
 }
 
+/** The directory holding `path`, for opening rather than display: keeps the
+ *  separator style and roots intact (`/a` → `/`, `C:\\a` → `C:\\`). */
+export function containingDir(path: string): string {
+  const trimmed = path.replace(/(?<=.)[/\\]+$/, '');
+  const i = Math.max(trimmed.lastIndexOf('/'), trimmed.lastIndexOf('\\'));
+  if (i < 0) return path;
+  const parent = trimmed.slice(0, i);
+  if (parent === '' || /^[A-Za-z]:$/.test(parent)) return parent + trimmed[i];
+  return parent;
+}
+
 /** Up to `levels` ancestor segments immediately above a project folder, for a
  *  breadcrumb shown before its name (e.g. "Desktop / prog" for
  *  ".../Desktop/prog/too-many-terminals") — enough to tell apart folders that
