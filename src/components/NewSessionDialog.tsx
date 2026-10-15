@@ -27,6 +27,8 @@ function LayoutThumb({ kind }: { kind: NewSessionKind }) {
 export interface NewSessionDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Where it opens pointed: the project the sidebar is inside, else the Inbox. */
+  defaultDir: string | null;
   projects: string[];
   /** Open (non-archived) sessions per project, for the counts beside each. */
   counts: Map<string, number>;
@@ -36,10 +38,11 @@ export interface NewSessionDialogProps {
 
 /** New session: where, then what, then an optional name.
  *
- *  It opens on Inbox + Claude — what ⌘N used to start with no questions — so
- *  Enter (or ⌘N again, handled in App) is still one keystroke from a session.
+ *  It opens on Claude in the project the sidebar is inside (the Inbox at the
+ *  top level) — so Enter, or ⌘N again (handled in App), is still one keystroke
+ *  from a session.
  *  See docs/features/scratch-sessions.md. */
-export default function NewSessionDialog({ open, onOpenChange, projects, counts, onStart, onAddProject }: NewSessionDialogProps) {
+export default function NewSessionDialog({ open, onOpenChange, defaultDir, projects, counts, onStart, onAddProject }: NewSessionDialogProps) {
   const [dir, setDir] = useState<string | null>(null);
   const [kind, setKind] = useState<NewSessionKind>('claude');
   const [name, setName] = useState('');
@@ -49,10 +52,10 @@ export default function NewSessionDialog({ open, onOpenChange, projects, counts,
   // would start the wrong thing on a reflexive Enter.
   useEffect(() => {
     if (!open) return;
-    setDir(null);
+    setDir(defaultDir);
     setKind('claude');
     setName('');
-  }, [open]);
+  }, [open, defaultDir]);
 
   // A folder added from here is the one you meant to start in.
   const known = useRef(projects);
@@ -177,7 +180,7 @@ export default function NewSessionDialog({ open, onOpenChange, projects, counts,
 
           <div className="flex items-center gap-2 h-12 px-4 border-t border-border shrink-0">
             <span className="text-[10.5px] text-muted-foreground">
-              <kbd className="px-1 rounded-sm border border-border bg-raised font-mono text-[9.5px] text-dim">⌘N</kbd> again starts Claude in the Inbox
+              <kbd className="px-1 rounded-sm border border-border bg-raised font-mono text-[9.5px] text-dim">⌘N</kbd> again starts Claude in {defaultDir ? folderName(defaultDir) : 'the Inbox'}
             </span>
             <Dialog.Close className="ml-auto px-3 h-7 rounded-sm border border-border bg-transparent text-[11.5px] text-dim cursor-pointer font-inherit hover:bg-hover hover:text-foreground">
               Cancel

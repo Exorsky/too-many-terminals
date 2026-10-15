@@ -11,7 +11,7 @@ looking closer:
 
 - **Filters** (left). *When* — Any time / Today / Yesterday / This week / This month,
   cumulative, by calendar day (`ageBucket` in `src/lib/sessions.ts`, the same helper
-  the sidebar's shelf uses). *Projects* — **folded by default**; with a dozen folders
+  the sidebar's day groups use). *Projects* — **folded by default**; with a dozen folders
   open the list of them was most of the column, and time is what you reach for first.
   While folded it still names the active project. Every count is computed from what
   the *other* filters leave, so it says what clicking it would show.

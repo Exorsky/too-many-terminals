@@ -12,7 +12,8 @@ import SessionInspector from '@/components/SessionInspector';
 import SessionReader from '@/components/SessionReader';
 import Seam from '@/components/Seam';
 import SessionWorkspace from '@/components/SessionWorkspace';
-import SessionsSidebar, { type NewSessionKind, type RecentEntry } from '@/components/SessionsSidebar';
+import SessionsSidebar, { ALL, INBOX, inScope, type NewSessionKind, type RecentEntry } from '@/components/SessionsSidebar';
+import ProjectHome from '@/components/ProjectHome';
 import SettingsView from '@/components/SettingsView';
 import TaskInspector from '@/components/TaskInspector';
 import TodoView from '@/components/TodoView';
@@ -25,13 +26,14 @@ import {
   visibleSessionIds, type Edge, type Pane, type PaneContent,
 } from '@/lib/panes';
 import {
-  learnSessionNames, restoreTab, shellPtyId, toSavedTab, UNNAMED_SESSION,
+  bySessionOrder, learnSessionNames, restoreTab, shellPtyId, toSavedTab, UNNAMED_SESSION,
 } from '@/lib/sessions';
 import { useSettings } from '@/lib/settings-store';
 import { addTask, linkSession, loadTasks, updateTask, useTasks } from '@/lib/tasks';
 import { activeTabId, initialTabsState, sessionModeOf, tabsReducer } from '@/lib/tabs';
 import { useDragValue } from '@/lib/use-drag-value';
 import { cn, folderName, ICON_BUTTON } from '@/lib/utils';
+import { projectHue } from '@/types';
 import { confirmAction } from '@/lib/confirm';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import NewSessionDialog from '@/components/NewSessionDialog';
@@ -153,8 +155,14 @@ export default function App() {
   const [readerTarget, setReaderTarget] = useState<{ projectDir: string; entry: SessionHistoryEntry } | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [newOpen, setNewOpen] = useState(false);
+  // Which project the sidebar is inside (ALL, INBOX or a directory), and
+  // whether the main area is showing that project's page instead of a session.
+  const [scopeRaw, setScopeRaw] = useState<string>(ALL);
+  const [projectHome, setProjectHome] = useState(false);
   const newOpenRef = useRef(newOpen);
   newOpenRef.current = newOpen;
+  // ⌘N inside a project starts there; read through a ref by the key handler.
+  const newDefaultDirRef = useRef<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [sidebarWidth, setSidebarWidth] = useState(248);
   const [inspectorOpen, setInspectorOpen] = useState(false);
@@ -355,6 +363,7 @@ export default function App() {
       setShowSettings(false);
       setShowArchive(false);
       setReaderTarget(null);
+      setProjectHome(false);
       startPty(tab);
       return tab;
     },
@@ -460,8 +469,25 @@ export default function App() {
     setShowSettings(false);
     setShowArchive(false);
     setReaderTarget(null);
+    setProjectHome(false);
     dispatch({ type: 'select', tabId });
   }, [dispatch]);
+
+  // A removed project can't stay the scope, or the sidebar would show an
+  // empty project that no longer exists.
+  const scope = scopeRaw === ALL || scopeRaw === INBOX || projects.includes(scopeRaw) ? scopeRaw : ALL;
+  const scopeDir = scope === ALL || scope === INBOX ? null : scope;
+  newDefaultDirRef.current = scopeDir;
+
+  /** Going into a project shows its page unless one of its sessions is
+   *  already what's on screen — a terminal from another project under a
+   *  sidebar that says this one would be the confusion P3 exists to remove. */
+  const handleScopeChange = useCallback((next: string) => {
+    setScopeRaw(next);
+    const current = state.tabs.find((t) => t.id === activeTabId(state));
+    setProjectHome(next !== ALL && !(current && inScope(current, next)));
+    if (next !== ALL) { setShowSettings(false); setShowArchive(false); setReaderTarget(null); setView('sessions'); }
+  }, [state]);
 
   // Every way of closing a session from the UI comes through here, so this is
   // the one place it asks.
@@ -649,7 +675,7 @@ export default function App() {
       // so the old one-keystroke session is two keystrokes, never a form.
       if (key === 'n' && !e.shiftKey) {
         e.preventDefault();
-        if (newOpenRef.current) { setNewOpen(false); void newSession(null); } else setNewOpen(true);
+        if (newOpenRef.current) { setNewOpen(false); void newSession(newDefaultDirRef.current); } else setNewOpen(true);
       }
       // ⌘⇧P kept as an alias: it was the palette's key before ⌘K, and muscle
       // memory outlives a release note.
@@ -889,6 +915,8 @@ export default function App() {
                 showArchive={showArchive}
                 onNewSession={(dir, kind) => { void newSession(dir, kind); }}
                 onOpenNewSession={() => setNewOpen(true)}
+                scope={scope}
+                onScopeChange={handleScopeChange}
                 onSelect={handleSelect}
                 onClose={handleClose}
                 onRename={(tabId, name) => dispatch({ type: 'rename', tabId, name })}
@@ -1125,6 +1153,23 @@ export default function App() {
             </div>
           )}
 
+          {onSessions && projectHome && scope !== ALL && (
+            <div className="absolute inset-0 bg-background">
+              <ProjectHome
+                name={scopeDir ? folderName(scopeDir) : 'Inbox'}
+                dir={scopeDir}
+                hue={scopeDir
+                  ? { background: `hsl(${projectHue(Math.max(0, projects.indexOf(scopeDir)))} 60% 62%)` }
+                  : { boxShadow: 'inset 0 0 0 1px var(--muted-foreground)' }}
+                sessions={sessions.filter((t) => !t.archived && inScope(t, scope)).sort(bySessionOrder(lastUsed))}
+                lastUsed={lastUsed}
+                now={Date.now()}
+                onNewSession={(kind) => { void newSession(scopeDir, kind); }}
+                onOpenDirectory={(dir) => ipc.openDirectory(dir)}
+                onSelect={handleSelect}
+              />
+            </div>
+          )}
           {showArchive && (
             <div className="absolute inset-0 bg-background">
               <SessionHistoryPanel
@@ -1226,6 +1271,7 @@ export default function App() {
       <NewSessionDialog
         open={newOpen}
         onOpenChange={setNewOpen}
+        defaultDir={scopeDir}
         projects={projects}
         counts={projectCounts}
         onStart={(dir, kind, name) => { void newSession(dir, kind, name); }}

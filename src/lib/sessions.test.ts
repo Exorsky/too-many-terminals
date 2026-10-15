@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  ageBucket, bySessionOrder, compactAge, DESK_WINDOW_MS, learnSessionNames, onDesk, matchesQuery, recencyOf, restoreTab,
+  ageBucket, bySessionOrder, compactAge, learnSessionNames, sessionGroup, matchesQuery, recencyOf, restoreTab,
   STATE_DOT,
   sessionState, shellPtyId, toSavedTab,
 } from './sessions';
@@ -227,27 +227,25 @@ describe('ageBucket', () => {
   });
 });
 
-describe('onDesk', () => {
-  const now = Date.now();
-  const old = now - DESK_WINDOW_MS - 1;
+describe('sessionGroup', () => {
+  const now = new Date(2026, 9, 15, 14, 55).getTime();
+  const on = (d: number, h = 12) => new Date(2026, 9, d, h).getTime();
 
-  it('keeps a recently touched session on the desk', () => {
-    expect(onDesk(tab({ createdAt: now - 60_000 }), undefined, now)).toBe(true);
-    expect(onDesk(tab(), now - 60_000, now)).toBe(true);
+  it('goes by the calendar day it was last touched', () => {
+    expect(sessionGroup(tab({ createdAt: on(15, 0) }), undefined, now)).toBe('today');
+    expect(sessionGroup(tab(), on(14, 23), now)).toBe('yesterday');
+    expect(sessionGroup(tab(), on(12), now)).toBe('week');
+    expect(sessionGroup(tab(), on(1), now)).toBe('earlier');
+    expect(sessionGroup(tab(), undefined, now)).toBe('earlier');
   });
 
-  it('shelves a quiet session after the window', () => {
-    expect(onDesk(tab({ statusChangedAt: old }), undefined, now)).toBe(false);
-    expect(onDesk(tab(), undefined, now)).toBe(false);
+  it('puts pinned and live sessions in Now, however old', () => {
+    expect(sessionGroup(tab({ pinned: true }), on(1), now)).toBe('now');
+    expect(sessionGroup(tab({ status: 'working' }), on(1), now)).toBe('now');
+    expect(sessionGroup(tab({ status: 'requires_response' }), on(1), now)).toBe('now');
   });
 
-  it('never shelves a pinned or live session', () => {
-    expect(onDesk(tab({ pinned: true }), old, now)).toBe(true);
-    expect(onDesk(tab({ status: 'working' }), old, now)).toBe(true);
-    expect(onDesk(tab({ status: 'requires_response' }), old, now)).toBe(true);
-  });
-
-  it('shelves a dormant session that last worked long ago', () => {
-    expect(onDesk(tab({ status: 'working', dormant: true }), old, now)).toBe(false);
+  it('does not call a dormant session live', () => {
+    expect(sessionGroup(tab({ status: 'working', dormant: true }), on(1), now)).toBe('earlier');
   });
 });

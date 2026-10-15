@@ -56,8 +56,8 @@ vi.mock('@/lib/ipc', () => {
     saveSettings: ok(undefined),
     getSessionUsageStats: ok({ available: false, session: null, week: null, fetchedAtMs: null, fromCache: false }),
     getSessionStats: ok([]),
-    // Fresh transcripts, so the restored sessions are on the desk rather than
-    // folded away on the shelf.
+    // Fresh transcripts, so the restored sessions are under Today rather than
+    // folded away in an older day.
     listSessions: ok(['sess-a', 'sess-b', 'sess-c'].map((sessionId) => (
       { sessionId, preview: '', lastUsedIso: new Date().toISOString() }))),
     deleteSession: ok(undefined),
@@ -86,7 +86,7 @@ beforeEach(() => {
 });
 
 /** Where a session is filed, as its row says it: the project on its second
- *  line, or nothing there for the Inbox. Desk and shelf mix every project, so
+ *  line, or nothing there for the Inbox. The top level mixes every project, so
  *  the row is the only place this is shown. */
 function groupOfRow(row: Element): string {
   return row.querySelector('[data-session-meta]')?.textContent ?? 'Inbox';
@@ -379,14 +379,14 @@ describe('persistence', () => {
   });
 });
 
-describe('desk and shelf', () => {
+describe('grouped by day', () => {
   const fresh = (sessionId: string) => ({ sessionId, preview: '', lastUsedIso: new Date().toISOString() });
   // clearAllMocks keeps implementations, so the override below would leak.
   afterEach(() => {
     vi.mocked(ipc.listSessions).mockResolvedValue(['sess-a', 'sess-b', 'sess-c'].map(fresh));
   });
 
-  it('folds a session nobody has touched for days onto the shelf', async () => {
+  it('folds a session nobody has touched for days into its day', async () => {
     const old = new Date(Date.now() - 5 * 86_400_000).toISOString();
     vi.mocked(ipc.listSessions).mockResolvedValue([
       fresh('sess-a'), { sessionId: 'sess-b', preview: '', lastUsedIso: old }, fresh('sess-c'),
@@ -399,17 +399,31 @@ describe('desk and shelf', () => {
     expect(sessionRow('Beta')).toBeInTheDocument();
   });
 
-  it('a project narrows the list instead of expanding under its name', async () => {
+  it('going into a project shows only its sessions, under its name, with a way back', async () => {
     render(<App />);
     await ready();
     await userEvent.click(document.querySelector('[data-project-row]')!);
 
+    const header = document.querySelector('[data-scope-header]') as HTMLElement;
+    expect(header).toHaveTextContent('proj');
     await waitFor(() => expect(() => sessionRow('Loose thought')).toThrow());
     sessionRow('Alpha');
     sessionRow('Beta');
+    // Nothing of this project is on screen yet, so the main area shows the
+    // project rather than a terminal from elsewhere.
+    expect(screen.getByRole('heading', { name: 'proj' })).toBeInTheDocument();
 
-    await userEvent.click(screen.getByLabelText('Show every project'));
+    await userEvent.click(screen.getByLabelText('Back to all projects'));
+    expect(document.querySelector('[data-scope-header]')).toBeNull();
     expect(sessionRow('Loose thought')).toBeInTheDocument();
+  });
+
+  it('⌘N inside a project offers that project first', async () => {
+    render(<App />);
+    await ready();
+    await userEvent.click(document.querySelector('[data-project-row]')!);
+    fireEvent.keyDown(window, { key: 'n', metaKey: true });
+    expect(await screen.findByRole('radio', { name: /proj/ })).toHaveAttribute('aria-checked', 'true');
   });
 });
 
@@ -442,7 +456,7 @@ describe('archiving', () => {
     await openMenu(within(sessionRow('Alpha')).getByLabelText('Actions for Alpha'));
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Archive' }));
 
-    // Out of the desk and into a group of its own, which is folded by default.
+    // Out of Today and into a group of its own, which is folded by default.
     await waitFor(() => expect(groupOfRow(sessionRow('Beta'))).toContain('proj'));
     expect(() => sessionRow('Alpha')).toThrow();
     expect(screen.getByRole('button', { expanded: false, name: /Archived/ })).toBeInTheDocument();

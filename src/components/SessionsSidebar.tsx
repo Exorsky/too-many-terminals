@@ -1,17 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Archive, ChevronRight, Columns2, Folder, FolderInput, FolderOpen, FolderPlus, Inbox, Library,
+  Archive, ChevronLeft, ChevronRight, Columns2, Folder, FolderInput, FolderOpen, FolderPlus, Inbox, Library,
   MoreHorizontal, Pencil, Pin, PinOff, Plus, Search, Settings, Code, Upload, X,
 } from 'lucide-react';
 import { TAB_MIME } from '@/lib/dnd';
 import * as ipc from '@/lib/ipc';
 import { useSettings } from '@/lib/settings-store';
 import {
-  ageBucket, bySessionOrder, compactAge, matchesQuery, onDesk, recencyOf, sessionState, STATE_DOT, STATE_LABEL,
-  type AgeBucket,
+  bySessionOrder, compactAge, matchesQuery, recencyOf, sessionGroup, sessionState, STATE_DOT, STATE_LABEL,
+  type SessionGroup,
 } from '@/lib/sessions';
 import { ACTION_ROW, cn, folderName } from '@/lib/utils';
-import type { SessionHistoryEntry, SessionTool, Tab } from '@/types';
+import { projectHue, type SessionHistoryEntry, type SessionTool, type Tab } from '@/types';
 
 /** What each tool is called, everywhere it's offered. */
 const TOOL_LABEL: Record<SessionTool, string> = {
@@ -60,6 +60,10 @@ export interface SessionsSidebarProps {
   /** The Library (closed sessions) is the overlay currently up — the footer
    *  row's pressed state, not a switch for the Archived group below. */
   showArchive: boolean;
+  /** What the list shows: `ALL`, `INBOX`, or a project's directory. Lives in
+   *  App because ⌘N and the main area follow it too. */
+  scope: string;
+  onScopeChange: (scope: string) => void;
   /** What a new session starts as. `both` is a Claude session with its shell
    *  already open in a pane beside it. */
   onNewSession: (dir: string | null, kind: NewSessionKind) => void;
@@ -100,7 +104,7 @@ export function StatusDot({ tab, size = 7 }: { tab: Tab; size?: number }) {
   );
 }
 
-/** A group heading with its count: DESK 6, SHELF 40, PROJECTS. Not a button
+/** A group heading with its count: NOW 2, TODAY 6, PROJECTS. Not a button
  *  unless it collapses something — a heading that looks clickable and isn't is
  *  worse than a plain one. */
 function GroupLabel({ children, count }: { children: React.ReactNode; count?: number }) {
@@ -130,9 +134,9 @@ function SessionRow({
 }: {
   tab: Tab;
   selected: boolean;
-  /** Shelf sessions sit one step in from their day's own row. */
+  /** Sessions under a folded day sit one step in from that day's row. */
   depth: 0 | 1;
-  /** Desk and shelf mix every project, so a row says which one it's from —
+  /** The top level mixes every project, so a row says which one it's from —
    *  unless the list is already narrowed to a single project. */
   showProject: boolean;
   projects: string[];
@@ -321,69 +325,81 @@ function SessionRow({
   );
 }
 
-/** A project: one row that narrows the list to it. Not a collapsible group —
- *  a project of seventy sessions expanded under its heading was most of the
- *  sidebar, and the desk already shows what in it is current. A filter costs
- *  one row whether the project holds two sessions or two hundred. */
+/** What the sidebar is showing: every session, the Inbox, or one project
+ *  (by its directory — absolute, so it can't collide with the two words). */
+export const ALL = 'all';
+export const INBOX = 'inbox';
+
+export function inScope(tab: Tab, scope: string): boolean {
+  if (scope === ALL) return true;
+  return scope === INBOX ? tab.projectDir === null : tab.projectDir === scope;
+}
+
+/** A project's identity colour, the same hue the New session dialog and the
+ *  Library use for it. The Inbox has none — it's drawn as a hollow ring. */
+function hueStyle(projects: string[], dir: string | null): React.CSSProperties {
+  if (dir === null) return { boxShadow: 'inset 0 0 0 1px var(--muted-foreground)' };
+  return { background: `hsl(${projectHue(Math.max(0, projects.indexOf(dir)))} 60% 62%)` };
+}
+
+/** The loudest live state among some sessions, for a project row's dot:
+ *  asking you beats working, and quiet shows nothing. */
+function loudest(tabs: Tab[]): 'attention' | 'running' | null {
+  const states = tabs.map(sessionState);
+  if (states.includes('attention')) return 'attention';
+  if (states.includes('running')) return 'running';
+  return null;
+}
+
+/** One row per project at the top level. Clicking it goes *into* the project
+ *  — the whole sidebar becomes that project, under a header in its colour —
+ *  rather than filtering in place, which left you guessing whether a filter
+ *  was on. */
 function ProjectRow({
-  dir, count, active, onToggle,
-  onNewSession, onOpenDirectory, onImportSession, onRemoveProject,
+  dir, label, hue, count, live, onEnter, menu,
 }: {
   dir: string;
+  label: string;
+  hue: React.CSSProperties;
   count: number;
-  active: boolean;
-  onToggle: () => void;
-  onNewSession: (dir: string | null, kind: NewSessionKind) => void;
-  onOpenDirectory: (dir: string) => void;
-  onImportSession: (dir: string) => void;
-  onRemoveProject: (dir: string) => void;
+  live: 'attention' | 'running' | null;
+  onEnter: () => void;
+  menu?: React.ReactNode;
 }) {
+  const row = (
+    <button
+      type="button"
+      // The Inbox shares the row's shape but isn't a project — no folder, no
+      // menu — so it isn't marked as one.
+      data-project-row={menu ? '' : undefined}
+      data-inbox-row={menu ? undefined : ''}
+      title={dir}
+      className={cn(
+        'group flex items-center gap-2 w-full h-[26px] px-3 shrink-0 rounded-sm',
+        'border-none cursor-pointer font-inherit text-left text-[11.5px]',
+        'bg-transparent text-dim hover:text-foreground hover:bg-hover',
+      )}
+      onClick={onEnter}
+    >
+      <span className="w-[7px] h-[7px] rounded-full shrink-0" style={hue} />
+      <span className="truncate flex-1">{label}</span>
+      <span className="shrink-0 text-[9.5px] font-mono tabular-nums text-muted-foreground">{count || ''}</span>
+      <span className="flex justify-end w-3 shrink-0">
+        {live && <span className={cn('w-1.5 h-1.5 rounded-full', STATE_DOT[live])} title={STATE_LABEL[live]} />}
+      </span>
+      <ChevronRight size={11} className="shrink-0 text-faint group-hover:text-muted-foreground" />
+    </button>
+  );
+  if (!menu) return row;
   return (
     <ContextMenu>
-      <ContextMenuTrigger asChild>
-        <button
-          type="button"
-          data-project-row
-          aria-pressed={active}
-          title={dir}
-          className={cn(
-            'group flex items-center gap-2 w-full h-[26px] px-3 shrink-0 rounded-sm',
-            'border-none cursor-pointer font-inherit text-left text-[11.5px]',
-            active ? 'bg-selected text-foreground' : 'bg-transparent text-dim hover:text-foreground hover:bg-hover',
-          )}
-          onClick={onToggle}
-        >
-          <Folder size={11} className="shrink-0 text-muted-foreground" />
-          <span className="truncate flex-1">{folderName(dir)}</span>
-          <span className="shrink-0 text-[9.5px] font-mono tabular-nums text-muted-foreground">
-            {count || ''}
-          </span>
-        </button>
-      </ContextMenuTrigger>
-      <ContextMenuContent className="min-w-44">
-        {NEW_SESSION_KINDS.map((kind) => (
-          <ContextMenuItem key={kind} onSelect={() => onNewSession(dir, kind)}>
-            <Plus size={13} /><span>New {NEW_SESSION_LABEL[kind]}</span>
-          </ContextMenuItem>
-        ))}
-        <ContextMenuSeparator />
-        <ContextMenuItem onSelect={() => onOpenDirectory(dir)}>
-          <FolderOpen size={13} /><span>Open directory</span>
-        </ContextMenuItem>
-        <ContextMenuItem onSelect={() => onImportSession(dir)}>
-          <FolderInput size={13} /><span>Import session…</span>
-        </ContextMenuItem>
-        <ContextMenuSeparator />
-        <ContextMenuItem variant="destructive" onSelect={() => onRemoveProject(dir)}>
-          <X size={13} /><span>Remove project</span>
-        </ContextMenuItem>
-      </ContextMenuContent>
+      <ContextMenuTrigger asChild>{row}</ContextMenuTrigger>
+      <ContextMenuContent className="min-w-44">{menu}</ContextMenuContent>
     </ContextMenu>
   );
 }
 
-/** A folding heading: a shelf day, or Archived. Folded by default — out of
- *  the way is the whole point of both. */
+/** A folding heading: an older day, or Archived. */
 function FoldRow({ label, count, open, onToggle }: {
   label: string;
   count: number;
@@ -404,36 +420,37 @@ function FoldRow({ label, count, open, onToggle }: {
   );
 }
 
-/** The shelf's days, oldest last. "Earlier today" only fills in the morning
- *  after a late night — anything from today is usually still on the desk. */
-const SHELF_DAYS: { key: string; label: string; ages: AgeBucket[] }[] = [
-  { key: 'today', label: 'Earlier today', ages: ['today'] },
-  { key: 'yesterday', label: 'Yesterday', ages: ['yesterday'] },
-  { key: 'week', label: 'This week', ages: ['week'] },
-  { key: 'earlier', label: 'Earlier', ages: ['month', 'older'] },
+/** Older days fold away; Now and Today never do. */
+const FOLDED_GROUPS: { key: SessionGroup; label: string }[] = [
+  { key: 'yesterday', label: 'Yesterday' },
+  { key: 'week', label: 'This week' },
+  { key: 'earlier', label: 'Earlier' },
 ];
+
+/** A project this small reads as one list — folding three sessions away
+ *  behind "Earlier" only adds clicks. */
+const SMALL_SCOPE = 8;
 
 /** The sidebar, and the only persistent list of sessions in the app.
  *
- *  A desk and a shelf. The desk is what you're working with — live, pinned,
- *  or touched in the last twelve hours — and stays short however many
- *  sessions you open in a day. Everything else sits on the shelf, folded by
- *  day. Projects are a filter over both, not groups of their own. Closed
- *  sessions live in the Library, not here. See docs/features/terminals.md. */
+ *  Two levels. At the top: every session grouped by when — Now (live or
+ *  pinned), Today, then older days folded — and the projects, each a row you
+ *  go into. Inside a project: the same groups for that project alone, under a
+ *  header in its colour with a way back. Closed sessions live in the Library,
+ *  not here. See docs/features/terminals.md. */
 export default function SessionsSidebar({
-  tabs, selectedId, projects, lastUsed, showSettings, showArchive,
+  tabs, selectedId, projects, lastUsed, showSettings, showArchive, scope, onScopeChange,
   onNewSession, onOpenNewSession, onSelect, onClose, onRename, onSetProject,
   onArchive, onTogglePin, onOpenDirectory, onOpenInVscode, onCreateTask, onOpenInWorkspace, onOpenPalette,
   onAddProject, onRemoveProject, onImportSession, onToggleArchive, onToggleSettings,
 }: SessionsSidebarProps) {
   const settings = useSettings();
   const [query, setQuery] = useState('');
-  const [projectFilter, setProjectFilter] = useState<string | null>(null);
-  const [openDays, setOpenDays] = useState<Set<string>>(() => new Set());
+  const [openGroups, setOpenGroups] = useState<Set<string>>(() => new Set());
   const [archiveOpen, setArchiveOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
 
-  // Powers every age label and the desk's window. 30s is plenty — these are
+  // Powers every age label and the day groups. 30s is plenty — these are
   // "how long", not a clock.
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -441,34 +458,116 @@ export default function SessionsSidebar({
     return () => clearInterval(timer);
   }, []);
 
-  // A removed project can't stay the filter, or the list would be quietly empty.
-  const activeProject = projectFilter && projects.includes(projectFilter) ? projectFilter : null;
+  // A fresh scope starts with its older days folded and no query.
+  useEffect(() => { setOpenGroups(new Set()); setQuery(''); }, [scope]);
 
   const order = useMemo(() => bySessionOrder(lastUsed), [lastUsed]);
   const ageOf = (tab: Tab) => (tab.resumeSessionId ? lastUsed.get(tab.resumeSessionId) : undefined);
 
   const all = tabs.filter((t) => t.kind !== 'file');
-  const sessions = all
-    .filter((t) => matchesQuery(t, query) && (!activeProject || t.projectDir === activeProject))
-    .sort(order);
+  const open = all.filter((t) => !t.archived);
+  const scoped = all.filter((t) => inScope(t, scope));
+  const sessions = scoped.filter((t) => matchesQuery(t, query)).sort(order);
   const live = sessions.filter((t) => !t.archived);
-  // The session you're looking at stays on the desk even if it's old —
-  // selecting a shelved session shouldn't make it vanish into a folded day.
-  const desk = live.filter((t) => t.id === selectedId || onDesk(t, ageOf(t), now));
-  const shelf = live.filter((t) => !desk.includes(t));
   const archived = sessions.filter((t) => t.archived);
   const filtering = query.trim() !== '';
+  const groupOf = (t: Tab) => sessionGroup(t, ageOf(t), now);
+  const inGroup = (key: SessionGroup) => live.filter((t) => groupOf(t) === key);
+  const small = scope !== ALL && scoped.filter((t) => !t.archived).length <= SMALL_SCOPE;
+
+  const scopeName = scope === ALL ? null : scope === INBOX ? 'Inbox' : folderName(scope);
+  const scopeDir = scope === ALL || scope === INBOX ? null : scope;
+  // Inside a project, the one thing you mustn't miss is a session elsewhere
+  // that's waiting on you.
+  const waitingElsewhere = scope === ALL ? [] : open.filter((t) => !inScope(t, scope) && sessionState(t) === 'attention');
 
   const rowProps = {
-    projects, compact: settings.compactList, now, showProject: !activeProject,
+    projects, compact: settings.compactList, now, showProject: scope === ALL,
     onSelect, onClose, onRename, onSetProject, onArchive, onTogglePin,
     onOpenDirectory, onOpenInVscode, onCreateTask, onOpenInWorkspace,
   };
+  const rows = (list: Tab[], depth: 0 | 1) => list.map((tab) => (
+    <SessionRow key={tab.id} tab={tab} selected={tab.id === selectedId} depth={depth} lastUsedAt={ageOf(tab)} {...rowProps} />
+  ));
+
+  const newKinds = (dir: string | null, Item: typeof DropdownMenuItem | typeof ContextMenuItem) => NEW_SESSION_KINDS.map((kind) => (
+    <Item key={kind} onSelect={() => onNewSession(dir, kind)}>
+      <Plus size={13} /><span>New {NEW_SESSION_LABEL[kind]}</span>
+    </Item>
+  ));
+  const projectMenu = (dir: string, Item: typeof DropdownMenuItem | typeof ContextMenuItem, Separator: typeof DropdownMenuSeparator | typeof ContextMenuSeparator) => (
+    <>
+      {newKinds(dir, Item)}
+      <Separator />
+      <Item onSelect={() => onOpenDirectory(dir)}><FolderOpen size={13} /><span>Open directory</span></Item>
+      <Item onSelect={() => onImportSession(dir)}><FolderInput size={13} /><span>Import session…</span></Item>
+      <Separator />
+      <Item variant="destructive" onSelect={() => onRemoveProject(dir)}><X size={13} /><span>Remove project</span></Item>
+    </>
+  );
+
+  const nowRows = inGroup('now');
+  const todayRows = inGroup('today');
 
   return (
-    <div className="flex flex-col w-full h-full min-h-0 bg-card border-r border-border">
+    <div
+      className="flex flex-col w-full h-full min-h-0 bg-card border-r border-border"
+      // The project's colour along the top edge: the one mark that says
+      // "you're inside something" before you read a word.
+      style={scope !== ALL ? { boxShadow: `inset 0 2px 0 ${scopeDir ? hueStyle(projects, scopeDir).background : 'var(--muted-foreground)'}` } : undefined}
+    >
+      {scopeName && (
+        <div
+          data-scope-header
+          className="flex items-center gap-1.5 h-10 px-2 shrink-0 border-b border-border"
+          style={scopeDir ? { background: `hsl(${projectHue(Math.max(0, projects.indexOf(scopeDir)))} 60% 62% / 0.08)` } : undefined}
+        >
+          <button
+            type="button"
+            aria-label="Back to all projects"
+            className="flex items-center gap-0.5 h-6 pl-1 pr-2 rounded-sm border border-border bg-transparent text-[11px] text-dim cursor-pointer font-inherit hover:text-foreground hover:bg-hover"
+            onClick={() => onScopeChange(ALL)}
+          >
+            <ChevronLeft size={12} />All
+          </button>
+          <span className="w-2 h-2 rounded-full shrink-0 ml-1.5" style={hueStyle(projects, scopeDir)} />
+          <span className="truncate text-[13px] font-semibold text-foreground" title={scopeDir ?? undefined}>{scopeName}</span>
+          <span className="shrink-0 text-[10px] font-mono tabular-nums text-muted-foreground">{scoped.filter((t) => !t.archived).length}</span>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                aria-label={`Actions for ${scopeName}`}
+                className="ml-auto flex items-center justify-center w-6 h-6 shrink-0 rounded-sm border-none bg-transparent text-muted-foreground cursor-pointer hover:text-foreground hover:bg-hover"
+              >
+                <MoreHorizontal size={13} />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-44">
+              {scopeDir ? projectMenu(scopeDir, DropdownMenuItem, DropdownMenuSeparator) : newKinds(null, DropdownMenuItem)}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      )}
+
+      {waitingElsewhere.length > 0 && (
+        <button
+          type="button"
+          className="flex items-center gap-1.5 h-6 mx-2 mt-1.5 px-2 shrink-0 rounded-sm border border-attention/30 bg-attention/10 text-[10.5px] text-dim cursor-pointer font-inherit text-left hover:text-foreground"
+          onClick={() => { onScopeChange(ALL); onSelect(waitingElsewhere[0].id); }}
+        >
+          <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-attention" />
+          <span className="flex-1 truncate">
+            {waitingElsewhere.length} waiting in {waitingElsewhere[0].projectDir ? folderName(waitingElsewhere[0].projectDir) : 'Inbox'}
+            {waitingElsewhere.length > 1 && ' and elsewhere'}
+          </span>
+          <ChevronRight size={11} className="shrink-0 text-muted-foreground" />
+        </button>
+      )}
+
       {/* Search and New sit above every group because they're the two things
-          you do without first knowing what's in the list. */}
+          you do without first knowing what's in the list. Inside a project
+          both say so. */}
       <div className="flex flex-col gap-1.5 px-2 pt-2 pb-1 shrink-0">
         <div className="flex items-center gap-1.5 h-[26px] px-2 rounded-sm border border-border focus-within:border-border-hover">
           <Search size={11} className="shrink-0 text-muted-foreground" />
@@ -476,7 +575,7 @@ export default function SessionsSidebar({
             ref={searchRef}
             type="text"
             value={query}
-            placeholder="Search sessions…"
+            placeholder={scopeName ? `Search ${scopeName}…` : 'Search sessions…'}
             aria-label="Search sessions"
             spellCheck={false}
             autoComplete="off"
@@ -510,7 +609,8 @@ export default function SessionsSidebar({
         </div>
 
         {/* What to start is a choice, so the button asks — in a dialog, where
-            there's room for where, what and a name. ⌘N opens the same one. */}
+            there's room for where, what and a name. ⌘N opens the same one,
+            already pointed at the project you're in. */}
         <button
           type="button"
           className={cn(
@@ -521,95 +621,89 @@ export default function SessionsSidebar({
           onClick={onOpenNewSession}
         >
           <Plus size={12} className="shrink-0 text-primary" />
-          <span className="flex-1 text-left">New session</span>
+          <span className="flex-1 text-left truncate">{scopeName ? `New session in ${scopeName}` : 'New session'}</span>
           <span className="shrink-0 text-[9px] text-faint">⌘N</span>
         </button>
       </div>
 
-      {/* A filter that has scrolled out of view still has to say it's on. */}
-      {activeProject && (
-        <div className="flex items-center gap-1.5 h-6 mx-2 px-2 shrink-0 rounded-sm bg-selected text-[10.5px] text-dim">
-          <Folder size={10} className="shrink-0 text-muted-foreground" />
-          <span className="truncate flex-1">Only {folderName(activeProject)}</span>
-          <button
-            type="button"
-            aria-label="Show every project"
-            className="flex items-center justify-center w-4 h-4 rounded-sm shrink-0 border-none cursor-pointer bg-transparent text-muted-foreground hover:text-foreground"
-            onClick={() => setProjectFilter(null)}
-          >
-            <X size={10} />
-          </button>
-        </div>
-      )}
-
       <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-1 pb-2 scrollbar-thin">
-        <GroupLabel count={desk.length}>Desk</GroupLabel>
-        {desk.length === 0 ? (
-          <p className="px-3 py-1 text-[10.5px] leading-snug text-faint">
-            {filtering || activeProject
-              ? 'Nothing current matches.'
-              : 'Nothing current. ⌘N starts a session without choosing anything.'}
-          </p>
-        ) : (
-          desk.map((tab) => (
-            <SessionRow key={tab.id} tab={tab} selected={tab.id === selectedId} depth={0} lastUsedAt={ageOf(tab)} {...rowProps} />
-          ))
-        )}
+        {scopeDir && <div className="px-3 pt-1 font-mono text-[10px] text-faint truncate" title={scopeDir}>{scopeDir}</div>}
 
-        {shelf.length > 0 && (
+        {nowRows.length > 0 && (
           <>
-            <GroupLabel count={shelf.length}>Shelf</GroupLabel>
-            {SHELF_DAYS.map(({ key, label, ages }) => {
-              const day = shelf.filter((t) => ages.includes(ageBucket(recencyOf(t, ageOf(t)), now)));
-              if (day.length === 0) return null;
-              // A search opens every day with a hit, so a match can't hide
-              // inside a folded one.
-              const open = filtering || openDays.has(key);
-              return (
-                <div key={key}>
-                  <FoldRow
-                    label={label}
-                    count={day.length}
-                    open={open}
-                    onToggle={() => setOpenDays((prev) => {
-                      const next = new Set(prev);
-                      if (!next.delete(key)) next.add(key);
-                      return next;
-                    })}
-                  />
-                  {open && day.map((tab) => (
-                    <SessionRow key={tab.id} tab={tab} selected={tab.id === selectedId} depth={1} lastUsedAt={ageOf(tab)} {...rowProps} />
-                  ))}
-                </div>
-              );
-            })}
+            <GroupLabel count={nowRows.length}>Now</GroupLabel>
+            {rows(nowRows, 0)}
           </>
         )}
 
-        <GroupLabel>Projects</GroupLabel>
-        {projects.length === 0 ? (
-          <button
-            type="button"
-            className={cn(ACTION_ROW, 'gap-1.5 h-[26px] px-3 text-[11.5px]')}
-            onClick={onAddProject}
-          >
-            <FolderPlus size={12} className="shrink-0" />
-            <span>Add a project…</span>
-          </button>
-        ) : (
-          projects.map((dir) => (
+        <GroupLabel count={todayRows.length}>Today</GroupLabel>
+        {todayRows.length === 0 ? (
+          <p className="px-3 py-1 text-[10.5px] leading-snug text-faint">
+            {filtering
+              ? 'Nothing from today matches.'
+              : scopeName ? `Nothing in ${scopeName} today.` : 'Nothing yet today. ⌘N starts a session.'}
+          </p>
+        ) : rows(todayRows, 0)}
+
+        {FOLDED_GROUPS.map(({ key, label }) => {
+          const list = inGroup(key);
+          if (list.length === 0) return null;
+          // Open when asked, when searching (a match can't hide in a folded
+          // day), when it holds the session you're looking at, or when the
+          // whole project is small enough to read as one list.
+          const isOpen = openGroups.has(key) || filtering || small || list.some((t) => t.id === selectedId);
+          return (
+            <div key={key} className="mt-1">
+              <FoldRow
+                label={label}
+                count={list.length}
+                open={isOpen}
+                onToggle={() => setOpenGroups((prev) => {
+                  const next = new Set(prev);
+                  if (!next.delete(key)) next.add(key);
+                  return next;
+                })}
+              />
+              {isOpen && rows(list, 1)}
+            </div>
+          );
+        })}
+
+        {scope === ALL && (
+          <>
+            <GroupLabel>Projects</GroupLabel>
             <ProjectRow
-              key={dir}
-              dir={dir}
-              count={all.filter((t) => !t.archived && t.projectDir === dir).length}
-              active={activeProject === dir}
-              onToggle={() => setProjectFilter(activeProject === dir ? null : dir)}
-              onNewSession={onNewSession}
-              onOpenDirectory={onOpenDirectory}
-              onImportSession={onImportSession}
-              onRemoveProject={onRemoveProject}
+              dir="Sessions filed under no project"
+              label="Inbox"
+              hue={hueStyle(projects, null)}
+              count={open.filter((t) => t.projectDir === null).length}
+              live={loudest(open.filter((t) => t.projectDir === null))}
+              onEnter={() => onScopeChange(INBOX)}
             />
-          ))
+            {projects.map((dir) => {
+              const owned = open.filter((t) => t.projectDir === dir);
+              return (
+                <ProjectRow
+                  key={dir}
+                  dir={dir}
+                  label={folderName(dir)}
+                  hue={hueStyle(projects, dir)}
+                  count={owned.length}
+                  live={loudest(owned)}
+                  onEnter={() => onScopeChange(dir)}
+                  menu={projectMenu(dir, ContextMenuItem, ContextMenuSeparator)}
+                />
+              );
+            })}
+            <button
+              type="button"
+              className={cn(ACTION_ROW, 'gap-1.5 h-[26px] px-3 text-[11.5px]')}
+              onClick={onAddProject}
+            >
+              <FolderPlus size={12} className="shrink-0" />
+              <span>Add a project folder…</span>
+            </button>
+          </>
         )}
 
         {/* Archived sessions are still in the workspace, so they get a group
@@ -618,9 +712,7 @@ export default function SessionsSidebar({
         {archived.length > 0 && (
           <div className="mt-3">
             <FoldRow label="Archived" count={archived.length} open={archiveOpen} onToggle={() => setArchiveOpen((v) => !v)} />
-            {archiveOpen && archived.map((tab) => (
-              <SessionRow key={tab.id} tab={tab} selected={tab.id === selectedId} depth={1} lastUsedAt={ageOf(tab)} {...rowProps} />
-            ))}
+            {archiveOpen && rows(archived, 1)}
           </div>
         )}
       </div>

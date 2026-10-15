@@ -239,7 +239,7 @@ export function compactAge(at: number | undefined, now: number): string {
  *  different days, and "yesterday" is what you remember them by.
  *
  *  `week` is 2–6 days back, `month` 7–29; the Library's "This week" and "This
- *  month" filters are cumulative over these, the sidebar's shelf is not. */
+ *  month" filters are cumulative over these; the sidebar's day groups are not. */
 export type AgeBucket = 'today' | 'yesterday' | 'week' | 'month' | 'older';
 
 export function ageBucket(at: number, now: number): AgeBucket {
@@ -257,18 +257,21 @@ export function ageBucket(at: number, now: number): AgeBucket {
   return 'older';
 }
 
-/** How long a quiet session stays on the desk before it moves to the shelf. */
-export const DESK_WINDOW_MS = 12 * 60 * 60 * 1000;
-
-/** On the desk: something you're working with right now. Pinned, live
- *  (working or asking), or touched in the last twelve hours. Everything else
- *  is on the shelf — still open, still resumable, just out of the way.
+/** Where a session sits in the list, named the way you'd say it.
  *
- *  Derived, not stored: nothing is moved, archived or killed, so a shelved
- *  session comes back to the desk the moment it does anything. */
-export function onDesk(tab: Tab, lastUsedAt: number | undefined, now: number): boolean {
-  if (tab.pinned) return true;
+ *  `now` is anything you'd act on regardless of age: pinned, working, or asking
+ *  you something. Everything else goes by the calendar day it was last
+ *  touched — Today is explicit rather than "the last twelve hours", because a
+ *  window you can't see is a list that rearranges itself for no visible reason.
+ *
+ *  Derived, not stored: nothing is moved, archived or killed, so a session
+ *  comes back to Now or Today the moment it does anything. */
+export type SessionGroup = 'now' | 'today' | 'yesterday' | 'week' | 'earlier';
+
+export function sessionGroup(tab: Tab, lastUsedAt: number | undefined, now: number): SessionGroup {
+  if (tab.pinned) return 'now';
   const state = sessionState(tab);
-  if (state === 'running' || state === 'attention') return true;
-  return now - recencyOf(tab, lastUsedAt) < DESK_WINDOW_MS;
+  if (state === 'running' || state === 'attention') return 'now';
+  const age = ageBucket(recencyOf(tab, lastUsedAt), now);
+  return age === 'month' || age === 'older' ? 'earlier' : age;
 }
