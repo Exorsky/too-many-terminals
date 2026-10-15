@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  bySessionOrder, compactAge, learnSessionNames, matchesQuery, recencyOf, restoreTab,
+  ageBucket, bySessionOrder, compactAge, DESK_WINDOW_MS, learnSessionNames, onDesk, matchesQuery, recencyOf, restoreTab,
   STATE_DOT,
   sessionState, shellPtyId, toSavedTab,
 } from './sessions';
@@ -203,5 +203,51 @@ describe('STATE_DOT', () => {
     // the ring are what carry the difference for them.
     expect(STATE_DOT.running).toContain('animate-pulse');
     expect(STATE_DOT.attention).toContain('ring-2');
+  });
+});
+
+describe('ageBucket', () => {
+  const now = new Date(2026, 9, 15, 14, 55).getTime();
+  const at = (d: number, h = 12) => new Date(2026, 9, d, h).getTime();
+
+  it('goes by calendar day, not elapsed hours', () => {
+    expect(ageBucket(new Date(2026, 9, 15, 0, 30).getTime(), now)).toBe('today');
+    expect(ageBucket(new Date(2026, 9, 14, 23, 30).getTime(), now)).toBe('yesterday');
+  });
+
+  it('buckets older days', () => {
+    expect(ageBucket(at(13), now)).toBe('week');
+    expect(ageBucket(at(9), now)).toBe('week');
+    expect(ageBucket(at(8), now)).toBe('month');
+    expect(ageBucket(new Date(2026, 8, 10).getTime(), now)).toBe('older');
+  });
+
+  it('treats no clock at all as old', () => {
+    expect(ageBucket(0, now)).toBe('older');
+  });
+});
+
+describe('onDesk', () => {
+  const now = Date.now();
+  const old = now - DESK_WINDOW_MS - 1;
+
+  it('keeps a recently touched session on the desk', () => {
+    expect(onDesk(tab({ createdAt: now - 60_000 }), undefined, now)).toBe(true);
+    expect(onDesk(tab(), now - 60_000, now)).toBe(true);
+  });
+
+  it('shelves a quiet session after the window', () => {
+    expect(onDesk(tab({ statusChangedAt: old }), undefined, now)).toBe(false);
+    expect(onDesk(tab(), undefined, now)).toBe(false);
+  });
+
+  it('never shelves a pinned or live session', () => {
+    expect(onDesk(tab({ pinned: true }), old, now)).toBe(true);
+    expect(onDesk(tab({ status: 'working' }), old, now)).toBe(true);
+    expect(onDesk(tab({ status: 'requires_response' }), old, now)).toBe(true);
+  });
+
+  it('shelves a dormant session that last worked long ago', () => {
+    expect(onDesk(tab({ status: 'working', dormant: true }), old, now)).toBe(false);
   });
 });

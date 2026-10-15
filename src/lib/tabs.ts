@@ -4,6 +4,7 @@ import {
   closePane, focusedPane, focusPane, initialLayout, removeSession, resizeSeam,
   splitPane, type Edge, type Layout, type PaneContent,
 } from './panes';
+import { UNNAMED_SESSION } from './sessions';
 
 export interface TabsState {
   tabs: Tab[];
@@ -62,6 +63,9 @@ export type TabsAction =
   | { type: 'close'; tabId: string }
   | { type: 'select'; tabId: string | null }
   | { type: 'rename'; tabId: string; name: string }
+  /** The auto-namer's suggestion: applied only while the session is still
+   *  unnamed, so a name you gave it (at creation or by hand) is never replaced. */
+  | { type: 'autoName'; tabId: string; name: string }
   | { type: 'exited'; tabId: string }
   | { type: 'sessionResolved'; tabId: string; sessionId: string }
   | { type: 'status'; tabId: string; status: TabStatus; detail?: string }
@@ -150,6 +154,9 @@ export function tabsReducer(state: TabsState, action: TabsAction): TabsState {
 
     case 'rename':
       return patch(action.tabId, (t) => ({ ...t, name: action.name }));
+
+    case 'autoName':
+      return patch(action.tabId, (t) => (t.name === UNNAMED_SESSION ? { ...t, name: action.name } : t));
 
     case 'exited':
       return patch(action.tabId, (t) => ({ ...t, exited: true }));

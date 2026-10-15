@@ -1,8 +1,30 @@
-# Session history
+# Session history: the Library
 
-The History item (sidebar footer menu) opens a panel of past Claude Code sessions merged
+The **Library** row in the sidebar footer opens every past Claude Code session merged
 across every open project folder, read from the transcripts Claude Code itself writes
 under `~/.claude/projects/<encoded-dir>/*.jsonl`. Read-only and offline; nothing uploaded.
+
+## Layout
+
+Three columns, because a hundred sessions are read by filtering, then scanning, then
+looking closer:
+
+- **Filters** (left). *When* — Any time / Today / Yesterday / This week / This month,
+  cumulative, by calendar day (`ageBucket` in `src/lib/sessions.ts`, the same helper
+  the sidebar's shelf uses). *Projects* — **folded by default**; with a dozen folders
+  open the list of them was most of the column, and time is what you reach for first.
+  While folded it still names the active project. Every count is computed from what
+  the *other* filters leave, so it says what clicking it would show.
+- **List** (middle). One dense line per session — name (or first message), folder,
+  clock time — under a sticky heading per real day ("Today", "Yesterday", "Mon 12 Oct"),
+  not a catch-all "Earlier". A transcript hit adds the matching text and an
+  `n in text` count under the name.
+- **The picked session** (right). Folder · timestamp · id, the first message when the
+  row is showing a name instead, and the actions: Resume, Read, Export, Delete. They
+  live here rather than as hover icons on every row — a hundred rows of four icons is a
+  toolbar, not a list.
+
+Click picks a row, double-click or Enter resumes it.
 
 - **Dir encoding** mirrors Claude Code's scheme: `:`/`\`/`/` → `-`
   (`C:\Users\x` → `C--Users-x`).
@@ -21,29 +43,28 @@ under `~/.claude/projects/<encoded-dir>/*.jsonl`. Read-only and offline; nothing
   Sessions never named in TMT (e.g. started in the VS Code extension — see
   [vscode-handoff.md](vscode-handoff.md)) fall back to the preview alone.
   The placeholder `Claude` a fresh tab starts with is not a name and never enters the map.
-- With more than one folder open, a project filter chip row appears (mirroring the
-  original multi-project app) alongside the folder name shown on each row.
-- **Resume** (click / Enter / →) opens a new Claude tab, in that entry's project, with
+- With more than one folder open, rows show their folder and the Projects filter appears.
+- **Resume** (double-click / Enter / the Resume button) opens a new Claude tab, in that entry's project, with
   `claude --resume <sessionId>`.
-- **Read** (`▤` action / Space) opens the transcript as a rendered document — see
+- **Read** (the Read button / Space) opens the transcript as a rendered document — see
   [session-reader.md](session-reader.md).
 - A live session's tab context menu also has **Open in VS Code**, handing it off to the
   native Claude Code VS Code extension — see [vscode-handoff.md](vscode-handoff.md).
   Works because both tools read the same transcript files this page describes.
-- **Delete** (trash / Del) removes the transcript file after inline confirmation.
+- **Delete** (trash button / Del) removes the transcript file after inline confirmation.
   Session ids are validated (`[A-Za-z0-9_-]+`) so no path escapes.
-- **Calendar** (`c`, or the header's calendar button): a three-month grid above the list —
+- **Calendar** (`c`, or the header's calendar button; hidden until asked for): a
+  three-month grid above the list —
   one square per day, filled by how many sessions ran and tinted with the hue of the folder
   that ran most of them. Click a day to scope the list to it; the picked day shows as a chip
-  next to the folder chips, and clicking the chip, the day again, or `esc` clears it. The grid
+  above the list, and clicking the chip, the day again, or `esc` clears it. The grid
   itself is drawn from everything the search and folder filters left, *not* from the day
   filter — so picking a day never empties the grid you picked it from. Hovering a day reads
   out date · sessions · folders under the grid.
   Same `SessionCalendar` component Home's cadence uses; passing `onSelectDay` is what makes
   the days clickable there and not on Home. History lists transcripts without scanning them,
   so its squares carry no token figure — the caption simply leaves it out.
-- Panel UX: search across preview text, folder name, and the session's name if it has
-  one (`/`), Today/Yesterday/Earlier day groups, ↑↓/Enter keyboard nav.
+- Keyboard: `/` search, ↑↓ pick, Enter resume, Space read, Del delete, `c` calendar.
 
 ## Searching inside transcripts
 

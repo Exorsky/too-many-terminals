@@ -7,14 +7,31 @@
 
 ## The session list
 
-Every open session — Claude and shell alike — lives in **one flat list**, sorted by what it's
-doing rather than by which folder it came from. There are no folder groups, no accordions and
-no nesting: thirteen sessions are thirteen rows.
+Two groups — a **desk** and a **shelf** — then the projects as a filter.
 
-That's a deliberate reversal. Sessions used to sit inside collapsible per-folder groups, which
-cost a header row and a "New session" row per folder before a single session appeared, and
-buried a running session three folders down. The flat list trades away per-folder ordering for
-the thing the sidebar is actually for: seeing what needs you.
+- **Desk**: what you're working with. A session is on it if it's pinned, live (working
+  or waiting on you), the one you're looking at, or was touched in the last **12 hours**
+  (`onDesk` / `DESK_WINDOW_MS` in `src/lib/sessions.ts`). It stays short however many
+  sessions you open in a day.
+- **Shelf**: every other open session, folded by day — Earlier today, Yesterday, This
+  week, Earlier — each day one row with a count until you open it. A search opens every
+  day with a hit.
+- **Projects**: one row per project, never expanded. Clicking it narrows the desk and
+  shelf to that project (a removable "Only <project>" line says so above the list);
+  clicking again, or the ✕, goes back. The right-click menu is unchanged.
+- **Archived** stays its own folded group; closed sessions are in the
+  [Library](session-history.md), so there is no Recent group.
+
+Nothing is moved, archived or killed to get a session onto the shelf: it is derived from
+the same clocks as the order below, so a shelved session comes back to the desk the moment
+it does anything. Because desk and shelf mix every project, a row's second line names its
+project (unless the list is already narrowed to one, or Claude is mid-turn, when the
+activity caption wins).
+
+The previous shape was one Inbox group plus a collapsible group per project, expanded by
+default. With a working day of new sessions, the Inbox reached twenty rows reaching two
+weeks back and a busy project expanded to seventy — the list grew with time instead of
+with work.
 
 ### Order
 

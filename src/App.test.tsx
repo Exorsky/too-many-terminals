@@ -36,6 +36,8 @@ vi.mock('@/lib/ipc', () => {
     canOpenSystemNotificationSettings: ok(false),
     openSystemNotificationSettings: ok(undefined),
     openDirectory: vi.fn(),
+    revealInFileManager: vi.fn(),
+    fileManagerName: () => 'Finder',
     openExternal: vi.fn(),
     openInVscode: vi.fn(),
     pickFolder: ok(null),
@@ -54,7 +56,10 @@ vi.mock('@/lib/ipc', () => {
     saveSettings: ok(undefined),
     getSessionUsageStats: ok({ available: false, session: null, week: null, fetchedAtMs: null, fromCache: false }),
     getSessionStats: ok([]),
-    listSessions: ok([]),
+    // Fresh transcripts, so the restored sessions are on the desk rather than
+    // folded away on the shelf.
+    listSessions: ok(['sess-a', 'sess-b', 'sess-c'].map((sessionId) => (
+      { sessionId, preview: '', lastUsedIso: new Date().toISOString() }))),
     deleteSession: ok(undefined),
     readTranscript: ok([]),
   };
@@ -70,24 +75,21 @@ vi.mock('@/components/terminalCache', () => ({
 
 import * as ipc from '@/lib/ipc';
 import { resetTasksForTest } from '@/lib/tasks';
+import { settleConfirm } from '@/lib/confirm';
 import App from './App';
 
-afterEach(cleanup);
+// A dialog left open by a failing test would hide the next test's whole UI.
+afterEach(() => { settleConfirm(false); cleanup(); });
 beforeEach(() => {
   vi.clearAllMocks();
   resetTasksForTest();
 });
 
-/** The group a session row sits under, by walking back up the sidebar's flat
- *  list to the nearest heading — which is exactly how a reader finds it too. */
-function groupOfRow(row: Element): string | null {
-  let node: Element | null = row;
-  while ((node = node.previousElementSibling)) {
-    const heading = node.querySelector('span');
-    if (node.matches('.mt-3') && heading) return heading.textContent;
-    if (node.matches('[data-project-row]')) return node.textContent?.trim().replace(/\d+$/, '') ?? null;
-  }
-  return null;
+/** Where a session is filed, as its row says it: the project on its second
+ *  line, or nothing there for the Inbox. Desk and shelf mix every project, so
+ *  the row is the only place this is shown. */
+function groupOfRow(row: Element): string {
+  return row.querySelector('[data-session-meta]')?.textContent ?? 'Inbox';
 }
 
 function sessionRow(name: string): HTMLElement {
@@ -175,11 +177,14 @@ describe('information architecture', () => {
 });
 
 describe('scratch sessions', () => {
-  it('⌘N creates a usable Inbox session with no modal and no folder picker', async () => {
+  it('⌘N then Enter creates a usable Inbox session with no folder picker', async () => {
     render(<App />);
     await ready();
 
     fireEvent.keyDown(window, { key: 'n', metaKey: true });
+    // The dialog opens on Inbox + Claude, so Enter starts exactly that.
+    await screen.findByRole('dialog', { name: 'New session' });
+    await userEvent.keyboard('{Enter}');
 
     await waitFor(() => expect(ipc.createScratchDir).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(ipc.spawnPty).toHaveBeenCalled());
@@ -367,9 +372,63 @@ describe('persistence', () => {
     await ready();
     fireEvent.contextMenu(document.querySelector('[data-project-row]')!);
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Remove project' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Remove project' }));
 
     await waitFor(() => expect(groupOfRow(sessionRow('Alpha'))).toBe('Inbox'));
     expect(ipc.killPty).not.toHaveBeenCalled();
+  });
+});
+
+describe('desk and shelf', () => {
+  const fresh = (sessionId: string) => ({ sessionId, preview: '', lastUsedIso: new Date().toISOString() });
+  // clearAllMocks keeps implementations, so the override below would leak.
+  afterEach(() => {
+    vi.mocked(ipc.listSessions).mockResolvedValue(['sess-a', 'sess-b', 'sess-c'].map(fresh));
+  });
+
+  it('folds a session nobody has touched for days onto the shelf', async () => {
+    const old = new Date(Date.now() - 5 * 86_400_000).toISOString();
+    vi.mocked(ipc.listSessions).mockResolvedValue([
+      fresh('sess-a'), { sessionId: 'sess-b', preview: '', lastUsedIso: old }, fresh('sess-c'),
+    ]);
+    render(<App />);
+    await waitFor(() => expect(() => sessionRow('Beta')).toThrow());
+    sessionRow('Alpha');
+
+    await userEvent.click(screen.getByRole('button', { expanded: false, name: /This week/ }));
+    expect(sessionRow('Beta')).toBeInTheDocument();
+  });
+
+  it('a project narrows the list instead of expanding under its name', async () => {
+    render(<App />);
+    await ready();
+    await userEvent.click(document.querySelector('[data-project-row]')!);
+
+    await waitFor(() => expect(() => sessionRow('Loose thought')).toThrow());
+    sessionRow('Alpha');
+    sessionRow('Beta');
+
+    await userEvent.click(screen.getByLabelText('Show every project'));
+    expect(sessionRow('Loose thought')).toBeInTheDocument();
+  });
+});
+
+describe('destructive actions', () => {
+  it('closing a session asks first, and Cancel leaves it running', async () => {
+    render(<App />);
+    await ready();
+
+    await openMenu(within(sessionRow('Alpha')).getByLabelText('Actions for Alpha'));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Close session' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
+    expect(sessionRow('Alpha')).toBeInTheDocument();
+    expect(ipc.killPty).not.toHaveBeenCalled();
+
+    await openMenu(within(sessionRow('Alpha')).getByLabelText('Actions for Alpha'));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Close session' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Close session' }));
+    await waitFor(() => expect(() => sessionRow('Alpha')).toThrow());
+    expect(ipc.killPty).toHaveBeenCalledWith('tab-alpha');
   });
 });
 
@@ -383,7 +442,7 @@ describe('archiving', () => {
     await openMenu(within(sessionRow('Alpha')).getByLabelText('Actions for Alpha'));
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Archive' }));
 
-    // Out of the project group and into its own, which is folded by default.
+    // Out of the desk and into a group of its own, which is folded by default.
     await waitFor(() => expect(groupOfRow(sessionRow('Beta'))).toContain('proj'));
     expect(() => sessionRow('Alpha')).toThrow();
     expect(screen.getByRole('button', { expanded: false, name: /Archived/ })).toBeInTheDocument();
@@ -493,9 +552,11 @@ describe('adding a shell', () => {
 });
 
 describe('starting a session', () => {
-  it('⌘N still starts Claude with no questions asked', async () => {
+  it('⌘N twice still starts Claude with no questions asked', async () => {
     render(<App />);
     await ready();
+    fireEvent.keyDown(window, { key: 'n', metaKey: true });
+    await screen.findByRole('dialog', { name: 'New session' });
     fireEvent.keyDown(window, { key: 'n', metaKey: true });
 
     await waitFor(() => expect(ipc.spawnPty).toHaveBeenCalledTimes(1));
@@ -510,7 +571,8 @@ describe('starting a session', () => {
     await ready();
 
     await userEvent.click(screen.getByRole('button', { name: /New session/ }));
-    await userEvent.click(await screen.findByRole('menuitem', { name: 'Claude + Shell' }));
+    await userEvent.click(await screen.findByRole('radio', { name: /Claude \+ Shell/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Start session' }));
 
     await waitFor(() => expect(document.querySelectorAll('[data-pane-tab]')).toHaveLength(2));
     const spawned = vi.mocked(ipc.spawnPty).mock.calls.map((c) => c[0].kind);
@@ -525,12 +587,60 @@ describe('starting a session', () => {
     await ready();
 
     await userEvent.click(screen.getByRole('button', { name: /New session/ }));
-    await userEvent.click(await screen.findByRole('menuitem', { name: 'Shell' }));
+    await userEvent.click(await screen.findByRole('radio', { name: /^Shell/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Start session' }));
 
     await waitFor(() => expect(ipc.spawnPty).toHaveBeenCalled());
     const spawn = lastCall(vi.mocked(ipc.spawnPty).mock.calls)[0];
     expect(spawn.kind).toBe('powershell');
     expect(spawn.cwd).toMatch(/\.tmt[/\\]scratch[/\\]/);
+  });
+});
+
+describe('the file explorer', () => {
+  // The reported bug: the menu is portaled outside the peeked panel, so the
+  // click on its item counted as "outside", closed the panel, and unmounted
+  // the menu before the item could fire. Nothing opened.
+  it('Show in Finder works from a peeked panel', async () => {
+    render(<App />);
+    await ready();
+    await userEvent.click(screen.getByLabelText('Show files'));
+    const panel = await waitFor(() => {
+      const el = document.querySelector('[data-files-panel]');
+      if (!el) throw new Error('no files panel');
+      return el as HTMLElement;
+    });
+
+    fireEvent.contextMenu(within(panel).getByText('proj'));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Show in Finder' }));
+
+    expect(ipc.revealInFileManager).toHaveBeenCalledWith('/proj');
+  });
+});
+
+describe('the New session dialog', () => {
+  it('starts in the picked project, under the name you gave it', async () => {
+    render(<App />);
+    await ready();
+
+    await userEvent.click(screen.getByRole('button', { name: /New session/ }));
+    await userEvent.click(await screen.findByRole('radio', { name: /proj/ }));
+    await userEvent.type(screen.getByPlaceholderText('ITA-29789 Mailapp migration'), 'ITA-1 move mail');
+    await userEvent.click(screen.getByRole('button', { name: 'Start session' }));
+
+    await waitFor(() => expect(ipc.spawnPty).toHaveBeenCalled());
+    expect(lastCall(vi.mocked(ipc.spawnPty).mock.calls)[0].cwd).toBe('/proj');
+    expect(ipc.createScratchDir).not.toHaveBeenCalled();
+    await waitFor(() => expect(groupOfRow(sessionRow('ITA-1 move mail'))).toBe('proj'));
+  });
+
+  it('Cancel starts nothing', async () => {
+    render(<App />);
+    await ready();
+    await userEvent.click(screen.getByRole('button', { name: /New session/ }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
+    expect(ipc.spawnPty).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 });
 

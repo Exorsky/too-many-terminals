@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Sparkles, Trash2, X } from 'lucide-react';
 import { deleteTask, fromLocalInput, toLocalInput, updateTask } from '@/lib/tasks';
 import { ACTION_ROW, ACTION_ROW_DANGER, cn, folderName, ICON_BUTTON } from '@/lib/utils';
+import { confirmAction } from '@/lib/confirm';
 import type { Tab, Task, TaskPriority } from '@/types';
 
 const PRIORITIES: TaskPriority[] = ['low', 'medium', 'high'];
@@ -216,7 +217,11 @@ export default function TaskInspector({
         <button
           type="button"
           className={cn(ACTION_ROW_DANGER, 'h-[26px] px-2 text-[11px]')}
-          onClick={() => { deleteTask(task.id); onClose(); }}
+          onClick={async () => {
+            if (!await confirmAction({ title: `Delete "${task.title}"?`, body: 'The task is gone for good. Sessions linked to it are not touched.', confirmLabel: 'Delete task' })) return;
+            deleteTask(task.id);
+            onClose();
+          }}
         >
           <Trash2 size={12} className="shrink-0" />
           Delete task

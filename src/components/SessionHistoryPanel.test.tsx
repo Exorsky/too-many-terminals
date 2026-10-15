@@ -101,6 +101,7 @@ describe('SessionHistoryPanel', () => {
     it('scopes the list to the day you click, and back', async () => {
       renderPanel();
       await screen.findByText('add a script to bulk-rename screenshots');
+      await userEvent.click(screen.getByTitle('Show the calendar (c)'));
 
       const month = fiveDaysAgo.toLocaleString('en-US', { month: 'short' });
       const cell = `${month} ${fiveDaysAgo.getFullYear()} ${fiveDaysAgo.getDate()} — 1 session`;
@@ -116,15 +117,53 @@ describe('SessionHistoryPanel', () => {
       expect(screen.getByText('add a script to bulk-rename screenshots')).toBeInTheDocument();
     });
 
-    it('hides and shows the grid', async () => {
+    it('is hidden until asked for', async () => {
       renderPanel();
-      await screen.findByText('Sessions per day');
-
-      await userEvent.click(screen.getByTitle('Hide the calendar (c)'));
+      await screen.findByText('add a script to bulk-rename screenshots');
       expect(screen.queryByText('Sessions per day')).not.toBeInTheDocument();
 
       await userEvent.click(screen.getByTitle('Show the calendar (c)'));
       expect(screen.getByText('Sessions per day')).toBeInTheDocument();
+
+      await userEvent.click(screen.getByTitle('Hide the calendar (c)'));
+      expect(screen.queryByText('Sessions per day')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('filters', () => {
+    const OLD_ID = 'a0000000-0000-0000-0000-000000000000';
+
+    it('narrows to a time range, and counts what each range holds', async () => {
+      vi.mocked(ipc.listSessions).mockResolvedValue([
+        entry(),
+        entry({ sessionId: OLD_ID, preview: 'why does the pty die', lastUsedIso: new Date(Date.now() - 40 * 86_400_000).toISOString() }),
+      ]);
+      renderPanel();
+      await screen.findByText('why does the pty die');
+
+      const today = screen.getByRole('button', { name: /^Today/ });
+      expect(today).toHaveTextContent('1');
+      await userEvent.click(today);
+
+      expect(screen.queryByText('why does the pty die')).not.toBeInTheDocument();
+      expect(screen.getByText('add a script to bulk-rename screenshots')).toBeInTheDocument();
+    });
+
+    it('keeps the project list folded until opened', async () => {
+      const OTHER = '/home/x/other';
+      vi.mocked(ipc.listSessions).mockImplementation((dir) => Promise.resolve(
+        dir === OTHER ? [entry({ sessionId: OLD_ID, preview: 'other folder work' })] : [entry()],
+      ));
+      render(<SessionHistoryPanel projects={[PROJECT, OTHER]} sessionNames={{}} onResume={vi.fn()} onRead={vi.fn()} />);
+      await screen.findByText('other folder work');
+
+      const toggle = screen.getByRole('button', { name: /Projects/, expanded: false });
+      expect(screen.queryByRole('button', { name: /^other/ })).not.toBeInTheDocument();
+
+      await userEvent.click(toggle);
+      await userEvent.click(screen.getByRole('button', { name: /^other/ }));
+      expect(screen.queryByText('add a script to bulk-rename screenshots')).not.toBeInTheDocument();
+      expect(screen.getAllByText('other folder work').length).toBeGreaterThan(0);
     });
   });
 });

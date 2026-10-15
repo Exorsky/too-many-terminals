@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as ipc from '@/lib/ipc';
 import { resetSettingsForTest } from '@/lib/settings-store';
 import CustomizeTab from './CustomizeTab';
+import ConfirmDialog from './ConfirmDialog';
 
 vi.mock('@/lib/ipc');
 
@@ -84,8 +85,11 @@ describe('CustomizeTab', () => {
       customThemes: [{ id: 'my-theme', name: 'My Theme', colors: {} }],
       showMarkdownToggle: true, notificationsEnabled: true, autoSleepMinutes: 15, usageRefreshSeconds: 60, compactList: false,
     });
-    render(<CustomizeTab />);
+    render(<><CustomizeTab /><ConfirmDialog /></>);
     await userEvent.click(await screen.findByLabelText('Delete My Theme'));
+    // Nothing is gone until the dialog says so.
+    expect(screen.getByText('My Theme')).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole('button', { name: 'Delete theme' }));
 
     expect(screen.queryByText('My Theme')).not.toBeInTheDocument();
     expect(ipc.saveSettings).toHaveBeenCalledWith(expect.objectContaining({ selectedThemeId: 'default', customThemes: [] }));

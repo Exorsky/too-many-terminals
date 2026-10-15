@@ -202,6 +202,25 @@ neighbour. An input that wants a border-based focus instead opts out with
 `outline-none` — utilities win over base — but nothing may simply have no focus
 treatment. Before this, most custom buttons had none at all.
 
+## Destructive actions ask once, in a dialog
+
+Anything that destroys something — closing a session, removing a project,
+deleting a transcript, a task or a theme — goes through `confirmAction()`
+(`src/lib/confirm.ts`), rendered by the single `ConfirmDialog` App mounts. One
+dialog, not per-component inline "Delete? Yes / No" rows: the Library used to
+have one, and it was a different shape from every other place that deletes.
+
+- The title names the thing (`Close "API refactor"?`), the body says what
+  happens **and what survives** ("the conversation stays in the Library"), and
+  the button repeats the verb of the menu item that asked.
+- Focus starts on **Cancel**, so a reflexive Enter never destroys anything; Esc
+  and a click outside cancel too.
+- The guard sits in the one function every path goes through (`handleClose`,
+  `handleRemoveProject`, `deleteTheme`), not at each button, so a new shortcut
+  or menu can't skip it.
+- Reversible actions don't ask: archiving, closing a pane tab (the session keeps
+  running), unpinning.
+
 ## Iconography
 
 `lucide-react` exclusively — no custom SVGs, no icon font. Stroke icons only

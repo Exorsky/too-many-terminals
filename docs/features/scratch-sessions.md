@@ -1,7 +1,22 @@
 # Scratch sessions and the Inbox
 
-> **⌘N, and you're typing.** No modal, no folder picker, no decision about where
-> this belongs.
+> **⌘N ⌘N (or ⌘N, Enter), and you're typing.** No folder picker, no decision
+> about where this belongs.
+
+## The New session dialog
+
+⌘N and the sidebar's **New session** button open one dialog
+(`NewSessionDialog.tsx`): **where** on the left (Inbox, every project with its
+open-session count, Add a project folder…), **what** on the right (Claude / Shell /
+Claude + Shell, each drawn as the layout it opens), and an optional **name**.
+
+It opens on **Inbox + Claude** with the name field focused, which is the old ⌘N
+with one keystroke added: Enter starts it, and so does pressing ⌘N a second time.
+↑↓ move between places (even while typing a name), ←→ between kinds. A name given
+here sticks — the auto-namer only names a session that is still unnamed
+(`autoName` in `tabsReducer`). A folder added from the dialog is selected as soon
+as it's picked. A project's right-click menu still starts Claude / Shell / both in
+it directly, without the dialog.
 
 ## The problem
 
@@ -20,10 +35,10 @@ That is the whole mechanism. The Inbox is **not** a reserved folder and not a fa
 project: it is the absence of one. Nothing has to exist before a session can be in
 it, which is what lets ⌘N skip every question.
 
-## What ⌘N does
+## What starting in the Inbox does
 
 ```
-⌘N
+⌘N ⌘N
  ↓  create_scratch_dir(<8 hex chars>)      →  ~/.tmt/scratch/<id>
  ↓  pty_spawn { kind: "claude", cwd }      →  a normal Claude Code session
  ↓  projectDir: null                       →  appears in the Inbox

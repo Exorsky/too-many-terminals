@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Check, Copy, Pencil, Plus, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { confirmAction } from '@/lib/confirm';
 import { loadSettings, patchSettings } from '@/lib/settings-store';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -97,7 +98,8 @@ export default function CustomizeTab() {
     setEditingId(null);
   };
 
-  const deleteTheme = (theme: Theme) => {
+  const deleteTheme = async (theme: Theme) => {
+    if (!await confirmAction({ title: `Delete the "${theme.name}" theme?`, confirmLabel: 'Delete theme' })) return;
     const customs = customThemes.filter((t) => t.id !== theme.id);
     setCustomThemes(customs);
     if (editingId === theme.id) setEditingId(null);

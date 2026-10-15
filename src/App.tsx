@@ -31,7 +31,10 @@ import { useSettings } from '@/lib/settings-store';
 import { addTask, linkSession, loadTasks, updateTask, useTasks } from '@/lib/tasks';
 import { activeTabId, initialTabsState, sessionModeOf, tabsReducer } from '@/lib/tabs';
 import { useDragValue } from '@/lib/use-drag-value';
-import { cn, ICON_BUTTON } from '@/lib/utils';
+import { cn, folderName, ICON_BUTTON } from '@/lib/utils';
+import { confirmAction } from '@/lib/confirm';
+import ConfirmDialog from '@/components/ConfirmDialog';
+import NewSessionDialog from '@/components/NewSessionDialog';
 import type { AppView, SessionHistoryEntry, SessionTool, ShellOption, Tab, TabStatus, Task } from '@/types';
 
 const INITIAL_COLS = 120;
@@ -149,6 +152,9 @@ export default function App() {
   const [showArchive, setShowArchive] = useState(false);
   const [readerTarget, setReaderTarget] = useState<{ projectDir: string; entry: SessionHistoryEntry } | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [newOpen, setNewOpen] = useState(false);
+  const newOpenRef = useRef(newOpen);
+  newOpenRef.current = newOpen;
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [sidebarWidth, setSidebarWidth] = useState(248);
   const [inspectorOpen, setInspectorOpen] = useState(false);
@@ -191,22 +197,16 @@ export default function App() {
     for (const tab of state.tabs) if (tab.kind === 'claude') dirs.add(tab.cwd);
     return [...dirs];
   }, [projects, state.tabs]);
-  const { entries, lastUsed } = useSessionHistory(historyDirs, historyKey);
+  const { lastUsed } = useSessionHistory(historyDirs, historyKey);
 
-  /** Past sessions that aren't open right now, newest first — the Recent group.
-   *  A session you already have open belongs in its own group, not here. */
-  const recent = useMemo<RecentEntry[]>(() => {
-    const open = new Set(state.tabs.map((t) => t.resumeSessionId).filter(Boolean));
-    return entries
-      .filter(({ entry }) => !open.has(entry.sessionId))
-      .map(({ dir, entry }) => ({
-        dir,
-        entry,
-        name: sessionNames[entry.sessionId] || entry.preview.slice(0, 40) || UNNAMED_SESSION,
-        at: new Date(entry.lastUsedIso).getTime() || 0,
-      }))
-      .sort((a, b) => b.at - a.at);
-  }, [entries, state.tabs, sessionNames]);
+  /** Open sessions per project, for the New session dialog's counts. */
+  const projectCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const t of state.tabs) {
+      if (t.kind !== 'file' && !t.archived && t.projectDir) counts.set(t.projectDir, (counts.get(t.projectDir) ?? 0) + 1);
+    }
+    return counts;
+  }, [state.tabs]);
 
   // --- pty lifecycle (unchanged from before the redesign) -----------------
 
@@ -281,7 +281,7 @@ export default function App() {
   }, [maybeNotify, dispatch]);
 
   useEffect(() => {
-    const unlisten = ipc.onTabNamed((tabId, name) => dispatch({ type: 'rename', tabId, name }));
+    const unlisten = ipc.onTabNamed((tabId, name) => dispatch({ type: 'autoName', tabId, name }));
     return () => { unlisten.then((fn) => fn()); };
   }, [dispatch]);
 
@@ -368,18 +368,19 @@ export default function App() {
    *  — which is a state, not a placeholder. ⌘N is this with both defaults, so
    *  the common case stays one keystroke with no modal and no folder picker.
    *  See docs/features/scratch-sessions.md. */
-  const newSession = useCallback(async (dir: string | null, kind: NewSessionKind = 'claude') => {
+  const newSession = useCallback(async (dir: string | null, kind: NewSessionKind = 'claude', name = '') => {
     const cwd = dir ?? await ipc.createScratchDir(crypto.randomUUID().slice(0, 8)).catch(() => null);
     if (!cwd) return;
 
     if (kind === 'shell') {
       const shell = shellOptions[0];
       if (!shell) return;
-      spawnSessionAt(cwd, 'shell', shell.id, shell.label, { projectDir: dir });
+      spawnSessionAt(cwd, 'shell', shell.id, name || shell.label, { projectDir: dir });
       return;
     }
 
-    const tab = spawnSessionAt(cwd, 'claude', null, UNNAMED_SESSION, { projectDir: dir });
+    // A name given up front sticks: the auto-namer only names unnamed sessions.
+    const tab = spawnSessionAt(cwd, 'claude', null, name || UNNAMED_SESSION, { projectDir: dir });
     // "Claude + Shell" is the layout decided up front: the second pane is put
     // there now rather than being something you go and add afterwards.
     if (kind === 'both') {
@@ -435,7 +436,16 @@ export default function App() {
    *  sessions are still running and their transcripts still exist; closing the
    *  folder is a statement about the *sidebar*, not about the work. They land
    *  in the Inbox, where anything unfiled lives. */
-  const handleRemoveProject = useCallback((dir: string) => {
+  const handleRemoveProject = useCallback(async (dir: string) => {
+    const owned = state.tabs.filter((t) => t.projectDir === dir && t.kind !== 'file').length;
+    const ok = await confirmAction({
+      title: `Remove ${folderName(dir)}?`,
+      body: owned
+        ? `Its ${owned} session${owned === 1 ? '' : 's'} move to the Inbox and keep running. The folder on disk is not touched.`
+        : 'The folder on disk is not touched.',
+      confirmLabel: 'Remove project',
+    });
+    if (!ok) return;
     for (const tab of state.tabs) {
       if (tab.projectDir === dir) dispatch({ type: 'setProject', tabId: tab.id, projectDir: null });
     }
@@ -453,7 +463,18 @@ export default function App() {
     dispatch({ type: 'select', tabId });
   }, [dispatch]);
 
-  const handleClose = useCallback((tabId: string) => {
+  // Every way of closing a session from the UI comes through here, so this is
+  // the one place it asks.
+  const handleClose = useCallback(async (tabId: string) => {
+    const tab = state.tabs.find((t) => t.id === tabId);
+    const ok = await confirmAction({
+      title: `Close ${tab ? `"${tab.name}"` : 'this session'}?`,
+      body: tab?.kind === 'claude'
+        ? 'Stops Claude and takes it out of the sidebar. The conversation stays in the Library and can be resumed.'
+        : 'Stops the shell and takes it out of the sidebar.',
+      confirmLabel: 'Close session',
+    });
+    if (!ok) return;
     ipc.killPty(tabId);
     ipc.killPty(shellPtyId(tabId));
     disposeTerminal(tabId);
@@ -467,7 +488,7 @@ export default function App() {
       return next;
     });
     dispatch({ type: 'close', tabId });
-  }, [dispatch]);
+  }, [dispatch, state.tabs]);
 
   /** Archiving frees the process and takes the session out of the list. It
    *  keeps its transcript, its name and its place in the workspace file, so
@@ -624,7 +645,12 @@ export default function App() {
     const onKey = (e: KeyboardEvent) => {
       if (!(e.ctrlKey || e.metaKey)) return;
       const key = e.key.toLowerCase();
-      if (key === 'n' && !e.shiftKey) { e.preventDefault(); void newSession(null); }
+      // ⌘N opens the dialog on Inbox + Claude; ⌘N again starts exactly that,
+      // so the old one-keystroke session is two keystrokes, never a form.
+      if (key === 'n' && !e.shiftKey) {
+        e.preventDefault();
+        if (newOpenRef.current) { setNewOpen(false); void newSession(null); } else setNewOpen(true);
+      }
       // ⌘⇧P kept as an alias: it was the palette's key before ⌘K, and muscle
       // memory outlives a release note.
       else if (key === 'k' || (key === 'p' && e.shiftKey)) { e.preventDefault(); setPaletteOpen((v) => !v); }
@@ -655,10 +681,16 @@ export default function App() {
   // the panel's edges, and a mouseleave rule would cancel the errand halfway.
   useEffect(() => {
     if (filesMode !== 'peek') return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setFilesMode('hidden'); };
+    // A menu opened from the tree (Show in Finder) is portaled outside the
+    // panel. Treating a click on it as "outside" unmounted the tree — and the
+    // menu with it — before the item could fire; Escape in it closed the whole
+    // panel instead of just the menu.
+    const menuOpen = () => document.querySelector('[role="menu"]') !== null;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !menuOpen()) setFilesMode('hidden'); };
     const onDown = (e: PointerEvent) => {
       const target = e.target as Element | null;
       if (target?.closest('[data-files-panel]') || target?.closest('[data-files-edge]')) return;
+      if (target?.closest('[role="menu"]')) return;
       setFilesMode('hidden');
     };
     document.addEventListener('keydown', onKey);
@@ -852,11 +884,11 @@ export default function App() {
                 tabs={state.tabs}
                 selectedId={onSessions ? currentTabId : null}
                 projects={projects}
-                recent={recent}
                 lastUsed={lastUsed}
                 showSettings={showSettings}
                 showArchive={showArchive}
                 onNewSession={(dir, kind) => { void newSession(dir, kind); }}
+                onOpenNewSession={() => setNewOpen(true)}
                 onSelect={handleSelect}
                 onClose={handleClose}
                 onRename={(tabId, name) => dispatch({ type: 'rename', tabId, name })}
@@ -874,7 +906,6 @@ export default function App() {
                 onAddProject={handleAddProject}
                 onRemoveProject={handleRemoveProject}
                 onImportSession={handleImportSession}
-                onResumeRecent={handleResumeRecent}
                 onToggleArchive={() => { setShowArchive((v) => !v); setShowSettings(false); setView('sessions'); }}
                 onToggleSettings={() => { setShowSettings((v) => !v); setShowArchive(false); setView('sessions'); }}
               />
@@ -1192,6 +1223,15 @@ export default function App() {
         onClose={() => setPaletteOpen(false)}
         onSelectTab={handleSelect}
       />
+      <NewSessionDialog
+        open={newOpen}
+        onOpenChange={setNewOpen}
+        projects={projects}
+        counts={projectCounts}
+        onStart={(dir, kind, name) => { void newSession(dir, kind, name); }}
+        onAddProject={handleAddProject}
+      />
+      <ConfirmDialog />
     </div>
   );
 }

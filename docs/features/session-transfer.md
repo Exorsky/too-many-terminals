@@ -37,8 +37,8 @@ The session id is the file's own stem and is kept as-is, so `claude --resume
 ## Using it
 
 - **Export**: right-click a session in the sidebar → **Export session…**, or in
-  [Session History](session-history.md) hover a row → the upload button (`⭱`).
-  A live session you're working right now is in History too (its transcript
+  the [Library](session-history.md) pick a row → the upload button (`⭱`).
+  A live session you're working right now is in the Library too (its transcript
   updates as you go), so exporting mid-shift just grabs the latest.
 - **Import**: right-click a folder in the sidebar → **Import session…**, pick the
   `.jsonl` you received. A resumed Claude tab opens in that folder. The tab

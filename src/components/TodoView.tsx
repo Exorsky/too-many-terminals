@@ -5,6 +5,7 @@ import {
   groupOf, matchesFilter, newTask, updateTask, useTasks, type TaskFilter,
 } from '@/lib/tasks';
 import { cn, folderName } from '@/lib/utils';
+import { confirmAction } from '@/lib/confirm';
 import type { Tab, Task, TaskPriority } from '@/types';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
@@ -352,7 +353,8 @@ export default function TodoView({
                     const { id: _id, createdAt: _c, updatedAt: _u, sessionIds: _s, ...rest } = task;
                     addTask({ ...newTask(), ...rest, done: false, inProgress: false });
                   }}
-                  onDelete={() => {
+                  onDelete={async () => {
+                    if (!await confirmAction({ title: `Delete "${task.title}"?`, body: 'The task is gone for good. Sessions linked to it are not touched.', confirmLabel: 'Delete task' })) return;
                     deleteTask(task.id);
                     if (task.id === selectedTaskId) onSelectTask(null);
                   }}

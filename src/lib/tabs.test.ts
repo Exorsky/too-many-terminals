@@ -31,6 +31,14 @@ function stateWith(...ids: string[]): TabsState {
 }
 
 describe('tabsReducer', () => {
+  it('autoName names an unnamed session but never replaces a given name', () => {
+    let state = tabsReducer(initialTabsState, { type: 'add', tab: makeTab('a', { name: 'Claude' }) });
+    state = tabsReducer(state, { type: 'add', tab: makeTab('b', { name: 'ITA-29789 migration' }) });
+    state = tabsReducer(state, { type: 'autoName', tabId: 'a', name: 'Fix login' });
+    state = tabsReducer(state, { type: 'autoName', tabId: 'b', name: 'Mailapp move' });
+    expect(state.tabs.map((t) => t.name)).toEqual(['Fix login', 'ITA-29789 migration']);
+  });
+
   it('add appends and selects the new session', () => {
     const state = stateWith('a', 'b');
     expect(state.tabs.map((t) => t.id)).toEqual(['a', 'b']);

@@ -11,6 +11,40 @@ listed here; see `git log` for the full history.
 
 ## [Unreleased]
 
+### Added
+
+- **A desk and a shelf in the sidebar.** The desk holds what you're working with —
+  live, pinned, or touched in the last 12 hours — and stays short however many sessions
+  you open in a day. Everything older moves to the shelf on its own, folded by day
+  (Yesterday, This week, Earlier). Nothing is closed or archived to get there, and a
+  shelved session comes back as soon as it does anything.
+- **The Library.** "Past sessions" is now a three-column browser: filters for Today /
+  Yesterday / This week / This month and by project, one dense list by day, and the
+  picked session with Resume / Read / Export / Delete beside it.
+- **New session is a dialog.** Pick where (Inbox or a project), what (Claude,
+  Shell, or both side by side) and, if you like, a name — a name given here is
+  kept instead of being replaced by the auto-generated one. ⌘N opens it on
+  Inbox + Claude, so Enter or a second ⌘N starts a session as before.
+- **Show in Finder from the file explorer.** Right-click a file or folder to open
+  the folder that holds it, with it selected (Explorer on Windows).
+
+### Changed
+
+- **Anything that deletes asks first.** Closing a session, removing a project,
+  and deleting a Library transcript, a task or a custom theme now confirm in a
+  dialog that says what goes and what stays. Cancel has the focus, so Enter
+  never destroys anything by reflex.
+- **Projects filter the list instead of expanding under their name.** Click a project
+  to see only its sessions, click again to go back. The Recent group is gone — closed
+  sessions are in the Library.
+
+### Fixed
+
+- **Scrollbars on macOS are dark and thin again.** With a mouse connected, lists showed
+  a wide light-grey system scrollbar: the macOS webview drops custom scrollbar styling
+  once the standard `scrollbar-width` property is set, and nothing told it the app is
+  dark.
+
 ## [0.25.1] - 2026-09-30
 
 ### Fixed

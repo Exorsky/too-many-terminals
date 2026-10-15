@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Archive, ChevronDown, ChevronRight, Clock, Columns2, Folder, FolderInput, FolderOpen, FolderPlus, Inbox,
+  Archive, ChevronRight, Columns2, Folder, FolderInput, FolderOpen, FolderPlus, Inbox, Library,
   MoreHorizontal, Pencil, Pin, PinOff, Plus, Search, Settings, Code, Upload, X,
 } from 'lucide-react';
 import { TAB_MIME } from '@/lib/dnd';
 import * as ipc from '@/lib/ipc';
 import { useSettings } from '@/lib/settings-store';
 import {
-  bySessionOrder, compactAge, matchesQuery, recencyOf, sessionState, STATE_DOT, STATE_LABEL,
+  ageBucket, bySessionOrder, compactAge, matchesQuery, onDesk, recencyOf, sessionState, STATE_DOT, STATE_LABEL,
+  type AgeBucket,
 } from '@/lib/sessions';
 import { ACTION_ROW, cn, folderName } from '@/lib/utils';
 import type { SessionHistoryEntry, SessionTool, Tab } from '@/types';
@@ -27,10 +28,6 @@ import {
   ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger,
 } from '@/components/ui/context-menu';
 
-/** How many past sessions the Recent group offers before it stops being a
- *  shortcut and starts being a second history browser. */
-const RECENT_LIMIT = 6;
-
 /** What a new session opens as. The layout is decided here, at the moment you
  *  start something — which is the moment you already know whether this is a
  *  "ask Claude something" or a "poke at the box" job. Rearranging afterwards
@@ -45,7 +42,7 @@ const NEW_SESSION_LABEL: Record<NewSessionKind, string> = {
 
 const NEW_SESSION_KINDS: NewSessionKind[] = ['claude', 'shell', 'both'];
 
-/** A past Claude session that isn't open right now — what Recent is made of. */
+/** A past Claude session that isn't open right now, picked to be resumed. */
 export interface RecentEntry {
   dir: string;
   entry: SessionHistoryEntry;
@@ -57,16 +54,17 @@ export interface SessionsSidebarProps {
   tabs: Tab[];
   selectedId: string | null;
   projects: string[];
-  recent: RecentEntry[];
   /** Transcript mtimes by Claude session id, for the age column. */
   lastUsed: Map<string, number>;
   showSettings: boolean;
-  /** The past-session browser is the overlay currently up — the footer row's
-   *  pressed state, not a switch for the Archived group below. */
+  /** The Library (closed sessions) is the overlay currently up — the footer
+   *  row's pressed state, not a switch for the Archived group below. */
   showArchive: boolean;
   /** What a new session starts as. `both` is a Claude session with its shell
    *  already open in a pane beside it. */
   onNewSession: (dir: string | null, kind: NewSessionKind) => void;
+  /** Opens the New session dialog. */
+  onOpenNewSession: () => void;
   onSelect: (tabId: string) => void;
   onClose: (tabId: string) => void;
   onRename: (tabId: string, name: string) => void;
@@ -82,7 +80,6 @@ export interface SessionsSidebarProps {
   onAddProject: () => void;
   onRemoveProject: (dir: string) => void;
   onImportSession: (dir: string) => void;
-  onResumeRecent: (entry: RecentEntry) => void;
   onToggleArchive: () => void;
   onToggleSettings: () => void;
 }
@@ -103,7 +100,7 @@ export function StatusDot({ tab, size = 7 }: { tab: Tab; size?: number }) {
   );
 }
 
-/** A group heading with its count: INBOX 4, PROJECTS, RECENT. Not a button
+/** A group heading with its count: DESK 6, SHELF 40, PROJECTS. Not a button
  *  unless it collapses something — a heading that looks clickable and isn't is
  *  worse than a plain one. */
 function GroupLabel({ children, count }: { children: React.ReactNode; count?: number }) {
@@ -127,14 +124,17 @@ function GroupLabel({ children, count }: { children: React.ReactNode; count?: nu
  *  it, and a close button on every row made a 20-session list look like a
  *  control panel. */
 function SessionRow({
-  tab, selected, depth, projects, compact, now, lastUsedAt,
+  tab, selected, depth, showProject, projects, compact, now, lastUsedAt,
   onSelect, onClose, onRename, onSetProject, onArchive, onTogglePin, onOpenDirectory,
   onOpenInVscode, onCreateTask, onOpenInWorkspace,
 }: {
   tab: Tab;
   selected: boolean;
-  /** Project sessions sit one step in from the project's own row. */
+  /** Shelf sessions sit one step in from their day's own row. */
   depth: 0 | 1;
+  /** Desk and shelf mix every project, so a row says which one it's from —
+   *  unless the list is already narrowed to a single project. */
+  showProject: boolean;
   projects: string[];
   compact: boolean;
   now: number;
@@ -168,7 +168,9 @@ function SessionRow({
   const startRename = () => { setDraft(tab.name); setEditing(true); };
 
   const age = compactAge(recencyOf(tab, lastUsedAt), now);
-  const detail = tab.status === 'working' ? tab.statusDetail : undefined;
+  // One second line at most: what Claude is doing beats where it lives.
+  const detail = (tab.status === 'working' ? tab.statusDetail : undefined)
+    ?? (showProject && tab.projectDir ? folderName(tab.projectDir) : undefined);
 
   const rowClass = cn(
     'group relative flex flex-col justify-center w-full shrink-0 h-[26px] pr-1.5 rounded-sm',
@@ -311,7 +313,7 @@ function SessionRow({
         </DropdownMenu>
       </div>
       {detail && !compact && (
-        <div className="flex items-center gap-1 w-full pl-4 text-[9.5px] leading-tight text-muted-foreground truncate">
+        <div data-session-meta className="flex items-center gap-1 w-full pl-4 text-[9.5px] leading-tight text-muted-foreground truncate">
           {detail}
         </div>
       )}
@@ -319,115 +321,149 @@ function SessionRow({
   );
 }
 
-/** A project: a collapsible heading with its sessions underneath. Not a
- *  navigation destination — clicking it folds the group, it doesn't take you
- *  anywhere, because a project isn't a place. */
-function ProjectGroup({
-  dir, sessions, open, onToggle, children,
+/** A project: one row that narrows the list to it. Not a collapsible group —
+ *  a project of seventy sessions expanded under its heading was most of the
+ *  sidebar, and the desk already shows what in it is current. A filter costs
+ *  one row whether the project holds two sessions or two hundred. */
+function ProjectRow({
+  dir, count, active, onToggle,
   onNewSession, onOpenDirectory, onImportSession, onRemoveProject,
 }: {
   dir: string;
-  sessions: Tab[];
-  open: boolean;
+  count: number;
+  active: boolean;
   onToggle: () => void;
-  children: React.ReactNode;
   onNewSession: (dir: string | null, kind: NewSessionKind) => void;
   onOpenDirectory: (dir: string) => void;
   onImportSession: (dir: string) => void;
   onRemoveProject: (dir: string) => void;
 }) {
   return (
-    <>
-      <ContextMenu>
-        <ContextMenuTrigger asChild>
-          <button
-            type="button"
-            data-project-row
-            aria-expanded={open}
-            title={dir}
-            className={cn(
-              'group flex items-center gap-1.5 w-full h-[26px] px-2 shrink-0 rounded-sm',
-              'border-none cursor-pointer bg-transparent font-inherit text-left',
-              'text-[11.5px] text-muted-foreground hover:text-foreground hover:bg-hover',
-            )}
-            onClick={onToggle}
-          >
-            <ChevronRight
-              size={11}
-              className={cn('shrink-0 transition-transform duration-100', open && 'rotate-90')}
-            />
-            <span className="truncate flex-1">{folderName(dir)}</span>
-            <span className="shrink-0 text-[9.5px] font-mono tabular-nums text-muted-foreground">
-              {sessions.length || ''}
-            </span>
-          </button>
-        </ContextMenuTrigger>
-        <ContextMenuContent className="min-w-44">
-          {NEW_SESSION_KINDS.map((kind) => (
-            <ContextMenuItem key={kind} onSelect={() => onNewSession(dir, kind)}>
-              <Plus size={13} /><span>New {NEW_SESSION_LABEL[kind]}</span>
-            </ContextMenuItem>
-          ))}
-          <ContextMenuSeparator />
-          <ContextMenuItem onSelect={() => onOpenDirectory(dir)}>
-            <FolderOpen size={13} /><span>Open directory</span>
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <button
+          type="button"
+          data-project-row
+          aria-pressed={active}
+          title={dir}
+          className={cn(
+            'group flex items-center gap-2 w-full h-[26px] px-3 shrink-0 rounded-sm',
+            'border-none cursor-pointer font-inherit text-left text-[11.5px]',
+            active ? 'bg-selected text-foreground' : 'bg-transparent text-dim hover:text-foreground hover:bg-hover',
+          )}
+          onClick={onToggle}
+        >
+          <Folder size={11} className="shrink-0 text-muted-foreground" />
+          <span className="truncate flex-1">{folderName(dir)}</span>
+          <span className="shrink-0 text-[9.5px] font-mono tabular-nums text-muted-foreground">
+            {count || ''}
+          </span>
+        </button>
+      </ContextMenuTrigger>
+      <ContextMenuContent className="min-w-44">
+        {NEW_SESSION_KINDS.map((kind) => (
+          <ContextMenuItem key={kind} onSelect={() => onNewSession(dir, kind)}>
+            <Plus size={13} /><span>New {NEW_SESSION_LABEL[kind]}</span>
           </ContextMenuItem>
-          <ContextMenuItem onSelect={() => onImportSession(dir)}>
-            <FolderInput size={13} /><span>Import session…</span>
-          </ContextMenuItem>
-          <ContextMenuSeparator />
-          <ContextMenuItem variant="destructive" onSelect={() => onRemoveProject(dir)}>
-            <X size={13} /><span>Remove project</span>
-          </ContextMenuItem>
-        </ContextMenuContent>
-      </ContextMenu>
-      {open && children}
-    </>
+        ))}
+        <ContextMenuSeparator />
+        <ContextMenuItem onSelect={() => onOpenDirectory(dir)}>
+          <FolderOpen size={13} /><span>Open directory</span>
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={() => onImportSession(dir)}>
+          <FolderInput size={13} /><span>Import session…</span>
+        </ContextMenuItem>
+        <ContextMenuSeparator />
+        <ContextMenuItem variant="destructive" onSelect={() => onRemoveProject(dir)}>
+          <X size={13} /><span>Remove project</span>
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
 
+/** A folding heading: a shelf day, or Archived. Folded by default — out of
+ *  the way is the whole point of both. */
+function FoldRow({ label, count, open, onToggle }: {
+  label: string;
+  count: number;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-expanded={open}
+      className="group flex items-center gap-1.5 w-full h-[26px] px-2 shrink-0 rounded-sm border-none cursor-pointer bg-transparent font-inherit text-left text-[11.5px] text-dim hover:text-foreground hover:bg-hover"
+      onClick={onToggle}
+    >
+      <ChevronRight size={11} className={cn('shrink-0 text-muted-foreground transition-transform duration-100', open && 'rotate-90')} />
+      <span className="flex-1 truncate">{label}</span>
+      <span className="text-[9.5px] font-mono tabular-nums text-muted-foreground">{count}</span>
+    </button>
+  );
+}
+
+/** The shelf's days, oldest last. "Earlier today" only fills in the morning
+ *  after a late night — anything from today is usually still on the desk. */
+const SHELF_DAYS: { key: string; label: string; ages: AgeBucket[] }[] = [
+  { key: 'today', label: 'Earlier today', ages: ['today'] },
+  { key: 'yesterday', label: 'Yesterday', ages: ['yesterday'] },
+  { key: 'week', label: 'This week', ages: ['week'] },
+  { key: 'earlier', label: 'Earlier', ages: ['month', 'older'] },
+];
+
 /** The sidebar, and the only persistent list of sessions in the app.
  *
- *  Four groups down one column: Inbox, Projects, Recent, and the footer's
- *  Archived/Settings. There is deliberately no project rail beside it and no
- *  tab strip above the terminal — the same sessions rendered in three places
- *  was the whole problem this replaces. See docs/features/terminals.md. */
+ *  A desk and a shelf. The desk is what you're working with — live, pinned,
+ *  or touched in the last twelve hours — and stays short however many
+ *  sessions you open in a day. Everything else sits on the shelf, folded by
+ *  day. Projects are a filter over both, not groups of their own. Closed
+ *  sessions live in the Library, not here. See docs/features/terminals.md. */
 export default function SessionsSidebar({
-  tabs, selectedId, projects, recent, lastUsed, showSettings, showArchive,
-  onNewSession, onSelect, onClose, onRename, onSetProject,
+  tabs, selectedId, projects, lastUsed, showSettings, showArchive,
+  onNewSession, onOpenNewSession, onSelect, onClose, onRename, onSetProject,
   onArchive, onTogglePin, onOpenDirectory, onOpenInVscode, onCreateTask, onOpenInWorkspace, onOpenPalette,
-  onAddProject, onRemoveProject, onImportSession, onResumeRecent, onToggleArchive, onToggleSettings,
+  onAddProject, onRemoveProject, onImportSession, onToggleArchive, onToggleSettings,
 }: SessionsSidebarProps) {
   const settings = useSettings();
   const [query, setQuery] = useState('');
-  const [folded, setFolded] = useState<Set<string>>(() => new Set());
+  const [projectFilter, setProjectFilter] = useState<string | null>(null);
+  const [openDays, setOpenDays] = useState<Set<string>>(() => new Set());
   const [archiveOpen, setArchiveOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
 
-  // Powers every age label. 30s is plenty — these are "how long", not a clock.
+  // Powers every age label and the desk's window. 30s is plenty — these are
+  // "how long", not a clock.
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 30_000);
     return () => clearInterval(timer);
   }, []);
 
-  const order = useMemo(() => bySessionOrder(lastUsed), [lastUsed]);
-  const sessions = useMemo(
-    () => tabs.filter((t) => t.kind !== 'file' && matchesQuery(t, query)).sort(order),
-    [tabs, query, order],
-  );
+  // A removed project can't stay the filter, or the list would be quietly empty.
+  const activeProject = projectFilter && projects.includes(projectFilter) ? projectFilter : null;
 
+  const order = useMemo(() => bySessionOrder(lastUsed), [lastUsed]);
+  const ageOf = (tab: Tab) => (tab.resumeSessionId ? lastUsed.get(tab.resumeSessionId) : undefined);
+
+  const all = tabs.filter((t) => t.kind !== 'file');
+  const sessions = all
+    .filter((t) => matchesQuery(t, query) && (!activeProject || t.projectDir === activeProject))
+    .sort(order);
   const live = sessions.filter((t) => !t.archived);
-  const inbox = live.filter((t) => t.projectDir === null);
+  // The session you're looking at stays on the desk even if it's old —
+  // selecting a shelved session shouldn't make it vanish into a folded day.
+  const desk = live.filter((t) => t.id === selectedId || onDesk(t, ageOf(t), now));
+  const shelf = live.filter((t) => !desk.includes(t));
   const archived = sessions.filter((t) => t.archived);
   const filtering = query.trim() !== '';
 
   const rowProps = {
-    projects, compact: settings.compactList, now,
+    projects, compact: settings.compactList, now, showProject: !activeProject,
     onSelect, onClose, onRename, onSetProject, onArchive, onTogglePin,
     onOpenDirectory, onOpenInVscode, onCreateTask, onOpenInWorkspace,
   };
-  const ageOf = (tab: Tab) => (tab.resumeSessionId ? lastUsed.get(tab.resumeSessionId) : undefined);
 
   return (
     <div className="flex flex-col w-full h-full min-h-0 bg-card border-r border-border">
@@ -473,62 +509,81 @@ export default function SessionsSidebar({
           )}
         </div>
 
-        {/* What to start is a choice, so the button asks. ⌘N skips the menu
-            and starts Claude in a scratch directory, which keeps the common
-            case one keystroke with no modal and no folder picker. */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              className={cn(
-                'flex items-center gap-1.5 w-full h-[26px] px-2 rounded-sm cursor-pointer font-inherit',
-                'border border-border bg-transparent text-[11.5px] text-foreground',
-                'hover:border-border-hover hover:bg-hover',
-              )}
-            >
-              <Plus size={12} className="shrink-0 text-primary" />
-              <span className="flex-1 text-left">New session</span>
-              <span className="shrink-0 text-[9px] text-faint">⌘N</span>
-              <ChevronDown size={11} className="shrink-0 text-muted-foreground" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="min-w-52">
-            {NEW_SESSION_KINDS.map((kind) => (
-              <DropdownMenuItem key={kind} onSelect={() => onNewSession(null, kind)}>
-                <Inbox size={13} /><span>{NEW_SESSION_LABEL[kind]}</span>
-              </DropdownMenuItem>
-            ))}
-            {projects.length > 0 && <DropdownMenuSeparator />}
-            {projects.map((dir) => (
-              <DropdownMenuSub key={dir}>
-                <DropdownMenuSubTrigger><Folder size={13} /><span>{folderName(dir)}</span></DropdownMenuSubTrigger>
-                <DropdownMenuSubContent>
-                  {NEW_SESSION_KINDS.map((kind) => (
-                    <DropdownMenuItem key={kind} onSelect={() => onNewSession(dir, kind)}>
-                      {NEW_SESSION_LABEL[kind]}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuSubContent>
-              </DropdownMenuSub>
-            ))}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={onAddProject}>
-              <FolderPlus size={13} /><span>Add project…</span>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        {/* What to start is a choice, so the button asks — in a dialog, where
+            there's room for where, what and a name. ⌘N opens the same one. */}
+        <button
+          type="button"
+          className={cn(
+            'flex items-center gap-1.5 w-full h-[26px] px-2 rounded-sm cursor-pointer font-inherit',
+            'border border-border bg-transparent text-[11.5px] text-foreground',
+            'hover:border-border-hover hover:bg-hover',
+          )}
+          onClick={onOpenNewSession}
+        >
+          <Plus size={12} className="shrink-0 text-primary" />
+          <span className="flex-1 text-left">New session</span>
+          <span className="shrink-0 text-[9px] text-faint">⌘N</span>
+        </button>
       </div>
 
+      {/* A filter that has scrolled out of view still has to say it's on. */}
+      {activeProject && (
+        <div className="flex items-center gap-1.5 h-6 mx-2 px-2 shrink-0 rounded-sm bg-selected text-[10.5px] text-dim">
+          <Folder size={10} className="shrink-0 text-muted-foreground" />
+          <span className="truncate flex-1">Only {folderName(activeProject)}</span>
+          <button
+            type="button"
+            aria-label="Show every project"
+            className="flex items-center justify-center w-4 h-4 rounded-sm shrink-0 border-none cursor-pointer bg-transparent text-muted-foreground hover:text-foreground"
+            onClick={() => setProjectFilter(null)}
+          >
+            <X size={10} />
+          </button>
+        </div>
+      )}
+
       <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-1 pb-2 scrollbar-thin">
-        <GroupLabel count={inbox.length}>Inbox</GroupLabel>
-        {inbox.length === 0 ? (
+        <GroupLabel count={desk.length}>Desk</GroupLabel>
+        {desk.length === 0 ? (
           <p className="px-3 py-1 text-[10.5px] leading-snug text-faint">
-            {filtering ? 'Nothing here matches.' : 'Nothing loose. ⌘N starts a session without choosing anything.'}
+            {filtering || activeProject
+              ? 'Nothing current matches.'
+              : 'Nothing current. ⌘N starts a session without choosing anything.'}
           </p>
         ) : (
-          inbox.map((tab) => (
+          desk.map((tab) => (
             <SessionRow key={tab.id} tab={tab} selected={tab.id === selectedId} depth={0} lastUsedAt={ageOf(tab)} {...rowProps} />
           ))
+        )}
+
+        {shelf.length > 0 && (
+          <>
+            <GroupLabel count={shelf.length}>Shelf</GroupLabel>
+            {SHELF_DAYS.map(({ key, label, ages }) => {
+              const day = shelf.filter((t) => ages.includes(ageBucket(recencyOf(t, ageOf(t)), now)));
+              if (day.length === 0) return null;
+              // A search opens every day with a hit, so a match can't hide
+              // inside a folded one.
+              const open = filtering || openDays.has(key);
+              return (
+                <div key={key}>
+                  <FoldRow
+                    label={label}
+                    count={day.length}
+                    open={open}
+                    onToggle={() => setOpenDays((prev) => {
+                      const next = new Set(prev);
+                      if (!next.delete(key)) next.add(key);
+                      return next;
+                    })}
+                  />
+                  {open && day.map((tab) => (
+                    <SessionRow key={tab.id} tab={tab} selected={tab.id === selectedId} depth={1} lastUsedAt={ageOf(tab)} {...rowProps} />
+                  ))}
+                </div>
+              );
+            })}
+          </>
         )}
 
         <GroupLabel>Projects</GroupLabel>
@@ -542,88 +597,36 @@ export default function SessionsSidebar({
             <span>Add a project…</span>
           </button>
         ) : (
-          projects.map((dir) => {
-            const owned = live.filter((t) => t.projectDir === dir);
-            // A search opens every group that has a hit, so a match can't hide
-            // inside a folded one.
-            const open = filtering ? owned.length > 0 : !folded.has(dir);
-            return (
-              <ProjectGroup
-                key={dir}
-                dir={dir}
-                sessions={owned}
-                open={open}
-                onToggle={() => setFolded((prev) => {
-                  const next = new Set(prev);
-                  if (!next.delete(dir)) next.add(dir);
-                  return next;
-                })}
-                onNewSession={onNewSession}
-                onOpenDirectory={onOpenDirectory}
-                onImportSession={onImportSession}
-                onRemoveProject={onRemoveProject}
-              >
-                {owned.length === 0 ? (
-                  <p className="pl-7 pr-3 py-0.5 text-[10.5px] text-faint">No sessions</p>
-                ) : (
-                  owned.map((tab) => (
-                    <SessionRow key={tab.id} tab={tab} selected={tab.id === selectedId} depth={1} lastUsedAt={ageOf(tab)} {...rowProps} />
-                  ))
-                )}
-              </ProjectGroup>
-            );
-          })
-        )}
-
-        {recent.length > 0 && !filtering && (
-          <>
-            <GroupLabel>Recent</GroupLabel>
-            {recent.slice(0, RECENT_LIMIT).map((r) => (
-              <button
-                key={`${r.dir}:${r.entry.sessionId}`}
-                type="button"
-                data-recent-row
-                title={`${r.entry.preview || r.name}\n${r.dir}`}
-                className="group flex items-center gap-2 w-full h-[26px] pl-3 pr-1.5 shrink-0 rounded-sm border-none cursor-pointer bg-transparent font-inherit text-left text-[11.5px] text-muted-foreground hover:text-foreground hover:bg-hover"
-                onClick={() => onResumeRecent(r)}
-              >
-                <Clock size={9} className="shrink-0 text-faint" />
-                <span className="truncate flex-1">{r.name}</span>
-                <span className="shrink-0 text-[9.5px] font-mono tabular-nums text-faint">
-                  {compactAge(r.at, now)}
-                </span>
-              </button>
-            ))}
-          </>
+          projects.map((dir) => (
+            <ProjectRow
+              key={dir}
+              dir={dir}
+              count={all.filter((t) => !t.archived && t.projectDir === dir).length}
+              active={activeProject === dir}
+              onToggle={() => setProjectFilter(activeProject === dir ? null : dir)}
+              onNewSession={onNewSession}
+              onOpenDirectory={onOpenDirectory}
+              onImportSession={onImportSession}
+              onRemoveProject={onRemoveProject}
+            />
+          ))
         )}
 
         {/* Archived sessions are still in the workspace, so they get a group
-            of their own rather than living behind the footer row — that row
-            opens the browser for *past* sessions, which is a different thing.
-            Folded by default: out of the list is what archiving meant. */}
+            of their own rather than living in the Library — that holds
+            *closed* sessions, which is a different thing. */}
         {archived.length > 0 && (
-          <>
-            <button
-              type="button"
-              aria-expanded={archiveOpen}
-              className="group flex items-center gap-1.5 w-full h-6 px-2 mt-3 shrink-0 rounded-sm border-none cursor-pointer bg-transparent font-inherit text-left hover:bg-hover"
-              onClick={() => setArchiveOpen((v) => !v)}
-            >
-              <ChevronRight size={10} className={cn('shrink-0 text-muted-foreground transition-transform duration-100', archiveOpen && 'rotate-90')} />
-              <span className="flex-1 text-[9.5px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">
-                Archived
-              </span>
-              <span className="text-[9.5px] font-mono tabular-nums text-muted-foreground">{archived.length}</span>
-            </button>
+          <div className="mt-3">
+            <FoldRow label="Archived" count={archived.length} open={archiveOpen} onToggle={() => setArchiveOpen((v) => !v)} />
             {archiveOpen && archived.map((tab) => (
               <SessionRow key={tab.id} tab={tab} selected={tab.id === selectedId} depth={1} lastUsedAt={ageOf(tab)} {...rowProps} />
             ))}
-          </>
+          </div>
         )}
       </div>
 
       <div className="flex flex-col shrink-0 border-t border-border px-1 py-1">
-        <FooterRow icon={Archive} label="Past sessions" active={showArchive} onClick={onToggleArchive} />
+        <FooterRow icon={Library} label="Library" active={showArchive} onClick={onToggleArchive} />
         <FooterRow icon={Settings} label="Settings" active={showSettings} onClick={onToggleSettings} />
       </div>
       <SidebarFooter />
