@@ -11,13 +11,18 @@ listed here; see `git log` for the full history.
 
 ## [Unreleased]
 
+## [0.26.0] - 2026-10-15
+
 ### Added
 
-- **A desk and a shelf in the sidebar.** The desk holds what you're working with —
-  live, pinned, or touched in the last 12 hours — and stays short however many sessions
-  you open in a day. Everything older moves to the shelf on its own, folded by day
-  (Yesterday, This week, Earlier). Nothing is closed or archived to get there, and a
-  shelved session comes back as soon as it does anything.
+- **The session list is grouped by day.** Now (working, waiting on you, or
+  pinned), then Today, always open; Yesterday, This week and Earlier fold away
+  with a count. Nothing is closed or archived to move between them, and an old
+  session comes back to the top as soon as it does anything.
+- **Go into a project.** Click a project to see only its sessions, under a header
+  in its colour with a way back to all of them. New session and ⌘N start there,
+  a line tells you if a session in another project is waiting on you, and a
+  project with nothing open shows its own page to start or pick up from.
 - **The Library.** "Past sessions" is now a three-column browser: filters for Today /
   Yesterday / This week / This month and by project, one dense list by day, and the
   picked session with Resume / Read / Export / Delete beside it.
@@ -34,9 +39,9 @@ listed here; see `git log` for the full history.
   and deleting a Library transcript, a task or a custom theme now confirm in a
   dialog that says what goes and what stays. Cancel has the focus, so Enter
   never destroys anything by reflex.
-- **Projects filter the list instead of expanding under their name.** Click a project
-  to see only its sessions, click again to go back. The Recent group is gone — closed
-  sessions are in the Library.
+- **Projects no longer expand under their name.** Going into one replaces the
+  long expanded groups. The Recent group is gone — closed sessions are in the
+  Library.
 
 ### Fixed
 
@@ -488,7 +493,8 @@ listed here; see `git log` for the full history.
 - The transcript reader now renders pipe tables, nested/checkbox lists,
   italics, autolinks, and horizontal rules.
 
-[Unreleased]: https://github.com/Exorsky/too-many-terminals/compare/v0.25.1...HEAD
+[Unreleased]: https://github.com/Exorsky/too-many-terminals/compare/v0.26.0...HEAD
+[0.26.0]: https://github.com/Exorsky/too-many-terminals/compare/v0.25.1...v0.26.0
 [0.25.1]: https://github.com/Exorsky/too-many-terminals/compare/v0.25.0...v0.25.1
 [0.25.0]: https://github.com/Exorsky/too-many-terminals/compare/v0.24.0...v0.25.0
 [0.24.0]: https://github.com/Exorsky/too-many-terminals/compare/v0.23.1...v0.24.0
