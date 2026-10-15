@@ -94,6 +94,12 @@
   --project-hue: 0;
 }
 
+/* Every theme is dark. Without this the webview draws its own chrome — any
+   scrollbar not styled below, form controls — in the light appearance. */
+:root {
+  color-scheme: dark;
+}
+
 @layer base {
   * {
     @apply border-border;
@@ -126,12 +132,19 @@
    shrinking the hit target, and it only gains contrast once you're over the
    list it belongs to. A sidebar of 40 sessions shouldn't advertise its own
    scrollbar. */
-.scrollbar-thin {
-  scrollbar-width: thin;
-  scrollbar-color: var(--raised) transparent;
-}
-.scrollbar-thin:hover {
-  scrollbar-color: var(--border-hover) transparent;
+/* The standard properties only where the -webkit- pseudo-elements don't
+   exist (Firefox). WebKit 18.2+ — the macOS webview — understands both, and a
+   non-auto `scrollbar-width` makes it drop the pseudo-element styling below
+   and draw a native scrollbar instead: with a mouse attached that's the wide,
+   always-on kind, in light grey on a dark app. */
+@supports not selector(::-webkit-scrollbar) {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: var(--raised) transparent;
+  }
+  .scrollbar-thin:hover {
+    scrollbar-color: var(--border-hover) transparent;
+  }
 }
 .scrollbar-thin::-webkit-scrollbar {
   width: 9px;
