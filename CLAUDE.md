@@ -12,11 +12,13 @@ Feature and architecture docs live in `docs/` — **keep them updated when featu
   vocabulary, shape rules, the status vocabulary, and when to reach for a tab strip vs. a
   left rail vs. a menu vs. a context menu
 - [docs/features/terminals.md](docs/features/terminals.md) — sidebar (folders, pinning, drag-reorder), tabs, PTY spawning per OS
-- [docs/features/panes.md](docs/features/panes.md) — the split-pane window manager: a 2x2 grid, drag-to-split, resizable seams
+- [docs/features/panes.md](docs/features/panes.md) — the split-pane grid's history; panes now live inside each session tab (see session-workspace.md)
+- [docs/features/session-workspace.md](docs/features/session-workspace.md) — session tabs that own their splits, shortcuts, inspector, focus mode
 - [docs/features/file-explorer.md](docs/features/file-explorer.md) — file tree + CodeMirror editor docked to the right edge
 - [docs/features/markdown-preview.md](docs/features/markdown-preview.md) — the shared Markdown renderer: file-opening links, anchors, mermaid diagrams
 - [docs/features/home-screen.md](docs/features/home-screen.md) — idle Home: a metrics dashboard built from your session history
 - [docs/features/attention-inbox.md](docs/features/attention-inbox.md) — the session ledger: live counts that filter the list (waiting / running / just finished / pinned)
+- [docs/features/jira-links.md](docs/features/jira-links.md) — Jira issue keys as links + hover cards in names, terminals and transcripts
 - [docs/features/command-palette.md](docs/features/command-palette.md) — Ctrl+Shift+P fuzzy jump to any open terminal
 - [docs/features/notifications.md](docs/features/notifications.md) — desktop notifications when an unfocused session needs you
 - [docs/features/session-history.md](docs/features/session-history.md) — past-session browsing/resume

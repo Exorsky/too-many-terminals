@@ -153,3 +153,20 @@ describe('re-rendering must not rebuild the document', () => {
     expect(first).not.toHaveBeenCalled();
   });
 });
+
+describe('Markdown, with Jira links on', () => {
+  it('links issue keys in prose but not in code', async () => {
+    const { patchSettings } = await import('@/lib/settings-store');
+    vi.mocked(ipc.saveSettings).mockResolvedValue(undefined);
+    patchSettings({ jiraBaseUrl: 'https://jira.example.com', jiraProjectKeys: ['PROJ'] });
+    render(<Markdown source={'Fixed PROJ-4821, see `PROJ-1`. SHA-256 stays text.'} />);
+    expect(screen.getByRole('link', { name: 'PROJ-4821' })).toHaveAttribute(
+      'href',
+      'https://jira.example.com/browse/PROJ-4821',
+    );
+    expect(screen.queryByRole('link', { name: 'PROJ-1' })).toBeNull();
+    expect(screen.queryByRole('link', { name: /SHA/ })).toBeNull();
+    vi.mocked(ipc.saveSettings).mockResolvedValue(undefined);
+    patchSettings({ jiraBaseUrl: '', jiraProjectKeys: [] });
+  });
+});

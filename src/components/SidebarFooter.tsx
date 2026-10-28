@@ -49,21 +49,26 @@ export function paceFraction(resetsAtIso: string, windowSeconds: number, now: nu
  *  The mark deliberately doesn't recolor anything. Color stays on the 70/90
  *  thresholds `barColor` already owns: a threshold warns, the mark informs,
  *  and folding two signals into one color makes neither readable. */
-function UsageRow({ label, window: w, windowSeconds, now }: {
+function UsageRow({ label, window: w, windowSeconds, now, inline }: {
   label: string;
   window: UsageWindow;
   windowSeconds: number;
   now: number;
+  /** Title-bar form: no countdown column — it moves into the tooltip. */
+  inline?: boolean;
 }) {
   const secondsLeft = (new Date(w.resetsAtIso).getTime() - now) / 1000;
   const pace = paceFraction(w.resetsAtIso, windowSeconds, now);
   const ahead = w.percent / 100 > pace;
 
   return (
-    <div className="flex items-center gap-1.5 h-[15px] text-[9.5px]">
-      <span className="w-9 shrink-0 text-muted-foreground">{label}</span>
+    <div
+      className={cn('flex items-center gap-1.5', inline ? 'text-[11px]' : 'h-[15px] text-[9.5px]')}
+      title={inline ? `${label}: resets in ${formatDuration(secondsLeft)}` : undefined}
+    >
+      <span className={cn('shrink-0 text-muted-foreground', !inline && 'w-9')}>{label}</span>
       <div
-        className="relative flex-1 min-w-0 h-[3px] rounded-full bg-border-hover"
+        className={cn('relative min-w-0 h-[3px] rounded-full bg-border-hover', inline ? 'w-12' : 'flex-1')}
         role="progressbar"
         aria-label={`${label} usage`}
         aria-valuenow={w.percent}
@@ -77,10 +82,12 @@ function UsageRow({ label, window: w, windowSeconds, now }: {
           title={ahead ? 'Burning faster than the clock' : 'Behind the clock — the window outlasts the limit'}
         />
       </div>
-      <span className="w-6 shrink-0 text-right font-mono tabular-nums text-foreground">{w.percent}%</span>
-      <span className="w-11 shrink-0 text-right font-mono tabular-nums text-muted-foreground" title="Resets in">
-        {formatDuration(secondsLeft)}
-      </span>
+      <span className={cn('shrink-0 text-right font-mono tabular-nums text-foreground', inline ? 'w-8' : 'w-6')}>{w.percent}%</span>
+      {!inline && (
+        <span className="w-11 shrink-0 text-right font-mono tabular-nums text-muted-foreground" title="Resets in">
+          {formatDuration(secondsLeft)}
+        </span>
+      )}
     </div>
   );
 }
@@ -92,7 +99,11 @@ function UsageRow({ label, window: w, windowSeconds, now }: {
  *  calendar. Nothing renders at all when neither window is available, rather
  *  than an empty 38px bar.
  *  See docs/features/usage-meter.md. */
-export default function SidebarFooter() {
+export default function SidebarFooter({ inline = false, onOpen }: {
+  inline?: boolean;
+  /** Clicking the meter opens the logbook — the usage dashboard. */
+  onOpen?: () => void;
+} = {}) {
   const settings = useSettings();
   const [stats, setStats] = useState<SessionUsageStats | null>(null);
   const [now, setNow] = useState(() => Date.now());
@@ -120,18 +131,29 @@ export default function SidebarFooter() {
   // so age it rather than passing a stale percentage off as live.
   const staleMinutes = stats.fromCache && stats.fetchedAtMs ? Math.floor((now - stats.fetchedAtMs) / 60_000) : 0;
 
+  const stale = staleMinutes >= 5 ? `cached — as of ${formatDuration(staleMinutes * 60)} ago` : undefined;
+  // A button only when it leads somewhere; otherwise it stays a plain readout.
+  const Root = onOpen ? 'button' : 'div';
   return (
-    <div
+    <Root
       data-testid="usage-meter"
-      className="flex flex-col gap-0.5 px-2 py-[3px] shrink-0 border-t border-border"
-      title={staleMinutes >= 5 ? `cached — as of ${formatDuration(staleMinutes * 60)} ago` : undefined}
+      type={onOpen ? 'button' : undefined}
+      aria-label={onOpen ? 'Open the logbook' : undefined}
+      onClick={onOpen}
+      className={cn(
+        inline
+          ? 'flex items-center gap-4 pr-1'
+          : 'flex flex-col gap-0.5 px-2 py-[3px] shrink-0 border-t border-border',
+        onOpen && 'px-2 py-1 rounded-sm border-none bg-transparent font-inherit cursor-pointer hover:bg-hover',
+      )}
+      title={stale ?? (onOpen ? 'Open the logbook' : undefined)}
     >
       {stats.session && (
-        <UsageRow label="Session" window={stats.session} windowSeconds={WINDOW_SECONDS.session} now={now} />
+        <UsageRow label="Session" window={stats.session} windowSeconds={WINDOW_SECONDS.session} now={now} inline={inline} />
       )}
       {stats.week && (
-        <UsageRow label="Week" window={stats.week} windowSeconds={WINDOW_SECONDS.week} now={now} />
+        <UsageRow label="Week" window={stats.week} windowSeconds={WINDOW_SECONDS.week} now={now} inline={inline} />
       )}
-    </div>
+    </Root>
   );
 }

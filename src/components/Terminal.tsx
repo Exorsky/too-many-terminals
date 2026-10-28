@@ -5,6 +5,8 @@ import { WebLinksAddon } from '@xterm/addon-web-links';
 import { WebglAddon } from '@xterm/addon-webgl';
 import '@xterm/xterm/css/xterm.css';
 import * as ipc from '@/lib/ipc';
+import { findIssueKeys, hideIssueCard, issueUrl, showIssueCard } from '@/lib/jira';
+import { getSettings } from '@/lib/settings-store';
 import { getActiveXtermTheme } from '@/lib/themes';
 import { isInterruptKeystroke } from '@/lib/utils';
 import { seamDragging } from '@/lib/use-drag-value';
@@ -71,6 +73,24 @@ const Terminal = React.memo(function Terminal({ tabId, isVisible, focused = true
       term.loadAddon(new WebLinksAddon((_event, uri) => {
         ipc.openExternal(uri);
       }));
+      // Jira keys, the same way URLs work: underline on hover, click opens.
+      // Settings are read per line, so turning Jira on applies to terminals
+      // that are already open.
+      term.registerLinkProvider({
+        provideLinks(y, callback) {
+          const { jiraBaseUrl, jiraProjectKeys } = getSettings();
+          const line = jiraBaseUrl ? term.buffer.active.getLine(y - 1)?.translateToString(true) : undefined;
+          if (!line) { callback(undefined); return; }
+          const links = findIssueKeys(line, jiraProjectKeys).map(({ key, index }) => ({
+            text: key,
+            range: { start: { x: index + 1, y }, end: { x: index + key.length, y } },
+            activate: () => ipc.openExternal(issueUrl(getSettings().jiraBaseUrl, key)),
+            hover: (e: MouseEvent) => showIssueCard(key, e.clientX, e.clientY + 14),
+            leave: hideIssueCard,
+          }));
+          callback(links.length ? links : undefined);
+        },
+      });
 
       // Ctrl+V / Ctrl+Shift+V: paste from clipboard into terminal.
       // Without this, xterm sends \x16 (literal-next) to the PTY.

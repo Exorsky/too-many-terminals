@@ -2,7 +2,11 @@ import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as ipc from '@/lib/ipc';
-import { resetSettingsForTest } from '@/lib/settings-store';
+import { resetSettingsForTest, DEFAULT_SETTINGS } from '@/lib/settings-store';
+
+/** Fields added after these fixtures were written. */
+const { newTabPosition, jiraBaseUrl, jiraProjectKeys, jiraTokenVar } = DEFAULT_SETTINGS;
+const NEW_DEFAULTS = { newTabPosition, jiraBaseUrl, jiraProjectKeys, jiraTokenVar };
 import SettingsView from './SettingsView';
 
 vi.mock('@/lib/ipc');
@@ -10,7 +14,7 @@ vi.mock('@/lib/ipc');
 beforeEach(() => {
   resetSettingsForTest();
   vi.mocked(ipc.loadSettings).mockResolvedValue({
-    selectedThemeId: 'default', customThemes: [], showMarkdownToggle: true, notificationsEnabled: true, autoSleepMinutes: 15, usageRefreshSeconds: 60, compactList: false,
+    selectedThemeId: 'default', customThemes: [], showMarkdownToggle: true, notificationsEnabled: true, autoSleepMinutes: 15, usageRefreshSeconds: 60, compactList: false, ...NEW_DEFAULTS,
   });
   vi.mocked(ipc.saveSettings).mockResolvedValue(undefined);
 });
@@ -65,5 +69,28 @@ describe('SettingsView', () => {
     render(<SettingsView />);
     await userEvent.click(screen.getByText('Customize'));
     expect(await screen.findByText('Theme')).toBeInTheDocument();
+  });
+});
+
+describe('the Jira token variable', () => {
+  it('takes a variable name and refuses a pasted token', async () => {
+    const { isEnvVarName } = await import('./SettingsView');
+    expect(isEnvVarName('JIRA_API_TOKEN')).toBe(true);
+    expect(isEnvVarName('aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789abcdEFGH')).toBe(false);
+    expect(isEnvVarName('jira token')).toBe(false);
+  });
+});
+
+describe('Settings › Integrations', () => {
+  it('refuses a pasted token: not saved, and cleared from the field', async () => {
+    render(<SettingsView />);
+    await userEvent.click(screen.getByRole('button', { name: /Integrations/ }));
+    const field = screen.getByLabelText('Token variable') as HTMLInputElement;
+    await userEvent.type(field, 'aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789abcdEFGH');
+    field.blur();
+    await screen.findByText(/looks like the token itself/);
+    expect(field.value).toBe('');
+    const saved = vi.mocked(ipc.saveSettings).mock.calls.map((c) => c[0].jiraTokenVar);
+    expect(saved).not.toContain('aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789abcdEFGH');
   });
 });

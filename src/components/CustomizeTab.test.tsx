@@ -2,7 +2,11 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as ipc from '@/lib/ipc';
-import { resetSettingsForTest } from '@/lib/settings-store';
+import { resetSettingsForTest, DEFAULT_SETTINGS } from '@/lib/settings-store';
+
+/** Fields added after these fixtures were written. */
+const { newTabPosition, jiraBaseUrl, jiraProjectKeys, jiraTokenVar } = DEFAULT_SETTINGS;
+const NEW_DEFAULTS = { newTabPosition, jiraBaseUrl, jiraProjectKeys, jiraTokenVar };
 import CustomizeTab from './CustomizeTab';
 import ConfirmDialog from './ConfirmDialog';
 
@@ -11,7 +15,7 @@ vi.mock('@/lib/ipc');
 beforeEach(() => {
   resetSettingsForTest();
   vi.mocked(ipc.loadSettings).mockResolvedValue({
-    selectedThemeId: 'default', customThemes: [], showMarkdownToggle: true, notificationsEnabled: true, autoSleepMinutes: 15, usageRefreshSeconds: 60, compactList: false,
+    selectedThemeId: 'default', customThemes: [], showMarkdownToggle: true, notificationsEnabled: true, autoSleepMinutes: 15, usageRefreshSeconds: 60, compactList: false, ...NEW_DEFAULTS,
   });
   vi.mocked(ipc.saveSettings).mockResolvedValue(undefined);
 });
@@ -34,7 +38,7 @@ describe('CustomizeTab', () => {
     vi.mocked(ipc.loadSettings).mockResolvedValue({
       selectedThemeId: 'my-theme',
       customThemes: [{ id: 'my-theme', name: 'My Theme', colors: {} }],
-      showMarkdownToggle: true, notificationsEnabled: true, autoSleepMinutes: 15, usageRefreshSeconds: 60, compactList: false,
+      showMarkdownToggle: true, notificationsEnabled: true, autoSleepMinutes: 15, usageRefreshSeconds: 60, compactList: false, ...NEW_DEFAULTS,
     });
     render(<CustomizeTab />);
     expect(await screen.findByText('My Theme')).toBeInTheDocument();
@@ -83,7 +87,7 @@ describe('CustomizeTab', () => {
     vi.mocked(ipc.loadSettings).mockResolvedValue({
       selectedThemeId: 'my-theme',
       customThemes: [{ id: 'my-theme', name: 'My Theme', colors: {} }],
-      showMarkdownToggle: true, notificationsEnabled: true, autoSleepMinutes: 15, usageRefreshSeconds: 60, compactList: false,
+      showMarkdownToggle: true, notificationsEnabled: true, autoSleepMinutes: 15, usageRefreshSeconds: 60, compactList: false, ...NEW_DEFAULTS,
     });
     render(<><CustomizeTab /><ConfirmDialog /></>);
     await userEvent.click(await screen.findByLabelText('Delete My Theme'));

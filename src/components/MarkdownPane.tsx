@@ -64,12 +64,12 @@ export default function MarkdownPane({
       <div className="flex items-center gap-2.5 h-7 px-2.5 shrink-0 border-b border-border">
         {label && (
           <span className="flex items-center gap-1.5">
-            <FileText size={11} className="text-[#6fd4c9] shrink-0" />
-            <span className="font-mono text-[10px] tracking-[0.12em] uppercase text-muted-foreground">{label}</span>
+            <FileText size={12} className="text-[#6fd4c9] shrink-0" />
+            <span className="font-mono text-[11px] tracking-[0.12em] uppercase text-muted-foreground">{label}</span>
           </span>
         )}
         {turnsCount !== null && (
-          <span className="font-mono text-[10px] text-muted-foreground font-mono tabular-nums">{turnsCount} turns</span>
+          <span className="font-mono text-[11px] text-muted-foreground font-mono tabular-nums">{turnsCount} turns</span>
         )}
         <span className="flex-1" />
         <div className="flex items-center gap-0.5 p-0.5 rounded-md border border-border bg-background">
@@ -78,7 +78,7 @@ export default function MarkdownPane({
               key={v}
               onClick={() => onSetView(v)}
               className={cn(
-                'inline-flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-[5px] cursor-pointer font-inherit transition-colors',
+                'inline-flex items-center gap-1.5 text-[12px] px-2 py-1 rounded-[5px] cursor-pointer font-inherit transition-colors',
                 view === v
                   ? (v === 'rendered' ? 'bg-secondary text-[#6fd4c9]' : 'bg-secondary text-foreground')
                   : 'text-muted-foreground hover:text-foreground',
@@ -93,7 +93,7 @@ export default function MarkdownPane({
         <button
           onClick={onRefresh}
           title="Re-read (a live session keeps growing)"
-          className="flex items-center justify-center w-[26px] h-[26px] rounded-md text-muted-foreground hover:text-foreground hover:bg-selected cursor-pointer bg-card border border-border"
+          className="flex items-center justify-center w-[26px] h-[30px] rounded-md text-muted-foreground hover:text-foreground hover:bg-selected cursor-pointer bg-card border border-border"
         >
           <RefreshCw size={12} />
         </button>

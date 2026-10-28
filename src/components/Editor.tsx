@@ -111,7 +111,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [path]);
 
-  return <div ref={hostRef} className="flex-1 min-h-0 overflow-auto text-[12.5px] [&_.cm-editor]:h-full [&_.cm-editor]:outline-none" />;
+  return <div ref={hostRef} className="flex-1 min-h-0 overflow-auto text-[13.5px] [&_.cm-editor]:h-full [&_.cm-editor]:outline-none" />;
 });
 
 export default Editor;

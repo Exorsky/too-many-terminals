@@ -26,7 +26,7 @@ export default function ProjectHome({
 }: ProjectHomeProps) {
   const ageOf = (t: Tab) => recencyOf(t, t.resumeSessionId ? lastUsed.get(t.resumeSessionId) : undefined);
   const latest = sessions[0];
-  const button = 'flex items-center gap-1.5 h-8 px-3.5 rounded-sm border bg-transparent text-[12px] cursor-pointer font-inherit hover:bg-hover';
+  const button = 'flex items-center gap-1.5 h-8 px-3.5 rounded-sm border bg-transparent text-[13px] cursor-pointer font-inherit hover:bg-hover';
 
   return (
     <div className="flex items-center justify-center h-full px-6">
@@ -35,7 +35,7 @@ export default function ProjectHome({
           <span className="w-2.5 h-2.5 rounded-full shrink-0" style={hue} />
           <h1 className="m-0 text-[18px] font-semibold text-foreground truncate">{name}</h1>
         </div>
-        <div className="font-mono text-[11px] text-muted-foreground truncate" title={dir ?? undefined}>
+        <div className="font-mono text-[12px] text-muted-foreground truncate" title={dir ?? undefined}>
           {sessions.length} open session{sessions.length === 1 ? '' : 's'}
           {latest && ` · last used ${compactAge(ageOf(latest), now) || 'a while'} ago`}
           {dir && ` · ${dir}`}
@@ -54,7 +54,7 @@ export default function ProjectHome({
 
         {sessions.length > 0 && (
           <>
-            <div className="mt-3 text-[10px] font-semibold uppercase tracking-[0.09em] text-muted-foreground">Pick up where you left off</div>
+            <div className="mt-3 text-[11px] font-semibold uppercase tracking-[0.09em] text-muted-foreground">Pick up where you left off</div>
             <div className="flex flex-col gap-1.5">
               {sessions.slice(0, 3).map((tab) => (
                 <button
@@ -64,8 +64,8 @@ export default function ProjectHome({
                   onClick={() => onSelect(tab.id)}
                 >
                   <StatusDot tab={tab} />
-                  <span className="flex-1 min-w-0 truncate text-[12px] text-foreground">{tab.name}</span>
-                  <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{compactAge(ageOf(tab), now)}</span>
+                  <span className="flex-1 min-w-0 truncate text-[13px] text-foreground">{tab.name}</span>
+                  <span className="shrink-0 font-mono text-[11px] text-muted-foreground">{compactAge(ageOf(tab), now)}</span>
                   <ArrowRight size={12} className="shrink-0 text-muted-foreground" />
                 </button>
               ))}

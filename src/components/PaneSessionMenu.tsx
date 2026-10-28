@@ -1,26 +1,18 @@
 import {
-  Archive, Code, Columns2, FolderInput, FolderOpen, Inbox, MoreHorizontal, PanelRight, Plus,
+  Archive, Code, FolderInput, FolderOpen, Inbox, MoreHorizontal, PanelRight, Plus,
   Upload, X,
 } from 'lucide-react';
 import * as ipc from '@/lib/ipc';
 import { cn, folderName, ICON_BUTTON } from '@/lib/utils';
-import type { SessionTool, Tab } from '@/types';
+import type { Tab } from '@/types';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
   DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
-const TOOL_LABEL: Record<SessionTool, string> = {
-  claude: 'Claude',
-  shell: 'Shell',
-  files: 'Files',
-};
-
 export interface PaneSessionMenuProps {
   session: Tab;
   projects: string[];
-  /** Open another of this session's tools as a tab. */
-  onAddTool: (tool: SessionTool) => void;
   onSetProject: (projectDir: string | null) => void;
   onArchive: () => void;
   onCloseSession: () => void;
@@ -31,43 +23,15 @@ export interface PaneSessionMenuProps {
   onToggleInspector: () => void;
 }
 
-/** What the active tab's session can do, docked to the trailing edge of its
- *  pane's tab strip.
- *
- *  Two visible buttons and a menu. The `+` is visible because adding a shell
- *  beside Claude is the grid's whole reason to exist and was unfindable while
- *  it lived inside ⋯; everything infrequent stays in ⋯ or the inspector.
- *  See docs/features/panes.md. */
+/** What the current session can do, docked to the trailing edge of the
+ *  session tab strip: ⋯ for the infrequent actions, and the inspector toggle.
+ *  Splitting has its own buttons beside these. */
 export default function PaneSessionMenu({
-  session, projects, onAddTool, onSetProject, onArchive, onCloseSession,
+  session, projects, onSetProject, onArchive, onCloseSession,
   onOpenInVscode, onOpenDirectory, onCreateTask, inspectorOpen, onToggleInspector,
 }: PaneSessionMenuProps) {
-  const tools: SessionTool[] = session.kind === 'claude'
-    ? ['claude', 'shell', 'files']
-    : ['shell', 'files'];
-
   return (
     <>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button
-            type="button"
-            aria-label="Add a tool to the workspace"
-            title="Open another of this session's tools as a tab"
-            className={cn(ICON_BUTTON, 'w-6 h-6')}
-          >
-            <Plus size={14} />
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="min-w-40">
-          {tools.map((t) => (
-            <DropdownMenuItem key={t} onSelect={() => onAddTool(t)}>
-              <Columns2 size={13} /><span>{TOOL_LABEL[t]}</span>
-            </DropdownMenuItem>
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
-
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button

@@ -1,5 +1,9 @@
 # Home screen
 
+> **Also a tab.** Click the usage meter in the title bar and the logbook opens as
+> its own tab at the leading edge of the session strip, beside whatever you have
+> open — not only when nothing is. See [usage-meter.md](usage-meter.md).
+
 What fills the terminal pane when no tab is open. Instead of a line of grey
 text, Home draws a **metrics dashboard built from your own session history** —
 a quiet readout of how much you've worked and what Claude did, in the app's own

@@ -34,7 +34,7 @@ function TranscriptDocument({ turns, view, fill = false }: {
   if (view === 'raw') {
     return (
       <div className={cn('py-7', fill ? 'px-7' : 'max-w-[820px] mx-auto px-5')}>
-        <pre className="m-0 font-mono text-[12.5px] leading-[1.62] text-muted-foreground whitespace-pre-wrap break-words">
+        <pre className="m-0 font-mono text-[13.5px] leading-[1.62] text-muted-foreground whitespace-pre-wrap break-words">
           {transcriptToMarkdown(turns)}
         </pre>
       </div>
@@ -49,13 +49,13 @@ function TranscriptDocument({ turns, view, fill = false }: {
           <div key={i} className="group/turn relative pl-11 pb-6">
             <span className="absolute left-[15px] top-1 bottom-0 w-px bg-border" aria-hidden />
             {showRole && (
-              <span className={cn('absolute left-2 top-0.5 w-4 h-4 grid place-items-center text-[9px] font-bold bg-card border', NODE_STYLES[turn.role])}>
+              <span className={cn('absolute left-2 top-0.5 w-4 h-4 grid place-items-center text-[10.5px] font-bold bg-card border', NODE_STYLES[turn.role])}>
                 {turn.role === 'user' ? 'U' : 'C'}
               </span>
             )}
 
             {showRole && (
-              <div className={cn('flex items-center gap-2 mb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.06em]', turn.role === 'user' ? 'text-primary' : 'text-[#6fd4c9]')}>
+              <div className={cn('flex items-center gap-2 mb-1.5 text-[11.5px] font-semibold uppercase tracking-[0.06em]', turn.role === 'user' ? 'text-primary' : 'text-[#6fd4c9]')}>
                 {roleLabel(turn.role)}
                 {turn.timestamp && <span className="text-muted-foreground font-medium normal-case tracking-normal">{turnTime(turn.timestamp)}</span>}
               </div>
@@ -77,10 +77,10 @@ function TranscriptDocument({ turns, view, fill = false }: {
                   b.kind === 'text' ? (
                     <Markdown key={j} source={b.text} />
                   ) : (
-                    <div key={j} className="flex items-start gap-2 self-start max-w-full text-[11.5px] rounded-md border border-border bg-card px-2.5 py-1.5">
+                    <div key={j} className="flex items-start gap-2 self-start max-w-full text-[13px] rounded-md border border-border bg-card px-2.5 py-1.5">
                       <span className="text-warning shrink-0 font-semibold">{b.name}</span>
                       {b.detail && (
-                        <pre className="m-0 min-w-0 font-mono text-[11px] leading-[1.5] text-foreground/90 whitespace-pre-wrap break-words">{b.detail}</pre>
+                        <pre className="m-0 min-w-0 font-mono text-[12px] leading-[1.5] text-foreground/90 whitespace-pre-wrap break-words">{b.detail}</pre>
                       )}
                     </div>
                   ),

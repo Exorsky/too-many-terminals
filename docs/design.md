@@ -78,21 +78,25 @@ The sizes in use form a consistent ladder (counted across
 
 | Size | Used for |
 |---|---|
-| 9–9.5px | Fine print: kbd hints, "Built-in" badges, stale-cache notes |
-| 10–10.5px | Meta text: folder chips, section eyebrows, reset countdowns |
-| **11–11.5px** | **The default** — row labels, buttons, most body text |
-| 12–12.5px | Panel headers, the wordmark, setting titles |
-| 13–15px | Rare emphasis (dialog headings) |
-| 16px+ | Rarer still — large numbers, empty-state icons |
+| 10.5–11px | The floor: meta text, counts, timestamps, kbd hints, chips |
+| 11.5–12px | Secondary: tab labels, pane headers, group labels, descriptions |
+| **13px** | **The default** — row names, navigation, buttons, inputs |
+| 13.5–15px | Setting titles, dialog headings |
+| 16px+ | Large numbers, empty-state icons |
+
+The scale moved up one step in the UI rethink: rows were 11.5px with 9.5px
+metadata on 26px rows — denser than VS Code, Zed or Linear, and the 9.5px tier
+was hard to read on a non-Retina screen. Nothing goes below 10.5px now.
 
 Icon sizes follow the same rhythm: 11–12px for anything sitting inside a row
 next to 11px text, 13–15px for header-level icons, 18–20px only for
 empty-state or oversized decorative icons. Never mix a 15px icon into an
 11px row — the row height (see below) was chosen around the smaller icon.
 
-Row/bar heights cluster at **32px** (`h-8` — the dominant chrome height:
-`SidebarFooter`'s trigger, `TabBar`) and **40px** (`h-10` —
-panel headers: Settings, History, the session bar, the sidebar header itself).
+Rows are **30px** one-line and **42px** two-line; navigation rows 28px. Bars
+are **28px** (a split pane's header), **36px** (the session tab strip) and
+**40–46px** (panel headers, the title bar — 46px on macOS, where the traffic
+lights are centred on it via `trafficLightPosition`).
 Uppercase eyebrow labels
 (`SETTINGS`, `PINNED`, folder-group hints) get `tracking-[0.08em]` to
 `tracking-[0.16em]` and `text-muted-foreground` — never full-strength
@@ -116,16 +120,14 @@ different values reaching as low as 1.7:1 contrast.
 
 ## Shape
 
-Radii come from one `--radius: 0.25rem` (4px) base with Tailwind's
-`radius-{sm,md,lg,xl}` derived as `-4px / -2px / +0px / +4px`. In practice
-that means `rounded-sm` is **visually square** (0px) — and it's the most
-common radius in the codebase (32 uses vs. 21 `rounded-md`, 24 `rounded-full`,
-2 `rounded-lg`). The pattern:
+Radii come from one `--radius: 0.625rem` (10px) base with Tailwind's
+`radius-{sm,md,lg,xl}` derived as `-4px / -2px / +0px / +4px`. It used to be
+4px, which made `rounded-sm` — the most common radius — 0px: rows and buttons
+were square. The rethink softened them to match macOS's own controls:
 
-- **`rounded-sm` (0px)** — interactive rows and most buttons (tab rows,
-  session rows, settings rows). Square by design; this is where "near-square"
-  in the identity paragraph above comes from.
-- **`rounded-md` (2px)** — floating surfaces: `DropdownMenuContent`,
+- **`rounded-sm` (6px)** — interactive rows and most buttons (tab rows,
+  session rows, settings rows, inputs).
+- **`rounded-md` (8px)** — floating surfaces: `DropdownMenuContent`,
   `ContextMenuContent`, theme cards. The only things allowed a `shadow`
   (`shadow-md`/`shadow-lg`) instead of just a border — everything anchored to
   the page stays flat; only things that float above it get depth.
@@ -278,7 +280,14 @@ came down to what kind of content is involved, not taste:
 - **Peers the user actively switches between while working** → a **tab
   strip**, not a rail. Open terminal/file tabs are equals you bounce between
   mid-task; a rail would frame them as categories, which they aren't.
-- **App-level destinations, next to a screen that isn't about them** → a
+- **App-level destinations** → **one block, in one place**: Search, Sessions,
+  To-Do, Library, Settings at the top of the sidebar, in the list's own rhythm;
+  the same five as squares, same order, when the sidebar folds to its rail. They
+  had drifted into three places — a Sessions/To-Do switch centred in the title
+  bar, Library/Settings at the sidebar's foot, ⌘K in the title bar's corner —
+  so "where do I go" had three answers. The title bar now holds only context
+  (a breadcrumb: project › issue › session) and status (the usage meter).
+- *(Superseded)* **App-level destinations, next to a screen that isn't about them** → a
   **vertical rail** beside the content, not a band above or below it. The
   sidebar's Home / Search / History / Files / Settings / collapse squares live
   in a 44px rail (see

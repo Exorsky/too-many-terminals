@@ -160,16 +160,16 @@ export default function FileViewer({ tab, isVisible, onDirtyChange, onOpenFile }
   return (
     <div className="absolute inset-0 flex flex-col bg-background" style={{ display: isVisible ? 'flex' : 'none' }}>
       {content !== null && (
-        <div className="flex items-center gap-2 h-7 px-3 shrink-0 border-b border-border text-[10.5px]">
+        <div className="flex items-center gap-2 h-7 px-3 shrink-0 border-b border-border text-[11.5px]">
           {saveError ? (
-            <span className="flex items-center gap-1 text-destructive"><TriangleAlert size={11} />{saveError}</span>
+            <span className="flex items-center gap-1 text-destructive"><TriangleAlert size={12} />{saveError}</span>
           ) : staleOnDisk ? (
             <span className="flex items-center gap-1.5 text-warning">
-              <TriangleAlert size={11} />
+              <TriangleAlert size={12} />
               Changed on disk, and you have unsaved edits
               <button
                 type="button"
-                className="px-1.5 py-px rounded-sm border border-warning/50 bg-transparent text-warning hover:bg-warning/10 cursor-pointer font-inherit text-[10.5px]"
+                className="px-1.5 py-px rounded-sm border border-warning/50 bg-transparent text-warning hover:bg-warning/10 cursor-pointer font-inherit text-[11.5px]"
                 onClick={() => { ipc.readFile(path).then(adoptFromDisk).catch(() => {}); }}
               >
                 Load the file
@@ -179,7 +179,7 @@ export default function FileViewer({ tab, isVisible, onDirtyChange, onOpenFile }
           ) : tab.dirty ? (
             <span className="text-muted-foreground">Unsaved changes · Ctrl+S to save</span>
           ) : (
-            <span className="flex items-center gap-1 text-muted-foreground"><Check size={11} className="text-success" />Saved</span>
+            <span className="flex items-center gap-1 text-muted-foreground"><Check size={12} className="text-success" />Saved</span>
           )}
           {isMd && (
             <div className="ml-auto flex items-center gap-0.5 p-0.5 rounded-md border border-border bg-card">
@@ -188,7 +188,7 @@ export default function FileViewer({ tab, isVisible, onDirtyChange, onOpenFile }
                   key={v}
                   onClick={() => setView(v)}
                   className={cn(
-                    'inline-flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-[5px] cursor-pointer font-inherit transition-colors',
+                    'inline-flex items-center gap-1.5 text-[12px] px-2 py-1 rounded-[5px] cursor-pointer font-inherit transition-colors',
                     view === v ? 'bg-secondary text-foreground' : 'text-muted-foreground hover:text-foreground',
                   )}
                 >
@@ -202,12 +202,12 @@ export default function FileViewer({ tab, isVisible, onDirtyChange, onOpenFile }
       )}
 
       {loadError && (
-        <div className="flex-1 min-h-0 flex items-center justify-center px-6 text-center text-[12px] text-muted-foreground">
+        <div className="flex-1 min-h-0 flex items-center justify-center px-6 text-center text-[13px] text-muted-foreground">
           {loadError}
         </div>
       )}
       {content === null && !loadError && (
-        <div className="flex-1 min-h-0 flex items-center justify-center text-[12px] text-muted-foreground">
+        <div className="flex-1 min-h-0 flex items-center justify-center text-[13px] text-muted-foreground">
           Loading…
         </div>
       )}

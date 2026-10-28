@@ -28,6 +28,14 @@ pub struct AppSettings {
     /// list and a 4px spectrum. Defaults to false — the full list is the one
     /// a new workspace should get.
     pub compact_list: bool,
+    /// Where a new session tab lands: "start" (left edge) or "afterCurrent".
+    pub new_tab_position: String,
+    /// Jira base URL; empty turns issue links off.
+    pub jira_base_url: String,
+    /// Project keys that count as issue keys. Empty means any `ABC-123`.
+    pub jira_project_keys: Vec<String>,
+    /// Name of the env var holding a Jira token — the name, never the value.
+    pub jira_token_var: String,
 }
 
 impl Default for AppSettings {
@@ -40,6 +48,10 @@ impl Default for AppSettings {
             auto_sleep_minutes: 15,
             usage_refresh_seconds: 300,
             compact_list: false,
+            new_tab_position: "start".to_string(),
+            jira_base_url: String::new(),
+            jira_project_keys: Vec::new(),
+            jira_token_var: String::new(),
         }
     }
 }
@@ -97,6 +109,9 @@ mod tests {
             auto_sleep_minutes: 30,
             usage_refresh_seconds: 15,
             compact_list: true,
+            jira_base_url: "https://jira.example.com".to_string(),
+            jira_project_keys: vec!["PROJ".to_string()],
+            ..AppSettings::default()
         };
 
         save_settings(tmp.path(), &settings).unwrap();

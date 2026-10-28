@@ -1,18 +1,22 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { CheckSquare, PanelLeft, Search, SquareTerminal } from 'lucide-react';
+import { BarChart3, ChevronRight, PanelLeft } from 'lucide-react';
 import CommandPalette from '@/components/CommandPalette';
 import FileExplorerPanel, { FilesEdge } from '@/components/FileExplorerPanel';
 import HomeScreen from '@/components/HomeScreen';
 import PaneFile from '@/components/PaneFile';
 import PaneSessionMenu from '@/components/PaneSessionMenu';
 import PaneTabs from '@/components/PaneTabs';
+import SessionTabs from '@/components/SessionTabs';
+import IssueCard from '@/components/IssueCard';
+import IssueChip, { useIssueName } from '@/components/IssueChip';
+import SidebarFooter from '@/components/SidebarFooter';
 import PaneDropZones from '@/components/PaneDropZones';
 import SessionHistoryPanel from '@/components/SessionHistoryPanel';
 import SessionInspector from '@/components/SessionInspector';
 import SessionReader from '@/components/SessionReader';
 import Seam from '@/components/Seam';
 import SessionWorkspace from '@/components/SessionWorkspace';
-import SessionsSidebar, { ALL, INBOX, inScope, type NewSessionKind, type RecentEntry } from '@/components/SessionsSidebar';
+import SessionsSidebar, { ALL, CollapsedRail, INBOX, inScope, type NewSessionKind, type RecentEntry } from '@/components/SessionsSidebar';
 import ProjectHome from '@/components/ProjectHome';
 import SettingsView from '@/components/SettingsView';
 import TaskInspector from '@/components/TaskInspector';
@@ -30,14 +34,14 @@ import {
 } from '@/lib/sessions';
 import { useSettings } from '@/lib/settings-store';
 import { addTask, linkSession, loadTasks, updateTask, useTasks } from '@/lib/tasks';
-import { activeTabId, initialTabsState, sessionModeOf, tabsReducer } from '@/lib/tabs';
+import { activeTabId, currentLayout, initialTabsState, sessionModeOf, tabsReducer } from '@/lib/tabs';
 import { useDragValue } from '@/lib/use-drag-value';
 import { cn, folderName, ICON_BUTTON } from '@/lib/utils';
 import { projectHue } from '@/types';
 import { confirmAction } from '@/lib/confirm';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import NewSessionDialog from '@/components/NewSessionDialog';
-import type { AppView, SessionHistoryEntry, SessionTool, ShellOption, Tab, TabStatus, Task } from '@/types';
+import type { AppView, SessionHistoryEntry, ShellOption, Tab, TabStatus, Task } from '@/types';
 
 const INITIAL_COLS = 120;
 const INITIAL_ROWS = 40;
@@ -50,8 +54,8 @@ const SLEEP_CHECK_MS = 60 * 1000;
  *  decides a padding, and this way it costs no IPC round trip at first paint. */
 const IS_MAC = typeof navigator !== 'undefined' && /Mac/i.test(navigator.userAgent);
 
-const MIN_SIDEBAR = 240;
-const MAX_SIDEBAR = 420;
+const MIN_SIDEBAR = 220;
+const MAX_SIDEBAR = 400;
 
 /** Would splitting this pane off what's being dragged leave it with nothing?
  *  Then there is no split to make — the pane would empty and collapse straight
@@ -155,6 +159,8 @@ export default function App() {
   const [readerTarget, setReaderTarget] = useState<{ projectDir: string; entry: SessionHistoryEntry } | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [newOpen, setNewOpen] = useState(false);
+  /** A Jira issue the New session dialog should open on, from an issue card. */
+  const [newIssue, setNewIssue] = useState<{ key: string; summary: string } | null>(null);
   // Which project the sidebar is inside (ALL, INBOX or a directory), and
   // whether the main area is showing that project's page instead of a session.
   const [scopeRaw, setScopeRaw] = useState<string>(ALL);
@@ -164,7 +170,7 @@ export default function App() {
   // ⌘N inside a project starts there; read through a ref by the key handler.
   const newDefaultDirRef = useRef<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [sidebarWidth, setSidebarWidth] = useState(248);
+  const [sidebarWidth, setSidebarWidth] = useState(268);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   // Three states, not two. `peek` lays the explorer over the grid instead of
   // beside it, which is the whole point: docking it is a layout change, so
@@ -175,6 +181,11 @@ export default function App() {
   const filesPanelRef = useRef<HTMLDivElement>(null);
   const filesPinned = filesMode === 'pinned';
   const [focusMode, setFocusMode] = useState(false);
+  // The logbook (HomeScreen's usage dashboard) as a tab of its own, opened from
+  // the usage meter. Not a session, so it lives here rather than in the tabs
+  // reducer: `logbookOpen` keeps it on the strip, `onLogbook` puts it on screen.
+  const [logbookOpen, setLogbookOpen] = useState(false);
+  const [onLogbook, setOnLogbook] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [historyKey, setHistoryKey] = useState(0);
 
@@ -192,10 +203,15 @@ export default function App() {
     void loadTasks();
   }, []);
 
-  const currentTabId = activeTabId(state);
+  const currentTabId = onLogbook ? null : activeTabId(state);
+  const layout = currentLayout(state);
+  const newTabPositionRef = useRef(settings.newTabPosition);
+  newTabPositionRef.current = settings.newTabPosition;
   const activeTab = state.tabs.find((t) => t.id === currentTabId) ?? null;
   const overlaysUp = showSettings || showArchive || readerTarget !== null;
   const onSessions = view === 'sessions' && !overlaysUp;
+  /** The panes are on screen: Sessions, and not covered by the logbook tab. */
+  const onGrid = onSessions && !onLogbook;
 
   // Every directory that might hold a transcript we care about: the open
   // projects, plus each session's own cwd (which is how a scratch session's
@@ -230,7 +246,7 @@ export default function App() {
       // A kill we issued for sleep — swallow it; the session lives on dormant.
       if (sleepingRef.current.delete(tabId)) return;
       // A session's shell tool exiting is not the session exiting.
-      if (tabId.endsWith('::shell')) { spawnedRef.current.delete(tabId); return; }
+      if (tabId.includes('::shell')) { spawnedRef.current.delete(tabId); return; }
       dispatch({ type: 'exited', tabId });
     });
     return () => { unlisten.then((fn) => fn()); };
@@ -311,8 +327,8 @@ export default function App() {
 
   /** Spawns a session's shell tool: a second pty in the same directory, with
    *  no session record of its own. Idempotent via the same `spawnedRef`. */
-  const startShell = useCallback((tab: Tab) => {
-    const id = shellPtyId(tab.id);
+  const startShell = useCallback((tab: Tab, n?: number) => {
+    const id = shellPtyId(tab.id, n);
     if (spawnedRef.current.has(id)) return;
     const shell = shellOptions[0];
     if (!shell) return;
@@ -358,12 +374,13 @@ export default function App() {
         createdAt: Date.now(),
       };
       if (opts.prompt) pendingPromptRef.current.set(tab.id, opts.prompt);
-      dispatch({ type: 'add', tab });
+      dispatch({ type: 'add', tab, at: newTabPositionRef.current });
       setView('sessions');
       setShowSettings(false);
       setShowArchive(false);
       setReaderTarget(null);
       setProjectHome(false);
+      setOnLogbook(false);
       startPty(tab);
       return tab;
     },
@@ -377,7 +394,7 @@ export default function App() {
    *  — which is a state, not a placeholder. ⌘N is this with both defaults, so
    *  the common case stays one keystroke with no modal and no folder picker.
    *  See docs/features/scratch-sessions.md. */
-  const newSession = useCallback(async (dir: string | null, kind: NewSessionKind = 'claude', name = '') => {
+  const newSession = useCallback(async (dir: string | null, kind: NewSessionKind = 'claude', name = '', prompt?: string) => {
     const cwd = dir ?? await ipc.createScratchDir(crypto.randomUUID().slice(0, 8)).catch(() => null);
     if (!cwd) return;
 
@@ -389,14 +406,12 @@ export default function App() {
     }
 
     // A name given up front sticks: the auto-namer only names unnamed sessions.
-    const tab = spawnSessionAt(cwd, 'claude', null, name || UNNAMED_SESSION, { projectDir: dir });
+    spawnSessionAt(cwd, 'claude', null, name || UNNAMED_SESSION, { projectDir: dir, prompt });
     // "Claude + Shell" is the layout decided up front: the second pane is put
     // there now rather than being something you go and add afterwards.
-    if (kind === 'both') {
-      startShell(tab);
-      dispatch({ type: 'addToWorkspace', content: sessionContent(tab.id, 'shell') });
-    }
-  }, [spawnSessionAt, shellOptions, startShell, dispatch]);
+    // SessionWorkspace spawns the shell's pty as soon as its pane mounts.
+    if (kind === 'both') dispatch({ type: 'splitShell', edge: 'right' });
+  }, [spawnSessionAt, shellOptions, dispatch]);
 
   // Restore the previous workspace once on startup. Restored sessions are
   // added *dormant* — no pty until one is first shown.
@@ -470,7 +485,8 @@ export default function App() {
     setShowArchive(false);
     setReaderTarget(null);
     setProjectHome(false);
-    dispatch({ type: 'select', tabId });
+    setOnLogbook(false);
+    dispatch({ type: 'select', tabId, at: newTabPositionRef.current });
   }, [dispatch]);
 
   // A removed project can't stay the scope, or the sidebar would show an
@@ -489,6 +505,16 @@ export default function App() {
     if (next !== ALL) { setShowSettings(false); setShowArchive(false); setReaderTarget(null); setView('sessions'); }
   }, [state]);
 
+  /** Kill every shell a session has open — its own and each split's. */
+  const killShells = useCallback((tabId: string) => {
+    for (const id of [...spawnedRef.current]) {
+      if (!id.startsWith(`${tabId}::shell`)) continue;
+      ipc.killPty(id);
+      disposeTerminal(id);
+      spawnedRef.current.delete(id);
+    }
+  }, []);
+
   // Every way of closing a session from the UI comes through here, so this is
   // the one place it asks.
   const handleClose = useCallback(async (tabId: string) => {
@@ -502,11 +528,9 @@ export default function App() {
     });
     if (!ok) return;
     ipc.killPty(tabId);
-    ipc.killPty(shellPtyId(tabId));
     disposeTerminal(tabId);
-    disposeTerminal(shellPtyId(tabId));
     spawnedRef.current.delete(tabId);
-    spawnedRef.current.delete(shellPtyId(tabId));
+    killShells(tabId);
     setMdTabs((prev) => {
       if (!prev.has(tabId)) return prev;
       const next = new Map(prev);
@@ -514,7 +538,7 @@ export default function App() {
       return next;
     });
     dispatch({ type: 'close', tabId });
-  }, [dispatch, state.tabs]);
+  }, [dispatch, state.tabs, killShells]);
 
   /** Archiving frees the process and takes the session out of the list. It
    *  keeps its transcript, its name and its place in the workspace file, so
@@ -524,10 +548,10 @@ export default function App() {
       sleepingRef.current.add(tabId);
       spawnedRef.current.delete(tabId);
       ipc.killPty(tabId);
-      ipc.killPty(shellPtyId(tabId));
+      killShells(tabId);
     }
     dispatch({ type: 'archive', tabId, archived });
-  }, [dispatch]);
+  }, [dispatch, killShells]);
 
   const handleOpenInVscode = useCallback((tabId: string) => {
     const tab = state.tabs.find((t) => t.id === tabId);
@@ -617,15 +641,15 @@ export default function App() {
    *  focused one. A session reading its transcript full-screen is excluded: its
    *  terminal is hidden and needs no live process behind it. */
   const visible = useMemo(() => {
-    if (!onSessions) return new Set<string>();
-    const ids = visibleSessionIds(state.layout);
+    if (!onSessions || onLogbook) return new Set<string>();
+    const ids = visibleSessionIds(layout);
     for (const id of ids) {
       const tab = state.tabs.find((t) => t.id === id);
       if (!tab || tab.archived) { ids.delete(id); continue; }
       if (sessionModeOf(tab, mdTabs, settings.showMarkdownToggle) === 'markdown') ids.delete(id);
     }
     return ids;
-  }, [onSessions, state.layout, state.tabs, mdTabs, settings.showMarkdownToggle]);
+  }, [onSessions, onLogbook, layout, state.tabs, mdTabs, settings.showMarkdownToggle]);
   visibleTabIdsRef.current = visible;
 
   useEffect(() => {
@@ -664,6 +688,24 @@ export default function App() {
 
   // --- keyboard -----------------------------------------------------------
 
+  const openRef = useRef(state.open);
+  openRef.current = state.open;
+  /** Keyboard navigation, read through a ref by the one key listener:
+   *  'settings', 'waiting' (the session that most recently started waiting
+   *  on you — cmux's "jump to latest unread"), or a session id. */
+  const keyNavRef = useRef<(target: string) => void>(() => {});
+  keyNavRef.current = (target) => {
+    if (target === 'settings') { setShowSettings(true); setShowArchive(false); setReaderTarget(null); return; }
+    if (target === 'waiting') {
+      const waiting = state.tabs
+        .filter((t) => !t.archived && t.status === 'requires_response')
+        .sort((a, b) => (b.statusChangedAt ?? 0) - (a.statusChangedAt ?? 0))[0];
+      if (waiting) handleSelect(waiting.id);
+      return;
+    }
+    handleSelect(target);
+  };
+
   // Capture phase, so these fire before the focused xterm swallows the key.
   // Every binding here was checked against the existing map (⌘F find-in-reader,
   // ⌘⇧V preview, Ctrl+V paste, Esc interrupt) — see docs/features/command-palette.md.
@@ -683,10 +725,24 @@ export default function App() {
       else if (key === 'b' && !e.shiftKey) { e.preventDefault(); setSidebarOpen((v) => !v); }
       else if (key === 'i' && !e.shiftKey) { e.preventDefault(); setInspectorOpen((v) => !v); }
       else if (key === 'f' && e.shiftKey) { e.preventDefault(); setFocusMode((v) => !v); }
+      // Terminal-standard splits. On macOS ⌘ never reaches the pty; elsewhere
+      // Ctrl+D is EOF, so the split lives on Ctrl+Shift+D instead.
+      else if (key === 'd' && (IS_MAC ? e.metaKey : e.shiftKey)) {
+        e.preventDefault();
+        const down = IS_MAC ? e.shiftKey : e.altKey;
+        dispatch({ type: 'splitShell', edge: down ? 'bottom' : 'right' });
+      }
+      else if (key === ',' && !e.shiftKey) { e.preventDefault(); keyNavRef.current('settings'); }
+      else if (key === 'u' && e.shiftKey) { e.preventDefault(); keyNavRef.current('waiting'); }
+      // ⌘1…9 picks a tab by position — ⌘1 is the newest when tabs open on the left.
+      else if (IS_MAC && e.metaKey && !e.shiftKey && /^[1-9]$/.test(e.key)) {
+        const id = openRef.current[Number(e.key) - 1];
+        if (id) { e.preventDefault(); keyNavRef.current(id); }
+      }
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [newSession]);
+  }, [newSession, dispatch]);
 
   // Escape leaves focus mode. Not registered in capture: a bare Escape belongs
   // to the terminal (it interrupts Claude), so this only runs if nothing else
@@ -744,7 +800,6 @@ export default function App() {
 
   // --- the pane grid ------------------------------------------------------
 
-  const { layout } = state;
   const focusedPaneContent = activeContent(findPane(layout, layout.focusedPaneId));
   const gridRef = useRef<HTMLDivElement>(null);
   const panes = panesOf(layout.grid).length;
@@ -778,7 +833,7 @@ export default function App() {
   const handleDropView = useCallback((content: PaneContent, paneId: string, zone: Edge | 'center') => {
     setDrag(null);
     setFilesMode((m) => (m === 'peek' ? 'hidden' : m));
-    const pane = findPane(state.layout, paneId);
+    const pane = findPane(layout, paneId);
     // Splitting a pane off the very thing it is showing would empty it and
     // collapse it right back — the same pane, a new id, and its terminal
     // remounted for nothing.
@@ -786,7 +841,7 @@ export default function App() {
     dispatch(zone === 'center'
       ? { type: 'showIn', content, paneId }
       : { type: 'splitTo', content, paneId, edge: zone });
-  }, [state.layout, dispatch]);
+  }, [layout, dispatch]);
 
   /** "Put this on the workspace", with no question about where. The menus use
    *  this; drag is for when you care about the geometry. */
@@ -823,6 +878,33 @@ export default function App() {
   const colSeamShown = bands.vertical[0] || bands.vertical[1];
   const rowSeamShown = bands.horizontal[0] || bands.horizontal[1];
 
+  /** How many panes each open tab holds, for the strip's badge. */
+  const paneCounts = useMemo(() => {
+    const out: Record<string, number> = {};
+    for (const id of state.open) {
+      const l = state.layouts[id];
+      if (l) out[id] = panesOf(l.grid).length;
+    }
+    return out;
+  }, [state.open, state.layouts]);
+  const activeCanRead = settings.showMarkdownToggle && activeTab?.kind === 'claude' && !!activeTab.resumeSessionId;
+
+  /** Close one view. A split's shell is *gone* when its pane closes — like
+   *  closing a split in any terminal — while Claude, Files or another
+   *  session's view only leave the screen. */
+  const handleCloseView = useCallback((key: string) => {
+    for (const p of layout.panes) {
+      const c = p.contents.find((x) => contentKey(x) === key);
+      if (c?.kind === 'session' && c.tool === 'shell' && c.n) {
+        const id = shellPtyId(c.sessionId, c.n);
+        ipc.killPty(id);
+        disposeTerminal(id);
+        spawnedRef.current.delete(id);
+      }
+    }
+    dispatch({ type: 'closeView', key });
+  }, [layout, dispatch]);
+
   const selectedTask = tasks.find((t) => t.id === selectedTaskId) ?? null;
   const linkedTasks = useMemo(
     () => (currentTabId ? tasks.filter((t) => t.sessionIds.includes(currentTabId)) : []),
@@ -833,73 +915,54 @@ export default function App() {
    *  is showing one. */
   const activeFilePath = focusedPaneContent?.kind === 'file' ? focusedPaneContent.path : null;
   const sidebarShown = sidebarOpen && !focusMode;
+  /** The four destinations, shared by the sidebar's block and the folded rail. */
+  const nav = {
+    sessions: () => { setView('sessions'); setShowSettings(false); setShowArchive(false); setReaderTarget(null); },
+    todo: () => { setView('todo'); setShowSettings(false); setShowArchive(false); setReaderTarget(null); },
+    library: () => { setShowArchive((v) => !v); setShowSettings(false); setView('sessions'); },
+    settings: () => { setShowSettings((v) => !v); setShowArchive(false); setView('sessions'); },
+  };
   const inspectorShown = inspectorOpen && !focusMode && activeTab !== null && onSessions;
 
   return (
     <div className="relative flex flex-col h-screen bg-background text-foreground">
-      {/* Two modes, one line, 32px — and on macOS this line *is* the title bar
-          (`titleBarStyle: Overlay`), so the window costs one 32px row of chrome
-          instead of two. The left pad clears the native traffic lights, which
-          stay real: drawing fake ones is how a desktop app starts feeling like
-          a web page wearing a costume. Projects are deliberately absent — they
-          organize what's in a mode, they aren't one. */}
+      {/* The title bar holds context and status — never navigation, which
+          lives in one block at the top of the sidebar. On macOS this row *is*
+          the window's title bar (`titleBarStyle: Overlay`), so the left pad
+          clears the real traffic lights, which tauri.conf.json centres on it. */}
       {!focusMode && (
-        <nav
+        <header
           data-tauri-drag-region
           className={cn(
-            'relative flex items-center gap-1 px-2 shrink-0 border-b border-border bg-background',
-            // On macOS this row *is* the title bar. Its content sits on the
-            // same line as the traffic lights, the way a native toolbar does,
-            // but the row is tall enough to put real air above and below them —
-            // at 38px everything was jammed against the window edge and read as
-            // chrome bleeding into the frame. The left pad clears the lights.
-            IS_MAC ? 'h-[54px] pl-[86px]' : 'h-[38px]',
+            'relative flex items-center gap-2 px-2 shrink-0 border-b border-border bg-card',
+            IS_MAC ? 'h-[46px] pl-[84px]' : 'h-10',
           )}
         >
-          {/* Both window-chrome controls lead the row, after the pad that clears
-              the traffic lights. Left is where the things they operate are —
-              the sidebar, and a palette that searches it — and it leaves the
-              whole trailing half free to be what a title bar mostly is:
-              somewhere to grab the window. */}
-          <button
-            type="button"
-            aria-label="Search sessions"
-            title="Go to session  ⌘K"
-            className={cn(ICON_BUTTON, 'h-6 w-auto gap-1.5 px-1.5')}
-            onClick={() => setPaletteOpen(true)}
-          >
-            <Search size={12} />
-            <span className="text-[9.5px] text-faint">⌘K</span>
-          </button>
           <button
             type="button"
             aria-label={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
             title={`${sidebarOpen ? 'Hide' : 'Show'} sidebar  ⌘B`}
-            className={cn(ICON_BUTTON, 'w-6 h-6')}
+            className={cn(ICON_BUTTON, 'w-7 h-7')}
             onClick={() => setSidebarOpen((v) => !v)}
           >
-            <PanelLeft size={13} />
+            <PanelLeft size={15} />
           </button>
-
-          {/* Centred, and centred on the window rather than on the space left
-              over — otherwise it drifts as the left and right runs change. */}
-          <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-0.5 p-0.5 rounded-sm bg-hover">
-            <NavTab
-              icon={SquareTerminal}
-              label="Sessions"
-              active={view === 'sessions'}
-              onClick={() => { setView('sessions'); setShowSettings(false); setShowArchive(false); }}
-            />
-            <NavTab
-              icon={CheckSquare}
-              label="To-Do"
-              active={view === 'todo'}
-              count={tasks.filter((t) => !t.done).length}
-              onClick={() => { setView('todo'); setShowSettings(false); setShowArchive(false); }}
+          {/* Centred on the window, not on what's left over, so it doesn't
+              drift as the two ends change width. */}
+          <div data-tauri-drag-region className="absolute left-1/2 -translate-x-1/2 max-w-[50%] flex items-center gap-1.5 min-w-0 text-[12px] text-muted-foreground">
+            <Breadcrumb
+              title={showSettings ? 'Settings' : showArchive ? 'Library' : view === 'todo' ? 'To-Do' : onLogbook ? 'Logbook' : null}
+              session={onSessions ? activeTab : null}
+              projects={projects}
             />
           </div>
-
-        </nav>
+          <div className="ml-auto">
+            <SidebarFooter
+              inline
+              onOpen={() => { nav.sessions(); setProjectHome(false); setLogbookOpen(true); setOnLogbook(true); }}
+            />
+          </div>
+        </header>
       )}
 
       <div className="flex flex-1 min-h-0">
@@ -934,8 +997,12 @@ export default function App() {
                 onAddProject={handleAddProject}
                 onRemoveProject={handleRemoveProject}
                 onImportSession={handleImportSession}
-                onToggleArchive={() => { setShowArchive((v) => !v); setShowSettings(false); setView('sessions'); }}
-                onToggleSettings={() => { setShowSettings((v) => !v); setShowArchive(false); setView('sessions'); }}
+                onToggleArchive={nav.library}
+                onToggleSettings={nav.settings}
+                view={view}
+                todoCount={tasks.filter((t) => !t.done).length}
+                onShowSessions={nav.sessions}
+                onShowTodo={nav.todo}
               />
             </div>
             <Seam
@@ -947,14 +1014,91 @@ export default function App() {
           </>
         )}
 
-        <main className="relative flex flex-1 min-w-0 min-h-0" data-terminal-area>
-          {/* The pane grid. Each pane shows ONE session — there is no tab strip
-              above it, because the sidebar is the only list of sessions. Drag a
-              session onto a pane's edge to split, or onto its middle to show it
-              there. See docs/features/panes.md. */}
+        {!sidebarShown && !focusMode && (
+          <CollapsedRail
+            tabs={state.tabs}
+            selectedId={onSessions ? currentTabId : null}
+            lastUsed={lastUsed}
+            view={view}
+            showSettings={showSettings}
+            showArchive={showArchive}
+            todoCount={tasks.filter((t) => !t.done).length}
+            onOpenPalette={() => setPaletteOpen(true)}
+            onShowSessions={nav.sessions}
+            onShowTodo={nav.todo}
+            onToggleArchive={nav.library}
+            onToggleSettings={nav.settings}
+            onSelect={handleSelect}
+          />
+        )}
+        <main className="relative flex flex-col flex-1 min-w-0 min-h-0" data-terminal-area>
+          {onSessions && (state.open.length > 0 || logbookOpen) && (
+            <SessionTabs
+              extra={logbookOpen ? {
+                label: 'Logbook',
+                icon: <BarChart3 size={13} className="shrink-0" />,
+                active: onLogbook,
+                onSelect: () => setOnLogbook(true),
+                onClose: () => { setLogbookOpen(false); setOnLogbook(false); },
+              } : null}
+              open={state.open}
+              tabs={state.tabs}
+              current={state.current}
+              paneCounts={paneCounts}
+              onSelect={handleSelect}
+              onHide={(id) => {
+                // A tab's splits go with it — like closing a terminal tab —
+                // so a later split starts a fresh shell, not this one again.
+                killShells(id);
+                dispatch({ type: 'hide', tabId: id });
+              }}
+              onNew={() => setNewOpen(true)}
+              trailing={focusMode || !activeTab ? undefined : (
+                <>
+                  <SessionControls
+                    canRead={!!activeCanRead}
+                    mode={sessionModeOf(activeTab, mdTabs, settings.showMarkdownToggle)}
+                    splitDirection={splitDirection}
+                    onSetMode={(mode) => setMdTabs((prev) => {
+                      const next = new Map(prev);
+                      if (mode === 'terminal') next.delete(activeTab.id);
+                      else next.set(activeTab.id, mode);
+                      return next;
+                    })}
+                    onSetSplitDirection={setSplitDirection}
+                    onSplitShell={(edge) => dispatch({ type: 'splitShell', edge })}
+                  />
+                  <span className="w-px h-4 mx-1 bg-border" aria-hidden="true" />
+                  <PaneSessionMenu
+                    session={activeTab}
+                    projects={projects}
+                    onSetProject={(projectDir: string | null) =>
+                      dispatch({ type: 'setProject', tabId: activeTab.id, projectDir })}
+                    onArchive={() => handleArchive(activeTab.id, true)}
+                    onCloseSession={() => handleClose(activeTab.id)}
+                    onOpenInVscode={() => handleOpenInVscode(activeTab.id)}
+                    onOpenDirectory={() => ipc.openDirectory(activeTab.cwd)}
+                    onCreateTask={() => handleCreateTaskFromSession(activeTab.id)}
+                    inspectorOpen={inspectorShown}
+                    onToggleInspector={() => setInspectorOpen((v) => !v)}
+                  />
+                </>
+              )}
+            />
+          )}
+          <div className="relative flex-1 min-h-0">
+          {/* The current tab's panes. A tab is a session; its splits live here,
+              and switching tabs swaps the whole layout. Drag a pane's header
+              onto another pane's edge to re-split, or a sidebar row onto an
+              edge to put another session beside this one. */}
+          {onSessions && onLogbook && (
+            <div className="absolute inset-0 z-10 bg-background">
+              <HomeScreen projects={projects} onAddProject={handleAddProject} />
+            </div>
+          )}
           <div
             ref={gridRef}
-            className={cn('absolute inset-0 grid', !onSessions && 'hidden')}
+            className={cn('absolute inset-0 grid', !onGrid && 'hidden')}
             style={{
               gridTemplateColumns: `${layout.colFrac}fr ${1 - layout.colFrac}fr`,
               gridTemplateRows: `${layout.rowFrac}fr ${1 - layout.rowFrac}fr`,
@@ -966,12 +1110,9 @@ export default function App() {
               const rect = paneRect(layout.grid, paneId);
               const focused = paneId === layout.focusedPaneId;
               const active = activeContent(pane);
-              const activeSession = active?.kind === 'session'
-                ? state.tabs.find((t) => t.id === active.sessionId) ?? null
-                : null;
-              const canRead = settings.showMarkdownToggle && activeSession?.kind === 'claude'
-                && !!activeSession.resumeSessionId && active?.kind === 'session'
-                && active.tool === 'claude';
+              // A lone pane showing one thing needs no header: the tab above
+              // already says what it is.
+              const header = panes > 1 || pane.contents.length > 1;
 
               return (
                 <div
@@ -987,52 +1128,17 @@ export default function App() {
                   }}
                   onMouseDownCapture={() => dispatch({ type: 'focusPane', paneId })}
                 >
-                  {/* Focus mode keeps the strip — it is the only thing left
-                      saying which session you are in — and drops its trailing
-                      controls, which is the part that was chrome. */}
-                  {pane.contents.length > 0 && (
+                  {header && (
                     <PaneTabs
                       contents={pane.contents}
                       activeKey={pane.activeKey}
                       tabs={state.tabs}
+                      ownSessionId={state.current}
                       paneFocused={focused}
                       onActivate={(key) => dispatch({ type: 'activateTab', paneId, key })}
-                      onClose={(key) => dispatch({ type: 'closeTab', key })}
+                      onClose={handleCloseView}
                       onDrop={(dropped, beforeKey) =>
                         dispatch({ type: 'showIn', content: dropped, paneId, beforeKey })}
-                      trailing={focusMode ? undefined : (
-                        <>
-                          {canRead && activeSession && (
-                            <SessionControls
-                              mode={sessionModeOf(activeSession, mdTabs, settings.showMarkdownToggle)}
-                              splitDirection={splitDirection}
-                              onSetMode={(mode) => setMdTabs((prev) => {
-                                const next = new Map(prev);
-                                if (mode === 'terminal') next.delete(activeSession.id);
-                                else next.set(activeSession.id, mode);
-                                return next;
-                              })}
-                              onSetSplitDirection={setSplitDirection}
-                            />
-                          )}
-                          {activeSession && (
-                            <PaneSessionMenu
-                              session={activeSession}
-                              projects={projects}
-                              onAddTool={(tool: SessionTool) => addToWorkspace(sessionContent(activeSession.id, tool))}
-                              onSetProject={(projectDir: string | null) =>
-                                dispatch({ type: 'setProject', tabId: activeSession.id, projectDir })}
-                              onArchive={() => handleArchive(activeSession.id, true)}
-                              onCloseSession={() => handleClose(activeSession.id)}
-                              onOpenInVscode={() => handleOpenInVscode(activeSession.id)}
-                              onOpenDirectory={() => ipc.openDirectory(activeSession.cwd)}
-                              onCreateTask={() => handleCreateTaskFromSession(activeSession.id)}
-                              inspectorOpen={inspectorShown && focused}
-                              onToggleInspector={() => setInspectorOpen((v) => !v)}
-                            />
-                          )}
-                        </>
-                      )}
                     />
                   )}
 
@@ -1056,7 +1162,7 @@ export default function App() {
                             {content.kind === 'file' ? (
                               <PaneFile
                                 content={content}
-                                active={onSessions && shown}
+                                active={onGrid && shown}
                                 onOpenFile={(dir, path) =>
                                   dispatch({ type: 'showIn', content: { kind: 'file', dir, path }, paneId })}
                               />
@@ -1068,7 +1174,8 @@ export default function App() {
                                   <SessionWorkspace
                                     session={session}
                                     tool={content.tool}
-                                    active={onSessions && shown}
+                                    shellN={content.n}
+                                    active={onGrid && shown}
                                     paneFocused={focused}
                                     mode={sessionModeOf(session, mdTabs, settings.showMarkdownToggle)}
                                     splitDirection={splitDirection}
@@ -1076,7 +1183,7 @@ export default function App() {
                                     onSetMdView={setMdView}
                                     showMarkdownToggle={settings.showMarkdownToggle}
                                     onInterrupt={() => dispatch({ type: 'interrupt', tabId: session.id })}
-                                    onNeedShell={() => startShell(session)}
+                                    onNeedShell={() => startShell(session, content.n)}
                                   />
                                 );
                               })()
@@ -1128,6 +1235,7 @@ export default function App() {
             {(draggingCol || draggingRow) && (
               <div className={cn('fixed inset-0 z-50', draggingCol ? 'cursor-col-resize' : 'cursor-row-resize')} />
             )}
+          </div>
           </div>
 
           {view === 'todo' && !overlaysUp && (
@@ -1192,7 +1300,7 @@ export default function App() {
           )}
           {showSettings && (
             <div className="absolute inset-0 bg-background">
-              <SettingsView />
+              <SettingsView onOpenFile={(dir, path) => addToWorkspace({ kind: 'file', dir, path })} />
             </div>
           )}
         </main>
@@ -1270,44 +1378,45 @@ export default function App() {
       />
       <NewSessionDialog
         open={newOpen}
-        onOpenChange={setNewOpen}
+        onOpenChange={(o) => { setNewOpen(o); if (!o) setNewIssue(null); }}
         defaultDir={scopeDir}
         projects={projects}
         counts={projectCounts}
-        onStart={(dir, kind, name) => { void newSession(dir, kind, name); }}
+        onStart={(dir, kind, name, prompt) => { void newSession(dir, kind, name, prompt); }}
         onAddProject={handleAddProject}
+        initialIssue={newIssue}
+      />
+      <IssueCard
+        sessions={sessions}
+        onNewSession={(key, summary) => { setNewIssue({ key, summary }); setNewOpen(true); }}
       />
       <ConfirmDialog />
     </div>
   );
 }
 
-function NavTab({ icon: Icon, label, active, count, onClick }: {
-  icon: typeof SquareTerminal;
-  label: string;
-  active: boolean;
-  count?: number;
-  onClick: () => void;
+/** Where you are: a view's name, or project › issue › session. */
+function Breadcrumb({ title, session, projects }: {
+  title: string | null;
+  session: Tab | null;
+  projects: string[];
 }) {
+  const { key, label } = useIssueName(session?.name ?? '');
+  if (title) return <span className="text-foreground font-medium">{title}</span>;
+  if (!session) return null;
+  const dir = session.projectDir;
   return (
-    <button
-      type="button"
-      aria-pressed={active}
-      className={cn(
-        'relative flex items-center gap-1.5 h-[26px] px-3 rounded-sm border-none cursor-pointer font-inherit text-[12px] font-medium',
-        // The accent underline is the only thing in the chrome that says "you
-        // are here". A background tint alone read as one more hover state.
-        active
-          ? 'bg-selected text-foreground after:absolute after:inset-x-1.5 after:-bottom-px after:h-px after:bg-primary'
-          : 'bg-transparent text-muted-foreground hover:text-foreground hover:bg-raised',
-      )}
-      onClick={onClick}
-    >
-      <Icon size={12} className="shrink-0" />
-      {label}
-      {count !== undefined && count > 0 && (
-        <span className="text-[9.5px] font-mono tabular-nums text-muted-foreground">{count}</span>
-      )}
-    </button>
+    <>
+      <span
+        className="w-1.5 h-1.5 rounded-full shrink-0"
+        style={dir
+          ? { background: `hsl(${projectHue(Math.max(0, projects.indexOf(dir)))} 60% 62%)` }
+          : { boxShadow: 'inset 0 0 0 1px var(--muted-foreground)' }}
+      />
+      <span className="shrink-0">{dir ? folderName(dir) : 'Inbox'}</span>
+      <ChevronRight size={12} className="shrink-0 text-faint" />
+      {key && <IssueChip text={key} size="xs" />}
+      <span className="truncate text-foreground font-medium">{label}</span>
+    </>
   );
 }

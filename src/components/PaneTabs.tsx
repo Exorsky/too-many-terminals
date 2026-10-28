@@ -11,6 +11,9 @@ export interface PaneTabsProps {
   activeKey: string | null;
   /** Every open session, to resolve a tab's name and status. */
   tabs: Tab[];
+  /** The session whose tab this pane lives in. Its own views are named by
+   *  tool alone ("Shell 2"); another session's carry that session's name. */
+  ownSessionId?: string | null;
   /** False for a pane that doesn't have the keyboard: it keeps its notch so
    *  you can still read what it's showing, but dims. With four terminals on
    *  screen, knowing which one takes your next keystroke matters most. */
@@ -26,12 +29,12 @@ export interface PaneTabsProps {
 /** What a tab is called and what it looks like. A session's name comes from
  *  the session; the tool is a suffix only when it isn't Claude, because
  *  "Alpha" reads better than "Alpha · Claude" and the icon already says it. */
-function describe(content: PaneContent, tabs: Tab[]) {
+function describe(content: PaneContent, tabs: Tab[], ownSessionId: string | null) {
   if (content.kind === 'file') {
     return {
       label: content.path.split(/[/\\]/).pop() || content.path,
       title: content.path,
-      icon: <File size={11} className="shrink-0 text-muted-foreground" />,
+      icon: <File size={12} className="shrink-0 text-muted-foreground" />,
     };
   }
   const session = tabs.find((t) => t.id === content.sessionId);
@@ -39,12 +42,16 @@ function describe(content: PaneContent, tabs: Tab[]) {
   const icon = content.tool === 'claude'
     ? (session
       ? <span className={cn('w-[7px] h-[7px] shrink-0 rounded-full box-border', STATE_DOT[sessionState(session)])} />
-      : <Sparkles size={11} className="shrink-0 text-muted-foreground" />)
+      : <Sparkles size={12} className="shrink-0 text-muted-foreground" />)
     : content.tool === 'shell'
-      ? <SquareTerminal size={11} className="shrink-0 text-muted-foreground" />
-      : <FolderTree size={11} className="shrink-0 text-muted-foreground" />;
+      ? <SquareTerminal size={12} className="shrink-0 text-muted-foreground" />
+      : <FolderTree size={12} className="shrink-0 text-muted-foreground" />;
+  const tool = content.tool === 'claude' ? 'Claude'
+    : content.tool === 'files' ? 'Files'
+    : content.n && content.n > 1 ? `Shell ${content.n}` : 'Shell';
+  const own = content.sessionId === ownSessionId;
   return {
-    label: content.tool === 'claude' ? name : `${name} · ${content.tool === 'shell' ? 'Shell' : 'Files'}`,
+    label: own ? tool : content.tool === 'claude' ? name : `${name} · ${tool}`,
     title: session?.cwd ?? name,
     icon,
   };
@@ -66,7 +73,7 @@ function dropSide(e: { clientX: number; currentTarget: HTMLElement }): 'before' 
  *  A tab is a *thing on the workspace*, never a session. Closing one puts the
  *  thing away; the session stays in the sidebar, running. */
 export default function PaneTabs({
-  contents, activeKey, tabs, paneFocused, onActivate, onClose, onDrop, trailing,
+  contents, activeKey, tabs, ownSessionId = null, paneFocused, onActivate, onClose, onDrop, trailing,
 }: PaneTabsProps) {
   const dragKeyRef = useRef<string | null>(null);
   const [dropAt, setDropAt] = useState<{ key: string; pos: 'before' | 'after' } | null>(null);
@@ -84,7 +91,7 @@ export default function PaneTabs({
     <div
       data-pane-tabs
       className={cn(
-        'flex items-stretch h-8 shrink-0 border-b border-border bg-card',
+        'flex items-stretch h-7 shrink-0 border-b border-border bg-card',
         !paneFocused && 'opacity-60',
       )}
       onDragOver={(e) => {
@@ -106,7 +113,7 @@ export default function PaneTabs({
       <div className="flex items-stretch min-w-0 overflow-x-auto scrollbar-thin">
         {contents.map((content) => {
           const key = contentKey(content)!;
-          const { label, title, icon } = describe(content, tabs);
+          const { label, title, icon } = describe(content, tabs, ownSessionId);
           const isActive = key === activeKey;
           return (
             <div
@@ -116,7 +123,7 @@ export default function PaneTabs({
               title={title}
               className={cn(
                 'group relative flex items-center gap-1.5 shrink-0 pl-2.5 pr-1.5 max-w-[190px]',
-                'border-r border-border cursor-pointer text-[11px] transition-colors duration-100',
+                'border-r border-border cursor-pointer text-[12px] transition-colors duration-100',
                 isActive
                   ? 'bg-background text-foreground'
                   : 'bg-transparent text-muted-foreground hover:text-foreground hover:bg-hover',
@@ -176,7 +183,7 @@ export default function PaneTabs({
                 onMouseDown={(e) => e.stopPropagation()}
                 onClick={(e) => { e.stopPropagation(); onClose(key); }}
               >
-                <X size={11} />
+                <X size={12} />
               </button>
             </div>
           );

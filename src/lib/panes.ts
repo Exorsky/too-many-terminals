@@ -20,7 +20,9 @@ import type { SessionTool } from '@/types';
 
 /** What a tab can be. */
 export type PaneContent =
-  | { kind: 'session'; sessionId: string; tool: SessionTool }
+  /** `n` numbers a session's extra shells (1, 2, …) so several can sit side by
+   *  side; absent means the session's own terminal for that tool. */
+  | { kind: 'session'; sessionId: string; tool: SessionTool; n?: number }
   | { kind: 'file'; dir: string; path: string };
 
 export interface Pane {
@@ -40,13 +42,29 @@ export interface Pane {
  *  places would blank one of them. */
 export function contentKey(content: PaneContent | null | undefined): string | null {
   if (!content) return null;
-  return content.kind === 'session'
-    ? `session:${content.sessionId}:${content.tool}`
-    : `file:${content.path}`;
+  if (content.kind === 'file') return `file:${content.path}`;
+  const base = `session:${content.sessionId}:${content.tool}`;
+  return content.n ? `${base}:${content.n}` : base;
 }
 
-export function sessionContent(sessionId: string, tool: SessionTool = 'claude'): PaneContent {
-  return { kind: 'session', sessionId, tool };
+export function sessionContent(sessionId: string, tool: SessionTool = 'claude', n?: number): PaneContent {
+  return n ? { kind: 'session', sessionId, tool, n } : { kind: 'session', sessionId, tool };
+}
+
+/** The next free shell number in a layout, so a split always opens a *new*
+ *  shell rather than moving one that's already on screen. */
+export function nextShellNumber(layout: Layout): number {
+  let max = 0;
+  for (const p of layout.panes) {
+    for (const c of p.contents) if (c.kind === 'session' && c.tool === 'shell' && c.n) max = Math.max(max, c.n);
+  }
+  return max + 1;
+}
+
+/** Does the layout show anything at all? An empty one means the session's
+ *  tab has nothing left to show. */
+export function isEmptyLayout(layout: Layout): boolean {
+  return layout.panes.every((p) => p.contents.length === 0);
 }
 
 /** Which pane owns each cell. A pane owning several cells spans them. */
@@ -385,13 +403,19 @@ export function resizeSeam(layout: Layout, axis: 'col' | 'row', frac: number): L
   return axis === 'col' ? { ...layout, colFrac: clamped } : { ...layout, rowFrac: clamped };
 }
 
-/** Put `content` on the workspace without being told where: as a tab of the
- *  focused pane. Already open? Bring it to the front where it is, rather than
- *  dragging it across the screen into the pane you happen to be in. */
+/** Put `content` on the workspace without being told where. Already open?
+ *  Bring it to the front where it is. A file joins a pane already showing a
+ *  file; anything else gets a pane of its own beside the focused one — a split,
+ *  not a tab hidden behind what you were looking at. */
 export function addToWorkspace(layout: Layout, content: PaneContent): Layout {
   const existing = paneOfContent(layout, content);
   if (existing) return activateInPane(layout, existing.id, contentKey(content)!);
-  return addToPane(layout, layout.focusedPaneId, content);
+  if (content.kind === 'file') {
+    const filePane = layout.panes.find((p) => p.contents.some((c) => c.kind === 'file'));
+    if (filePane) return addToPane(layout, filePane.id, content);
+  }
+  if (isEmptyLayout(layout)) return addToPane(layout, layout.focusedPaneId, content);
+  return splitPane(layout, layout.focusedPaneId, 'right', content);
 }
 
 /** Open a session — what clicking a sidebar row does. An open tab for it comes

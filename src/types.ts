@@ -10,6 +10,9 @@ export type AppView = 'sessions' | 'todo';
  *  its files. See docs/features/session-workspace.md. */
 export type SessionTool = 'claude' | 'shell' | 'files';
 
+/** Where a newly opened session tab lands on the strip. */
+export type NewTabPosition = 'start' | 'afterCurrent';
+
 /** How a tab is being shown: the terminal alone, its transcript alone, or both
  *  side by side. Lives here rather than on SessionControls because App and
  *  PaneView both have to agree on it — see `sessionModeOf` in lib/tabs.ts. */
@@ -263,4 +266,16 @@ export interface AppSettings {
   /** Hide the session list's secondary line (project, activity, elapsed),
    *  leaving one name per row. For someone who knows their sessions by name. */
   compactList: boolean;
+  /** Where a newly opened session tab lands: the left edge (newest first) or
+   *  right after the current tab, as most terminals do. */
+  newTabPosition: NewTabPosition;
+  /** Jira base URL, e.g. https://jira.example.com. Empty turns issue links off. */
+  jiraBaseUrl: string;
+  /** Project keys that count as issue keys (PROJ, HELP…). Empty means any
+   *  `ABC-123`-shaped word — noisier, since UTF-8 and SHA-256 look the same. */
+  jiraProjectKeys: string[];
+  /** Name of the environment variable holding a Jira personal access token,
+   *  looked up in the app's environment and then in ~/.claude/settings.json's
+   *  `env` block. Empty means links only, no issue details. */
+  jiraTokenVar: string;
 }

@@ -20,6 +20,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   autoSleepMinutes: 15,
   usageRefreshSeconds: 300,
   compactList: false,
+  newTabPosition: 'start',
+  jiraBaseUrl: '',
+  jiraProjectKeys: [],
+  jiraTokenVar: '',
 };
 
 let current: AppSettings = { ...DEFAULT_SETTINGS };

@@ -1,6 +1,8 @@
 import { Children, isValidElement, useMemo, useRef, type ReactElement, type ReactNode } from 'react';
 import ReactMarkdown, { type Components, type ExtraProps } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { remarkIssueLinks } from '@/lib/jira';
+import { useSettings } from '@/lib/settings-store';
 import * as ipc from '@/lib/ipc';
 import { isExternalHref } from '@/lib/paths';
 import { cn } from '@/lib/utils';
@@ -43,9 +45,9 @@ const HEADING_CLS: Record<number, string> = {
   1: 'text-[16px]',
   2: 'text-[14.5px]',
   3: 'text-[13px]',
-  4: 'text-[12.5px]',
-  5: 'text-[12px] text-muted-foreground',
-  6: 'text-[12px] text-muted-foreground',
+  4: 'text-[13.5px]',
+  5: 'text-[13px] text-muted-foreground',
+  6: 'text-[13px] text-muted-foreground',
 };
 
 function heading(level: 1 | 2 | 3 | 4 | 5 | 6) {
@@ -205,9 +207,15 @@ export default function Markdown({ source, onOpenLink }: MarkdownProps) {
     td: ({ children, style }) => <td style={style} className="px-3 py-1.5 align-top">{children}</td>,
   }), []);
 
+  const { jiraBaseUrl, jiraProjectKeys } = useSettings();
+  const remarkPlugins = useMemo(
+    () => [remarkGfm, remarkIssueLinks({ base: jiraBaseUrl, projects: jiraProjectKeys })],
+    [jiraBaseUrl, jiraProjectKeys],
+  );
+
   return (
     <div ref={rootRef} className="flex flex-col gap-3 font-sans text-[14.5px] leading-[1.62] text-[#d7dae1]">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+      <ReactMarkdown remarkPlugins={remarkPlugins} components={components}>
         {source}
       </ReactMarkdown>
     </div>

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Archive, ChevronLeft, ChevronRight, Columns2, Folder, FolderInput, FolderOpen, FolderPlus, Inbox, Library,
-  MoreHorizontal, Pencil, Pin, PinOff, Plus, Search, Settings, Code, Upload, X,
+  Archive, CheckSquare, ChevronLeft, ChevronRight, Columns2, Folder, FolderInput, FolderOpen, FolderPlus, Inbox,
+  Library, MoreHorizontal, Pencil, Pin, PinOff, Plus, Search, Settings, Code, SquareTerminal, Upload, X,
 } from 'lucide-react';
 import { TAB_MIME } from '@/lib/dnd';
 import * as ipc from '@/lib/ipc';
@@ -11,15 +11,8 @@ import {
   type SessionGroup,
 } from '@/lib/sessions';
 import { ACTION_ROW, cn, folderName } from '@/lib/utils';
-import { projectHue, type SessionHistoryEntry, type SessionTool, type Tab } from '@/types';
-
-/** What each tool is called, everywhere it's offered. */
-const TOOL_LABEL: Record<SessionTool, string> = {
-  claude: 'Claude',
-  shell: 'Shell',
-  files: 'Files',
-};
-import SidebarFooter from './SidebarFooter';
+import { projectHue, type AppView, type SessionHistoryEntry, type SessionTool, type Tab } from '@/types';
+import IssueChip, { useIssueName } from './IssueChip';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
   DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger,
@@ -86,6 +79,12 @@ export interface SessionsSidebarProps {
   onImportSession: (dir: string) => void;
   onToggleArchive: () => void;
   onToggleSettings: () => void;
+  /** Which top-level view is up, for the navigation block. */
+  view: AppView;
+  /** Open To-Dos, shown beside the To-Do item. */
+  todoCount: number;
+  onShowSessions: () => void;
+  onShowTodo: () => void;
 }
 
 /** The one status mark in the list. Four states, three of which are quiet on
@@ -109,12 +108,12 @@ export function StatusDot({ tab, size = 7 }: { tab: Tab; size?: number }) {
  *  worse than a plain one. */
 function GroupLabel({ children, count }: { children: React.ReactNode; count?: number }) {
   return (
-    <div className="flex items-center gap-2 h-6 px-3 mt-3 shrink-0 select-none">
-      <span className="text-[10px] font-semibold uppercase tracking-[0.09em] text-muted-foreground">
+    <div className="flex items-center gap-2 h-7 px-3 mt-3 shrink-0 select-none">
+      <span className="text-[12px] font-semibold text-muted-foreground">
         {children}
       </span>
       {count !== undefined && count > 0 && (
-        <span className="ml-auto text-[9.5px] font-mono tabular-nums text-muted-foreground">{count}</span>
+        <span className="ml-auto text-[11px] font-mono tabular-nums text-muted-foreground">{count}</span>
       )}
     </div>
   );
@@ -170,6 +169,7 @@ function SessionRow({
     setEditing(false);
   };
   const startRename = () => { setDraft(tab.name); setEditing(true); };
+  const issue = useIssueName(tab.name);
 
   const age = compactAge(recencyOf(tab, lastUsedAt), now);
   // One second line at most: what Claude is doing beats where it lives.
@@ -177,14 +177,14 @@ function SessionRow({
     ?? (showProject && tab.projectDir ? folderName(tab.projectDir) : undefined);
 
   const rowClass = cn(
-    'group relative flex flex-col justify-center w-full shrink-0 h-[26px] pr-1.5 rounded-sm',
-    'text-[11.5px] transition-colors duration-100 cursor-pointer',
+    'group relative flex flex-col justify-center w-full shrink-0 h-[30px] pr-1.5 rounded-sm',
+    'text-[13px] transition-colors duration-100 cursor-pointer',
     depth === 1 ? 'pl-7' : 'pl-3',
     // A session's name is the thing you scan for, so it sits a tier above its
     // own timestamp and status text rather than level with them.
     selected ? 'bg-selected text-foreground' : 'text-dim hover:text-foreground hover:bg-hover',
     tab.exited && 'opacity-55',
-    detail && !compact && 'h-[34px]',
+    detail && !compact && 'h-[42px]',
   );
 
   if (editing) {
@@ -202,7 +202,7 @@ function SessionRow({
               if (e.key === 'Enter') { e.preventDefault(); commit(); }
               else if (e.key === 'Escape') { e.preventDefault(); setDraft(tab.name); setEditing(false); }
             }}
-            className="flex-1 min-w-0 bg-transparent border-none outline-none text-[11.5px] text-foreground font-inherit"
+            className="flex-1 min-w-0 bg-transparent border-none outline-none text-[13px] text-foreground font-inherit"
           />
         </div>
       </div>
@@ -229,12 +229,13 @@ function SessionRow({
       {selected && <span className="absolute left-0 top-1 bottom-1 w-0.5 rounded-full bg-primary" />}
       <div className="flex items-center gap-2 w-full">
         <StatusDot tab={tab} />
-        <span data-session-name className="truncate flex-1">{tab.name}</span>
-        {tab.pinned && <Pin size={9} className="shrink-0 text-muted-foreground" />}
+        <span data-session-name className="truncate flex-1">{issue.label}</span>
+        {issue.key && <IssueChip text={issue.key} size="xs" />}
+        {tab.pinned && <Pin size={10} className="shrink-0 text-muted-foreground" />}
         {/* The age gives way to the ⋯ on hover rather than sitting beside it:
             two things in one 40px gutter is how a calm list turns into a
             toolbar. */}
-        <span className="shrink-0 text-[9.5px] font-mono tabular-nums text-muted-foreground group-hover:hidden">
+        <span className="shrink-0 text-[11px] font-mono tabular-nums text-muted-foreground group-hover:hidden">
           {tab.exited ? 'exited' : age}
         </span>
         <DropdownMenu>
@@ -272,22 +273,13 @@ function SessionRow({
               <Plus size={13} /><span>Create To-Do…</span>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            {/* Which tool, not which edge: where it lands is the layout's
-                problem, and dragging the row onto a pane edge is there for
-                when it's yours. A shell session has only its shell. */}
-            <DropdownMenuSub>
-              <DropdownMenuSubTrigger><Columns2 size={13} /><span>Add to workspace…</span></DropdownMenuSubTrigger>
-              <DropdownMenuSubContent>
-                {(tab.kind === 'claude'
-                  ? (['claude', 'shell', 'files'] as const)
-                  : (['shell', 'files'] as const)
-                ).map((t) => (
-                  <DropdownMenuItem key={t} onSelect={() => onOpenInWorkspace(tab.id, t)}>
-                    {TOOL_LABEL[t]}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
+            {/* Compare two sessions: this one as a split inside the tab on
+                screen. Dragging the row onto a pane edge picks the side. */}
+            {!selected && (
+              <DropdownMenuItem onSelect={() => onOpenInWorkspace(tab.id, tab.kind === 'claude' ? 'claude' : 'shell')}>
+                <Columns2 size={13} /><span>Open beside current</span>
+              </DropdownMenuItem>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={() => onOpenDirectory(tab.cwd)}>
               <FolderOpen size={13} /><span>Open directory</span>
@@ -317,7 +309,7 @@ function SessionRow({
         </DropdownMenu>
       </div>
       {detail && !compact && (
-        <div data-session-meta className="flex items-center gap-1 w-full pl-4 text-[9.5px] leading-tight text-muted-foreground truncate">
+        <div data-session-meta className="flex items-center gap-1 w-full pl-4 text-[11px] leading-tight text-muted-foreground truncate">
           {detail}
         </div>
       )}
@@ -375,19 +367,19 @@ function ProjectRow({
       data-inbox-row={menu ? undefined : ''}
       title={dir}
       className={cn(
-        'group flex items-center gap-2 w-full h-[26px] px-3 shrink-0 rounded-sm',
-        'border-none cursor-pointer font-inherit text-left text-[11.5px]',
+        'group flex items-center gap-2 w-full h-[30px] px-3 shrink-0 rounded-sm',
+        'border-none cursor-pointer font-inherit text-left text-[13px]',
         'bg-transparent text-dim hover:text-foreground hover:bg-hover',
       )}
       onClick={onEnter}
     >
       <span className="w-[7px] h-[7px] rounded-full shrink-0" style={hue} />
       <span className="truncate flex-1">{label}</span>
-      <span className="shrink-0 text-[9.5px] font-mono tabular-nums text-muted-foreground">{count || ''}</span>
+      <span className="shrink-0 text-[11px] font-mono tabular-nums text-muted-foreground">{count || ''}</span>
       <span className="flex justify-end w-3 shrink-0">
         {live && <span className={cn('w-1.5 h-1.5 rounded-full', STATE_DOT[live])} title={STATE_LABEL[live]} />}
       </span>
-      <ChevronRight size={11} className="shrink-0 text-faint group-hover:text-muted-foreground" />
+      <ChevronRight size={12} className="shrink-0 text-faint group-hover:text-muted-foreground" />
     </button>
   );
   if (!menu) return row;
@@ -410,12 +402,12 @@ function FoldRow({ label, count, open, onToggle }: {
     <button
       type="button"
       aria-expanded={open}
-      className="group flex items-center gap-1.5 w-full h-[26px] px-2 shrink-0 rounded-sm border-none cursor-pointer bg-transparent font-inherit text-left text-[11.5px] text-dim hover:text-foreground hover:bg-hover"
+      className="group flex items-center gap-1.5 w-full h-[30px] px-2 shrink-0 rounded-sm border-none cursor-pointer bg-transparent font-inherit text-left text-[13px] text-dim hover:text-foreground hover:bg-hover"
       onClick={onToggle}
     >
-      <ChevronRight size={11} className={cn('shrink-0 text-muted-foreground transition-transform duration-100', open && 'rotate-90')} />
+      <ChevronRight size={12} className={cn('shrink-0 text-muted-foreground transition-transform duration-100', open && 'rotate-90')} />
       <span className="flex-1 truncate">{label}</span>
-      <span className="text-[9.5px] font-mono tabular-nums text-muted-foreground">{count}</span>
+      <span className="text-[11px] font-mono tabular-nums text-muted-foreground">{count}</span>
     </button>
   );
 }
@@ -443,6 +435,7 @@ export default function SessionsSidebar({
   onNewSession, onOpenNewSession, onSelect, onClose, onRename, onSetProject,
   onArchive, onTogglePin, onOpenDirectory, onOpenInVscode, onCreateTask, onOpenInWorkspace, onOpenPalette,
   onAddProject, onRemoveProject, onImportSession, onToggleArchive, onToggleSettings,
+  view, todoCount, onShowSessions, onShowTodo,
 }: SessionsSidebarProps) {
   const settings = useSettings();
   const [query, setQuery] = useState('');
@@ -516,6 +509,34 @@ export default function SessionsSidebar({
       // "you're inside something" before you read a word.
       style={scope !== ALL ? { boxShadow: `inset 0 2px 0 ${scopeDir ? hueStyle(projects, scopeDir).background : 'var(--muted-foreground)'}` } : undefined}
     >
+      {/* Every destination in the app, in one place. They used to be split
+          three ways — a Sessions/To-Do switch centred in the title bar, Library
+          and Settings at the foot of this column, ⌘K in the title bar's
+          corner — so "where do I go" had three answers. */}
+      <nav aria-label="Main" className="flex flex-col gap-px px-1.5 pt-2 pb-2 shrink-0 border-b border-border">
+        <button
+          type="button"
+          aria-label="Search sessions"
+          title="Go to session  ⌘K"
+          className="flex items-center gap-2 h-[30px] mb-1.5 px-2.5 rounded-sm border border-border bg-transparent text-[13px] text-muted-foreground cursor-pointer font-inherit text-left hover:border-border-hover hover:text-dim"
+          onClick={onOpenPalette}
+        >
+          <Search size={13} className="shrink-0" />
+          <span className="flex-1">Search or jump…</span>
+          <kbd className="px-1 rounded-[3px] border border-border-hover font-mono text-[10.5px] leading-4 text-muted-foreground">⌘K</kbd>
+        </button>
+        <NavRow
+          icon={SquareTerminal}
+          label="Sessions"
+          count={open.length}
+          active={view === 'sessions' && !showSettings && !showArchive}
+          onClick={onShowSessions}
+        />
+        <NavRow icon={CheckSquare} label="To-Do" count={todoCount} active={view === 'todo' && !showSettings && !showArchive} onClick={onShowTodo} />
+        <NavRow icon={Library} label="Library" active={showArchive} onClick={onToggleArchive} />
+        <NavRow icon={Settings} label="Settings" hint="⌘," active={showSettings} onClick={onToggleSettings} />
+      </nav>
+
       {scopeName && (
         <div
           data-scope-header
@@ -525,14 +546,14 @@ export default function SessionsSidebar({
           <button
             type="button"
             aria-label="Back to all projects"
-            className="flex items-center gap-0.5 h-6 pl-1 pr-2 rounded-sm border border-border bg-transparent text-[11px] text-dim cursor-pointer font-inherit hover:text-foreground hover:bg-hover"
+            className="flex items-center gap-0.5 h-6 pl-1 pr-2 rounded-sm border border-border bg-transparent text-[12px] text-dim cursor-pointer font-inherit hover:text-foreground hover:bg-hover"
             onClick={() => onScopeChange(ALL)}
           >
             <ChevronLeft size={12} />All
           </button>
           <span className="w-2 h-2 rounded-full shrink-0 ml-1.5" style={hueStyle(projects, scopeDir)} />
           <span className="truncate text-[13px] font-semibold text-foreground" title={scopeDir ?? undefined}>{scopeName}</span>
-          <span className="shrink-0 text-[10px] font-mono tabular-nums text-muted-foreground">{scoped.filter((t) => !t.archived).length}</span>
+          <span className="shrink-0 text-[11px] font-mono tabular-nums text-muted-foreground">{scoped.filter((t) => !t.archived).length}</span>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
@@ -553,7 +574,7 @@ export default function SessionsSidebar({
       {waitingElsewhere.length > 0 && (
         <button
           type="button"
-          className="flex items-center gap-1.5 h-6 mx-2 mt-1.5 px-2 shrink-0 rounded-sm border border-attention/30 bg-attention/10 text-[10.5px] text-dim cursor-pointer font-inherit text-left hover:text-foreground"
+          className="flex items-center gap-1.5 h-6 mx-2 mt-1.5 px-2 shrink-0 rounded-sm border border-attention/30 bg-attention/10 text-[11.5px] text-dim cursor-pointer font-inherit text-left hover:text-foreground"
           onClick={() => { onScopeChange(ALL); onSelect(waitingElsewhere[0].id); }}
         >
           <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-attention" />
@@ -561,7 +582,7 @@ export default function SessionsSidebar({
             {waitingElsewhere.length} waiting in {waitingElsewhere[0].projectDir ? folderName(waitingElsewhere[0].projectDir) : 'Inbox'}
             {waitingElsewhere.length > 1 && ' and elsewhere'}
           </span>
-          <ChevronRight size={11} className="shrink-0 text-muted-foreground" />
+          <ChevronRight size={12} className="shrink-0 text-muted-foreground" />
         </button>
       )}
 
@@ -569,14 +590,14 @@ export default function SessionsSidebar({
           you do without first knowing what's in the list. Inside a project
           both say so. */}
       <div className="flex flex-col gap-1.5 px-2 pt-2 pb-1 shrink-0">
-        <div className="flex items-center gap-1.5 h-[26px] px-2 rounded-sm border border-border focus-within:border-border-hover">
-          <Search size={11} className="shrink-0 text-muted-foreground" />
+        <div className="flex items-center gap-1.5 h-[30px] px-2 rounded-sm border border-border focus-within:border-border-hover">
+          <Search size={12} className="shrink-0 text-muted-foreground" />
           <input
             ref={searchRef}
             type="text"
             value={query}
-            placeholder={scopeName ? `Search ${scopeName}…` : 'Search sessions…'}
-            aria-label="Search sessions"
+            placeholder={scopeName ? `Filter ${scopeName}…` : 'Filter sessions…'}
+            aria-label="Filter sessions"
             spellCheck={false}
             autoComplete="off"
             onChange={(e) => setQuery(e.target.value)}
@@ -584,7 +605,7 @@ export default function SessionsSidebar({
               e.stopPropagation();
               if (e.key === 'Escape') { e.preventDefault(); setQuery(''); searchRef.current?.blur(); }
             }}
-            className="flex-1 min-w-0 bg-transparent border-none outline-none font-inherit text-[11.5px] text-foreground placeholder:text-muted-foreground"
+            className="flex-1 min-w-0 bg-transparent border-none outline-none font-inherit text-[13px] text-foreground placeholder:text-muted-foreground"
           />
           {filtering ? (
             <button
@@ -600,7 +621,7 @@ export default function SessionsSidebar({
               type="button"
               aria-label="Open command palette"
               title="Jump to a session"
-              className="shrink-0 text-[9px] font-mono tabular-nums text-faint border-none bg-transparent cursor-pointer hover:text-foreground"
+              className="shrink-0 text-[10.5px] font-mono tabular-nums text-faint border-none bg-transparent cursor-pointer hover:text-foreground"
               onClick={onOpenPalette}
             >
               ⌘K
@@ -614,20 +635,20 @@ export default function SessionsSidebar({
         <button
           type="button"
           className={cn(
-            'flex items-center gap-1.5 w-full h-[26px] px-2 rounded-sm cursor-pointer font-inherit',
-            'border border-border bg-transparent text-[11.5px] text-foreground',
+            'flex items-center gap-1.5 w-full h-[30px] px-2 rounded-sm cursor-pointer font-inherit',
+            'border border-border bg-transparent text-[13px] text-foreground',
             'hover:border-border-hover hover:bg-hover',
           )}
           onClick={onOpenNewSession}
         >
           <Plus size={12} className="shrink-0 text-primary" />
           <span className="flex-1 text-left truncate">{scopeName ? `New session in ${scopeName}` : 'New session'}</span>
-          <span className="shrink-0 text-[9px] text-faint">⌘N</span>
+          <span className="shrink-0 text-[10.5px] text-faint">⌘N</span>
         </button>
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-1 pb-2 scrollbar-thin">
-        {scopeDir && <div className="px-3 pt-1 font-mono text-[10px] text-faint truncate" title={scopeDir}>{scopeDir}</div>}
+        {scopeDir && <div className="px-3 pt-1 font-mono text-[11px] text-faint truncate" title={scopeDir}>{scopeDir}</div>}
 
         {nowRows.length > 0 && (
           <>
@@ -638,7 +659,7 @@ export default function SessionsSidebar({
 
         <GroupLabel count={todayRows.length}>Today</GroupLabel>
         {todayRows.length === 0 ? (
-          <p className="px-3 py-1 text-[10.5px] leading-snug text-faint">
+          <p className="px-3 py-1 text-[11.5px] leading-snug text-faint">
             {filtering
               ? 'Nothing from today matches.'
               : scopeName ? `Nothing in ${scopeName} today.` : 'Nothing yet today. ⌘N starts a session.'}
@@ -697,7 +718,7 @@ export default function SessionsSidebar({
             })}
             <button
               type="button"
-              className={cn(ACTION_ROW, 'gap-1.5 h-[26px] px-3 text-[11.5px]')}
+              className={cn(ACTION_ROW, 'gap-1.5 h-[30px] px-3 text-[13px]')}
               onClick={onAddProject}
             >
               <FolderPlus size={12} className="shrink-0" />
@@ -717,38 +738,101 @@ export default function SessionsSidebar({
         )}
       </div>
 
-      <div className="flex flex-col shrink-0 border-t border-border px-1 py-1">
-        <FooterRow icon={Library} label="Library" active={showArchive} onClick={onToggleArchive} />
-        <FooterRow icon={Settings} label="Settings" active={showSettings} onClick={onToggleSettings} />
-      </div>
-      <SidebarFooter />
     </div>
   );
 }
 
-function FooterRow({ icon: Icon, label, count, active, onClick }: {
+function NavRow({ icon: Icon, label, count, hint, active, onClick }: {
   icon: typeof Archive;
   label: string;
   count?: number;
+  hint?: string;
   active?: boolean;
   onClick: () => void;
 }) {
   return (
     <button
       type="button"
+      aria-current={active ? 'page' : undefined}
       data-active={active || undefined}
       className={cn(
-        'flex items-center gap-2 w-full h-[26px] px-3 shrink-0 rounded-sm border-none cursor-pointer',
-        'bg-transparent font-inherit text-left text-[11.5px]',
-        active ? 'bg-selected text-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-hover',
+        'flex items-center gap-2.5 w-full h-7 px-2.5 shrink-0 rounded-sm border-none cursor-pointer',
+        'font-inherit text-left text-[13px]',
+        active ? 'bg-selected text-foreground' : 'bg-transparent text-dim hover:text-foreground hover:bg-hover',
       )}
       onClick={onClick}
     >
-      <Icon size={12} className="shrink-0" />
+      <Icon size={15} className="shrink-0" />
       <span className="flex-1">{label}</span>
       {count !== undefined && count > 0 && (
-        <span className="text-[9.5px] font-mono tabular-nums text-muted-foreground">{count}</span>
+        <span className="text-[11px] font-mono tabular-nums text-muted-foreground">{count}</span>
       )}
+      {hint && <span className="text-[11px] font-mono text-faint">{hint}</span>}
     </button>
+  );
+}
+
+/** The sidebar folded to 48px (⌘B). The same five destinations in the same
+ *  order and at the same height as the expanded navigation block, so folding
+ *  never moves a target; below a hairline, the live sessions as status squares. */
+export function CollapsedRail({
+  tabs, selectedId, lastUsed, view, showSettings, showArchive, todoCount,
+  onOpenPalette, onShowSessions, onShowTodo, onToggleArchive, onToggleSettings, onSelect,
+}: {
+  tabs: Tab[];
+  selectedId: string | null;
+  lastUsed: Map<string, number>;
+  view: AppView;
+  showSettings: boolean;
+  showArchive: boolean;
+  todoCount: number;
+  onOpenPalette: () => void;
+  onShowSessions: () => void;
+  onShowTodo: () => void;
+  onToggleArchive: () => void;
+  onToggleSettings: () => void;
+  onSelect: (tabId: string) => void;
+}) {
+  const live = tabs
+    .filter((t) => t.kind !== 'file' && !t.archived && (!t.dormant || t.id === selectedId))
+    .sort(bySessionOrder(lastUsed));
+  const square = (active: boolean) => cn(
+    'relative flex items-center justify-center w-8 h-8 shrink-0 rounded-sm border-none cursor-pointer',
+    active ? 'bg-selected text-foreground' : 'bg-transparent text-muted-foreground hover:text-foreground hover:bg-hover',
+  );
+  const onSessionsView = view === 'sessions' && !showSettings && !showArchive;
+  return (
+    <nav aria-label="Main" className="flex flex-col items-center gap-1 w-12 h-full py-2 shrink-0 bg-card border-r border-border">
+      <button type="button" aria-label="Search sessions" title="Go to session  ⌘K" className={square(false)} onClick={onOpenPalette}>
+        <Search size={15} />
+      </button>
+      <button type="button" aria-label="Sessions" title="Sessions" className={square(onSessionsView)} onClick={onShowSessions}>
+        <SquareTerminal size={15} />
+      </button>
+      <button type="button" aria-label="To-Do" title={`To-Do${todoCount ? ` · ${todoCount}` : ''}`} className={square(view === 'todo' && !showSettings && !showArchive)} onClick={onShowTodo}>
+        <CheckSquare size={15} />
+      </button>
+      <button type="button" aria-label="Library" title="Library" className={square(showArchive)} onClick={onToggleArchive}>
+        <Library size={15} />
+      </button>
+      <button type="button" aria-label="Settings" title="Settings  ⌘," className={square(showSettings)} onClick={onToggleSettings}>
+        <Settings size={15} />
+      </button>
+      <span className="w-6 h-px my-1.5 shrink-0 bg-border" />
+      <div className="flex flex-col items-center gap-1 min-h-0 overflow-y-auto scrollbar-none">
+        {live.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            aria-label={t.name}
+            title={t.name}
+            className={square(t.id === selectedId)}
+            onClick={() => onSelect(t.id)}
+          >
+            <StatusDot tab={t} size={8} />
+          </button>
+        ))}
+      </div>
+    </nav>
   );
 }

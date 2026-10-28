@@ -64,7 +64,7 @@ function Mermaid({ chart }: { chart: string }) {
       <div
         data-testid="mermaid-pending"
         aria-busy={!tried}
-        className="rounded-lg border border-border bg-[#0a0b0e] px-3 py-4 text-[11px] text-muted-foreground"
+        className="rounded-lg border border-border bg-[#0a0b0e] px-3 py-4 text-[12px] text-muted-foreground"
       >
         Rendering diagram…
       </div>

@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as ipc from '@/lib/ipc';
-import { getSettings, loadSettings, patchSettings, resetSettingsForTest } from './settings-store';
+import { getSettings, loadSettings, patchSettings, resetSettingsForTest, DEFAULT_SETTINGS } from './settings-store';
+
+/** Fields added after these fixtures were written. */
+const { newTabPosition, jiraBaseUrl, jiraProjectKeys, jiraTokenVar } = DEFAULT_SETTINGS;
+const NEW_DEFAULTS = { newTabPosition, jiraBaseUrl, jiraProjectKeys, jiraTokenVar };
 
 vi.mock('@/lib/ipc');
 
@@ -21,7 +25,7 @@ describe('settings-store', () => {
 
   it('loads exactly once even if called concurrently', async () => {
     vi.mocked(ipc.loadSettings).mockResolvedValue({
-      selectedThemeId: 'default', customThemes: [], showMarkdownToggle: true, notificationsEnabled: true, autoSleepMinutes: 15, usageRefreshSeconds: 60, compactList: false,
+      selectedThemeId: 'default', customThemes: [], showMarkdownToggle: true, notificationsEnabled: true, autoSleepMinutes: 15, usageRefreshSeconds: 60, compactList: false, ...NEW_DEFAULTS,
     });
     await Promise.all([loadSettings(), loadSettings(), loadSettings()]);
     expect(ipc.loadSettings).toHaveBeenCalledOnce();

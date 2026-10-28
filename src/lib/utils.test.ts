@@ -16,7 +16,7 @@ describe('containingDir', () => {
 
 describe('parentPath', () => {
   it('shows the two nearest ancestors with an ellipsis when there are more above', () => {
-    expect(parentPath('C:\\Users\\Exorsky\\Desktop\\prog\\too-many-terminals')).toBe('… / Desktop / prog');
+    expect(parentPath('C:\\Users\\me\\Desktop\\prog\\too-many-terminals')).toBe('… / Desktop / prog');
   });
 
   it('omits the ellipsis when exactly the shown levels are all there is', () => {
@@ -36,7 +36,7 @@ describe('parentPath', () => {
   });
 
   it('respects a custom level count', () => {
-    expect(parentPath('C:\\Users\\Exorsky\\Desktop\\prog\\too-many-terminals', 1)).toBe('… / prog');
+    expect(parentPath('C:\\Users\\me\\Desktop\\prog\\too-many-terminals', 1)).toBe('… / prog');
   });
 });
 

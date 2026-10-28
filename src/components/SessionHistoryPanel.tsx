@@ -90,7 +90,7 @@ function Facet({ label, count, active, onClick, hue }: {
       type="button"
       aria-pressed={active}
       className={cn(
-        'flex items-center gap-2 w-full h-[26px] px-3 shrink-0 rounded-sm border-none cursor-pointer font-inherit text-left text-[11.5px]',
+        'flex items-center gap-2 w-full h-[30px] px-3 shrink-0 rounded-sm border-none cursor-pointer font-inherit text-left text-[13px]',
         active ? 'bg-selected text-foreground' : 'bg-transparent text-dim hover:text-foreground hover:bg-hover',
       )}
       onClick={onClick}
@@ -99,7 +99,7 @@ function Facet({ label, count, active, onClick, hue }: {
         <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: `hsl(${hue} 60% 62%)` }} />
       )}
       <span className="flex-1 truncate">{label}</span>
-      <span className="shrink-0 text-[9.5px] font-mono tabular-nums text-muted-foreground">{count}</span>
+      <span className="shrink-0 text-[11px] font-mono tabular-nums text-muted-foreground">{count}</span>
     </button>
   );
 }
@@ -350,7 +350,7 @@ export default function SessionHistoryPanel({ projects, sessionNames, onResume, 
             aria-label="Search the Library"
             autoComplete="off"
             spellCheck={false}
-            className="flex-1 min-w-0 bg-transparent border-none outline-none text-[12.5px] text-foreground placeholder:text-muted-foreground font-inherit"
+            className="flex-1 min-w-0 bg-transparent border-none outline-none text-[13.5px] text-foreground placeholder:text-muted-foreground font-inherit"
           />
           {query ? (
             <button
@@ -362,7 +362,7 @@ export default function SessionHistoryPanel({ projects, sessionNames, onResume, 
               <X size={12} />
             </button>
           ) : (
-            <kbd className="shrink-0 font-mono text-[9.5px] text-faint">/</kbd>
+            <kbd className="shrink-0 font-mono text-[11px] text-faint">/</kbd>
           )}
         </label>
         {/* The transcript scan is the one thing here that isn't instant, and
@@ -374,11 +374,11 @@ export default function SessionHistoryPanel({ projects, sessionNames, onResume, 
             <span className="relative w-6 h-px shrink-0 bg-border overflow-hidden">
               <span className="absolute inset-y-0 w-1/2 bg-primary animate-[history-scan_1s_ease-in-out_infinite]" />
             </span>
-            <span className="text-[11px] text-muted-foreground">Searching transcripts…</span>
+            <span className="text-[12px] text-muted-foreground">Searching transcripts…</span>
           </span>
         )}
         {entries !== null && (
-          <span className="ml-auto shrink-0 text-[10.5px] text-muted-foreground font-mono tabular-nums">
+          <span className="ml-auto shrink-0 text-[11.5px] text-muted-foreground font-mono tabular-nums">
             {isFiltering
               ? <><span className="text-foreground">{filteredEntries.length}</span> of {totalCount} sessions</>
               : <><span className="text-foreground">{totalCount}</span> sessions</>}
@@ -405,7 +405,7 @@ export default function SessionHistoryPanel({ projects, sessionNames, onResume, 
 
       <div className="flex flex-1 min-h-0">
         <nav aria-label="Filters" className="flex flex-col gap-px w-[200px] shrink-0 px-1 py-2 bg-card border-r border-border overflow-y-auto scrollbar-thin">
-          <div className="px-3 pt-1 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.09em] text-muted-foreground">When</div>
+          <div className="px-3 pt-1 pb-1.5 text-[11px] font-semibold uppercase tracking-[0.09em] text-muted-foreground">When</div>
           {WHEN.map(({ key, label }) => (
             <Facet
               key={key}
@@ -428,9 +428,9 @@ export default function SessionHistoryPanel({ projects, sessionNames, onResume, 
                 onClick={() => setProjectsOpen((v) => !v)}
               >
                 <ChevronRight size={10} className={cn('shrink-0 text-muted-foreground transition-transform duration-100', projectsOpen && 'rotate-90')} />
-                <span className="flex-1 text-[10px] font-semibold uppercase tracking-[0.09em] text-muted-foreground">Projects</span>
+                <span className="flex-1 text-[11px] font-semibold uppercase tracking-[0.09em] text-muted-foreground">Projects</span>
                 {projectFilter !== 'all' && !projectsOpen && (
-                  <span className="truncate max-w-[90px] text-[10px] text-dim">{folderName(projectFilter)}</span>
+                  <span className="truncate max-w-[90px] text-[11px] text-dim">{folderName(projectFilter)}</span>
                 )}
               </button>
               {projectsOpen && (
@@ -462,7 +462,7 @@ export default function SessionHistoryPanel({ projects, sessionNames, onResume, 
             <div className="flex px-4 pt-2.5">
               <button
                 type="button"
-                className="flex items-center gap-1.5 whitespace-nowrap text-[11px] rounded-full border border-primary/40 bg-primary/10 text-foreground px-2.5 py-[3px] cursor-pointer font-inherit"
+                className="flex items-center gap-1.5 whitespace-nowrap text-[12px] rounded-full border border-primary/40 bg-primary/10 text-foreground px-2.5 py-[3px] cursor-pointer font-inherit"
                 onClick={() => setDayFilter(null)}
                 title="Show every date"
               >
@@ -475,8 +475,8 @@ export default function SessionHistoryPanel({ projects, sessionNames, onResume, 
           {entries !== null && entries.length > 0 && showCalendar && (
             <div className="px-4 py-2.5 border-b border-border">
               <div className="flex items-baseline justify-between gap-2 mb-2">
-                <span className="text-[10px] tracking-[0.16em] uppercase text-muted-foreground">Sessions per day</span>
-                <span className="text-[9.5px] tracking-[0.08em] uppercase text-muted-foreground">last 3 months</span>
+                <span className="text-[11px] tracking-[0.16em] uppercase text-muted-foreground">Sessions per day</span>
+                <span className="text-[11px] tracking-[0.08em] uppercase text-muted-foreground">last 3 months</span>
               </div>
               <SessionCalendar
                 months={months}
@@ -488,7 +488,7 @@ export default function SessionHistoryPanel({ projects, sessionNames, onResume, 
           )}
 
           {entries === null && (
-            <div className="flex items-center gap-2 px-4 py-6 text-[12px] text-muted-foreground">
+            <div className="flex items-center gap-2 px-4 py-6 text-[13px] text-muted-foreground">
               <Loader2 size={14} className="animate-spin" />
               <span>Loading past sessions…</span>
             </div>
@@ -497,8 +497,8 @@ export default function SessionHistoryPanel({ projects, sessionNames, onResume, 
           {entries !== null && entries.length === 0 && (
             <div className="flex flex-col items-center gap-1.5 text-center px-6 py-14 text-muted-foreground">
               <Library size={20} className="text-faint mb-1" />
-              <div className="text-[12.5px] text-foreground">No sessions yet</div>
-              <div className="text-[11px] max-w-[34ch] leading-relaxed">
+              <div className="text-[13.5px] text-foreground">No sessions yet</div>
+              <div className="text-[12px] max-w-[34ch] leading-relaxed">
                 Sessions appear here once you start chatting with Claude.
               </div>
             </div>
@@ -507,15 +507,15 @@ export default function SessionHistoryPanel({ projects, sessionNames, onResume, 
           {entries !== null && entries.length > 0 && filteredEntries.length === 0 && (
             <div className="flex flex-col items-center gap-1.5 text-center px-6 py-14 text-muted-foreground">
               <Search size={20} className="text-faint mb-1" />
-              <div className="text-[12.5px] text-foreground">
+              <div className="text-[13.5px] text-foreground">
                 No sessions match {query ? `"${query}"` : 'this filter'}
               </div>
-              <div className="text-[11px] max-w-[34ch] leading-relaxed">
+              <div className="text-[12px] max-w-[34ch] leading-relaxed">
                 Try a different search term, or clear the filter to see everything.
               </div>
               <button
                 type="button"
-                className="mt-1 text-[11px] text-primary hover:bg-primary/10 bg-transparent border-none cursor-pointer px-2 py-1 rounded-sm font-inherit"
+                className="mt-1 text-[12px] text-primary hover:bg-primary/10 bg-transparent border-none cursor-pointer px-2 py-1 rounded-sm font-inherit"
                 onClick={clearFilters}
               >
                 Clear filters
@@ -526,8 +526,8 @@ export default function SessionHistoryPanel({ projects, sessionNames, onResume, 
           {days.map((day) => (
             <div key={day.key}>
               <div className="sticky top-0 z-[1] flex items-baseline gap-2 bg-background px-4 pt-3 pb-1">
-                <span className="text-[10px] font-semibold uppercase tracking-[0.09em] text-muted-foreground">{day.label}</span>
-                <span className="ml-auto text-[9.5px] font-mono tabular-nums text-muted-foreground">{day.items.length}</span>
+                <span className="text-[11px] font-semibold uppercase tracking-[0.09em] text-muted-foreground">{day.label}</span>
+                <span className="ml-auto text-[11px] font-mono tabular-nums text-muted-foreground">{day.items.length}</span>
               </div>
               {day.items.map((entry) => {
                 const index = filteredEntries.indexOf(entry);
@@ -550,25 +550,25 @@ export default function SessionHistoryPanel({ projects, sessionNames, onResume, 
                     onDoubleClick={() => onResume(entry.projectDir, entry)}
                   >
                     <div className="flex-1 min-w-0">
-                      <div className={cn('truncate text-[12px] leading-[18px]', isActive ? 'text-foreground' : 'text-dim')}>
+                      <div className={cn('truncate text-[13px] leading-[18px]', isActive ? 'text-foreground' : 'text-dim')}>
                         {highlightMatch(name || entry.preview, query)}
                       </div>
                       {entry.hit && entry.hit.snippet !== entry.preview && (
                         <div className="flex gap-2 min-w-0 mt-0.5 mb-0.5">
                           <span className="w-px shrink-0 bg-primary/40" aria-hidden="true" />
-                          <div className="min-w-0 text-[11px] leading-[1.45] text-muted-foreground line-clamp-2 break-words">
+                          <div className="min-w-0 text-[12px] leading-[1.45] text-muted-foreground line-clamp-2 break-words">
                             {highlightMatch(entry.hit.snippet, query)}
                           </div>
                         </div>
                       )}
                     </div>
                     {entry.hit && (
-                      <span className="shrink-0 text-[10px] leading-[18px] text-primary" title={`Matched inside the transcript (${entry.hit.role})`}>
+                      <span className="shrink-0 text-[11px] leading-[18px] text-primary" title={`Matched inside the transcript (${entry.hit.role})`}>
                         {entry.hit.matchCount} in text
                       </span>
                     )}
                     {multiFolder && (
-                      <span className="flex items-center gap-1.5 shrink-0 w-[150px] min-w-0 text-[10.5px] leading-[18px] text-muted-foreground">
+                      <span className="flex items-center gap-1.5 shrink-0 w-[150px] min-w-0 text-[11.5px] leading-[18px] text-muted-foreground">
                         <span
                           className="w-1.5 h-1.5 rounded-full shrink-0"
                           style={projects.includes(entry.projectDir)
@@ -578,7 +578,7 @@ export default function SessionHistoryPanel({ projects, sessionNames, onResume, 
                         <span className="truncate">{folderName(entry.projectDir)}</span>
                       </span>
                     )}
-                    <span className="shrink-0 w-10 text-right text-[9.5px] leading-[18px] font-mono tabular-nums text-muted-foreground">
+                    <span className="shrink-0 w-10 text-right text-[11px] leading-[18px] font-mono tabular-nums text-muted-foreground">
                       {clock(entry.lastUsedIso)}
                     </span>
                   </div>
@@ -595,14 +595,14 @@ export default function SessionHistoryPanel({ projects, sessionNames, onResume, 
           {active ? (
             <>
               <div className="flex flex-col gap-2 px-4 py-3.5 border-b border-border">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.09em] text-muted-foreground">Session</div>
-                <div className="font-mono text-[10px] leading-relaxed text-muted-foreground break-all">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.09em] text-muted-foreground">Session</div>
+                <div className="font-mono text-[11px] leading-relaxed text-muted-foreground break-all">
                   {folderName(active.projectDir)} · {fullTimestamp(active.lastUsedIso)} · {active.sessionId.slice(0, 8)}
                 </div>
                 <div className="flex flex-wrap items-center gap-1.5 mt-1">
                   <button
                     type="button"
-                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-sm border border-border-hover bg-transparent text-[11px] text-foreground cursor-pointer font-inherit hover:bg-hover"
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-sm border border-border-hover bg-transparent text-[12px] text-foreground cursor-pointer font-inherit hover:bg-hover"
                     title="Resume (↵)"
                     onClick={() => onResume(active.projectDir, active)}
                   >
@@ -610,7 +610,7 @@ export default function SessionHistoryPanel({ projects, sessionNames, onResume, 
                   </button>
                   <button
                     type="button"
-                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-sm border border-border bg-transparent text-[11px] text-dim cursor-pointer font-inherit hover:bg-hover"
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-sm border border-border bg-transparent text-[12px] text-dim cursor-pointer font-inherit hover:bg-hover"
                     title="Read (space)"
                     onClick={() => onRead(active.projectDir, active)}
                   >
@@ -638,19 +638,19 @@ export default function SessionHistoryPanel({ projects, sessionNames, onResume, 
               </div>
               {sessionNames[active.sessionId] && active.preview && (
                 <div className="px-4 py-3.5">
-                  <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.09em] text-muted-foreground">First message</div>
-                  <div className="text-[12px] leading-[1.55] text-dim break-words whitespace-pre-wrap">{active.preview}</div>
+                  <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.09em] text-muted-foreground">First message</div>
+                  <div className="text-[13px] leading-[1.55] text-dim break-words whitespace-pre-wrap">{active.preview}</div>
                 </div>
               )}
             </>
           ) : (
-            <div className="px-4 py-6 text-[11px] text-faint">Pick a session to see it here.</div>
+            <div className="px-4 py-6 text-[12px] text-faint">Pick a session to see it here.</div>
           )}
         </aside>
       </div>
 
       {entries !== null && entries.length > 0 && (
-        <div className="flex items-center h-6 px-4 border-t border-border shrink-0 text-[10.5px] text-muted-foreground">
+        <div className="flex items-center h-6 px-4 border-t border-border shrink-0 text-[11.5px] text-muted-foreground">
           <kbd className="mr-1 px-1 rounded-sm border border-border bg-raised text-dim">↑↓</kbd> pick
           <span className="mx-2 text-faint">·</span>
           <kbd className="mr-1 px-1 rounded-sm border border-border bg-raised text-dim">↵</kbd> resume

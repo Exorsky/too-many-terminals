@@ -18,7 +18,7 @@ export default function ConfirmDialog() {
             {request?.title}
           </AlertDialog.Title>
           {request?.body ? (
-            <AlertDialog.Description className="mt-1.5 mb-0 text-[11.5px] leading-relaxed text-muted-foreground">
+            <AlertDialog.Description className="mt-1.5 mb-0 text-[13px] leading-relaxed text-muted-foreground">
               {request.body}
             </AlertDialog.Description>
           ) : (
@@ -26,12 +26,12 @@ export default function ConfirmDialog() {
           )}
           <div className="flex justify-end gap-2 mt-4">
             <AlertDialog.Cancel
-              className="px-3 h-7 rounded-sm border border-border bg-transparent text-[11.5px] text-dim cursor-pointer font-inherit hover:bg-hover hover:text-foreground"
+              className="px-3 h-7 rounded-sm border border-border bg-transparent text-[13px] text-dim cursor-pointer font-inherit hover:bg-hover hover:text-foreground"
             >
               Cancel
             </AlertDialog.Cancel>
             <AlertDialog.Action
-              className="px-3 h-7 rounded-sm border border-destructive/50 bg-destructive/10 text-[11.5px] text-destructive cursor-pointer font-inherit hover:bg-destructive/20"
+              className="px-3 h-7 rounded-sm border border-destructive/50 bg-destructive/10 text-[13px] text-destructive cursor-pointer font-inherit hover:bg-destructive/20"
               onClick={() => settleConfirm(true)}
             >
               {request?.confirmLabel}

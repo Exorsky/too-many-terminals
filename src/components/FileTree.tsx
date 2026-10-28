@@ -86,7 +86,7 @@ function Node({ entry, depth, rootDir, defaultOpen, activePath, onOpen }: NodePr
         type="button"
         className={cn(
           'flex items-center gap-1.5 w-[calc(100%-8px)] mx-1 my-0.5 px-1.5 py-[3px] rounded-sm text-left',
-          'text-[11px] text-muted-foreground hover:text-foreground hover:bg-hover border-none bg-transparent cursor-pointer font-inherit',
+          'text-[12px] text-muted-foreground hover:text-foreground hover:bg-hover border-none bg-transparent cursor-pointer font-inherit',
           entry.path === activePath && 'text-foreground bg-selected',
         )}
         style={{ paddingLeft: 6 + depth * 12 }}

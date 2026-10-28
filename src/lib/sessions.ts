@@ -195,8 +195,8 @@ export function toSavedTab(tab: Tab): SavedTab {
  *  and nothing to restore. Deriving its pty id from the session's own means
  *  there is no second record to keep in sync, and killing the session kills a
  *  shell that can be named without looking anything up. */
-export function shellPtyId(sessionId: string): string {
-  return `${sessionId}::shell`;
+export function shellPtyId(sessionId: string, n?: number): string {
+  return n ? `${sessionId}::shell:${n}` : `${sessionId}::shell`;
 }
 
 /** Folds the names currently on sessions into the persisted session-id → name

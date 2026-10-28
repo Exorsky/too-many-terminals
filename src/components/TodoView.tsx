@@ -100,7 +100,7 @@ function TaskRow({
           {task.title || 'Untitled task'}
         </span>
         {meta.length > 0 && (
-          <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground truncate">
+          <span className="flex items-center gap-1.5 text-[12px] text-muted-foreground truncate">
             <span className={PRIORITY_CLASS[task.priority]}>{task.priority}</span>
             {meta.slice(1).map((m) => (
               <span key={m} className="flex items-center gap-1.5">
@@ -119,7 +119,7 @@ function TaskRow({
 
       <span
         className={cn(
-          'shrink-0 mt-[2px] text-[11px] font-mono tabular-nums',
+          'shrink-0 mt-[2px] text-[12px] font-mono tabular-nums',
           group === 'overdue' ? 'text-warning' : 'text-muted-foreground',
         )}
       >
@@ -251,12 +251,12 @@ export default function TodoView({
     <div className="flex flex-col flex-1 min-w-0 min-h-0 bg-background">
       <header className="flex items-center gap-3 shrink-0 px-5 pt-4 pb-2">
         <h1 className="m-0 text-[16px] font-semibold tracking-[-0.01em]">To-Do</h1>
-        <span className="text-[11px] text-muted-foreground">
+        <span className="text-[12px] text-muted-foreground">
           {counts.all} open
         </span>
         <button
           type="button"
-          className="flex items-center gap-1.5 ml-auto h-[26px] px-2.5 shrink-0 rounded-sm cursor-pointer border border-border bg-transparent font-inherit text-[11.5px] text-foreground hover:border-border-hover hover:bg-hover"
+          className="flex items-center gap-1.5 ml-auto h-[30px] px-2.5 shrink-0 rounded-sm cursor-pointer border border-border bg-transparent font-inherit text-[13px] text-foreground hover:border-border-hover hover:bg-hover"
           onClick={() => setComposing(true)}
         >
           <Plus size={12} className="text-primary" />
@@ -271,7 +271,7 @@ export default function TodoView({
             type="button"
             aria-pressed={filter === f}
             className={cn(
-              'flex items-center gap-1.5 h-[22px] px-2 rounded-sm border-none cursor-pointer font-inherit text-[11px]',
+              'flex items-center gap-1.5 h-[22px] px-2 rounded-sm border-none cursor-pointer font-inherit text-[12px]',
               filter === f
                 ? 'bg-selected text-foreground'
                 : 'bg-transparent text-muted-foreground hover:text-foreground hover:bg-hover',
@@ -280,7 +280,7 @@ export default function TodoView({
           >
             {FILTER_LABEL[f]}
             {counts[f] > 0 && (
-              <span className="text-[9.5px] font-mono tabular-nums text-muted-foreground">{counts[f]}</span>
+              <span className="text-[11px] font-mono tabular-nums text-muted-foreground">{counts[f]}</span>
             )}
           </button>
         ))}
@@ -306,22 +306,22 @@ export default function TodoView({
                 else if (e.key === 'Escape') { e.preventDefault(); setDraft(''); setComposing(false); }
               }}
               onBlur={() => commitDraft(false)}
-              className="flex-1 min-w-0 bg-transparent border-none outline-none font-inherit text-[12px] text-foreground placeholder:text-muted-foreground"
+              className="flex-1 min-w-0 bg-transparent border-none outline-none font-inherit text-[13px] text-foreground placeholder:text-muted-foreground"
             />
-            <span className="shrink-0 text-[9.5px] text-faint">↵ to add · esc to close</span>
+            <span className="shrink-0 text-[11px] text-faint">↵ to add · esc to close</span>
           </div>
         )}
 
         {grouped.length === 0 && !composing ? (
           <div className="flex flex-col items-center justify-center gap-1 h-full min-h-0 px-4 pb-10 text-center">
             <CheckCheck size={18} className="mb-1.5 text-muted-foreground" aria-hidden="true" />
-            <p className="m-0 text-[12.5px] text-dim">{EMPTY_COPY[filter].title}</p>
-            <p className="m-0 max-w-64 text-[11px] leading-relaxed text-muted-foreground">
+            <p className="m-0 text-[13.5px] text-dim">{EMPTY_COPY[filter].title}</p>
+            <p className="m-0 max-w-64 text-[12px] leading-relaxed text-muted-foreground">
               {EMPTY_COPY[filter].body}
             </p>
             <button
               type="button"
-              className="flex items-center gap-1.5 mt-3 h-[26px] px-2.5 rounded-sm border border-border bg-transparent cursor-pointer font-inherit text-[11.5px] text-foreground hover:border-border-hover hover:bg-hover"
+              className="flex items-center gap-1.5 mt-3 h-[30px] px-2.5 rounded-sm border border-border bg-transparent cursor-pointer font-inherit text-[13px] text-foreground hover:border-border-hover hover:bg-hover"
               onClick={() => setComposing(true)}
             >
               <Plus size={12} className="text-primary" />
@@ -332,10 +332,10 @@ export default function TodoView({
           grouped.map(({ group, items }) => (
             <section key={group}>
               <div className="flex items-baseline gap-2 px-3 pt-4 pb-1">
-                <h2 className="m-0 text-[10px] font-semibold uppercase tracking-[0.09em] text-muted-foreground">
+                <h2 className="m-0 text-[11px] font-semibold uppercase tracking-[0.09em] text-muted-foreground">
                   {GROUP_LABEL[group]}
                 </h2>
-                <span className="text-[9.5px] font-mono tabular-nums text-faint">{items.length}</span>
+                <span className="text-[11px] font-mono tabular-nums text-faint">{items.length}</span>
               </div>
               {items.map((task) => (
                 <TaskRow

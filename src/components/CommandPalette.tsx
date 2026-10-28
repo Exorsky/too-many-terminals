@@ -126,7 +126,7 @@ export default function CommandPalette({ open, tabs, onClose, onSelectTab }: Com
 
         <div ref={listRef} className="flex-1 overflow-y-auto scrollbar-thin py-1.5">
           {results.length === 0 ? (
-            <div className="px-4 py-6 text-center text-[12px] text-muted-foreground">
+            <div className="px-4 py-6 text-center text-[13px] text-muted-foreground">
               No open session matches “{query.trim()}”.
             </div>
           ) : (
@@ -144,13 +144,13 @@ export default function CommandPalette({ open, tabs, onClose, onSelectTab }: Com
                 {i === selected && <span className="absolute left-0 top-1 bottom-1 w-0.5 rounded-full bg-primary" />}
                 <StatusDot tab={tab} size={7} />
                 <span className="truncate flex-1 text-[13px]">{tab.name}{tab.exited ? ' (exited)' : ''}</span>
-                <span className="shrink-0 text-[11px] text-muted-foreground truncate max-w-[40%]">{fileLabel(tab)}</span>
+                <span className="shrink-0 text-[12px] text-muted-foreground truncate max-w-[40%]">{fileLabel(tab)}</span>
               </button>
             ))
           )}
         </div>
 
-        <div className="flex items-center gap-4 px-3.5 h-8 border-t border-border shrink-0 text-[10px] text-muted-foreground">
+        <div className="flex items-center gap-4 px-3.5 h-8 border-t border-border shrink-0 text-[11px] text-muted-foreground">
           <span>↑↓ move</span>
           <span>↵ open</span>
           <span>esc close</span>

@@ -9,7 +9,7 @@ import * as ipc from '@/lib/ipc';
 import HomeScreen from './HomeScreen';
 
 const APP = 'C:\\code\\claude-terminal';
-const FLOWS = 'C:\\code\\n8n-flows';
+const FLOWS = 'C:\\code\\my-flows';
 const day = (d: number) => new Date(Date.now() - d * 86_400_000).toISOString();
 
 function stat(over: Partial<SessionStat> = {}): SessionStat {
@@ -74,7 +74,7 @@ describe('HomeScreen dashboard', () => {
   it('counts sessions per folder', async () => {
     setup();
     expect(await screen.findByText('claude-terminal')).toBeInTheDocument();
-    expect(screen.getByText('n8n-flows')).toBeInTheDocument();
+    expect(screen.getByText('my-flows')).toBeInTheDocument();
   });
 
   it('shows the live rate-limit percentages', async () => {

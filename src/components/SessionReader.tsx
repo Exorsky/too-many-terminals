@@ -46,7 +46,7 @@ export default function SessionReader({ projectDir, entry, onClose, onResume }: 
         <FileText size={14} className="text-[#6fd4c9] shrink-0" />
         <div className="min-w-0">
           <div className="text-[13px] font-semibold text-foreground truncate">{entry.preview || 'Session'}</div>
-          <div className="flex items-center gap-1.5 text-[10.5px] text-muted-foreground">
+          <div className="flex items-center gap-1.5 text-[11.5px] text-muted-foreground">
             <span className="truncate">{folderName(projectDir)}</span>
             <span className="opacity-50">·</span>
             <span className="shrink-0 px-1 rounded-sm border border-border bg-hover" title={entry.sessionId}>
@@ -69,7 +69,7 @@ export default function SessionReader({ projectDir, entry, onClose, onResume }: 
               key={v}
               onClick={() => setView(v)}
               className={cn(
-                'inline-flex items-center gap-1.5 text-[11.5px] px-2.5 py-1 rounded-[5px] cursor-pointer font-inherit transition-colors',
+                'inline-flex items-center gap-1.5 text-[13px] px-2.5 py-1 rounded-[5px] cursor-pointer font-inherit transition-colors',
                 view === v
                   ? (v === 'rendered' ? 'bg-secondary text-[#6fd4c9]' : 'bg-secondary text-foreground')
                   : 'text-muted-foreground hover:text-foreground',
@@ -91,7 +91,7 @@ export default function SessionReader({ projectDir, entry, onClose, onResume }: 
         <CopyButton text={fullMarkdown} label="Copy all" />
         <button
           onClick={() => onResume(projectDir, entry)}
-          className="inline-flex items-center gap-1.5 text-[11.5px] rounded-md border border-primary/35 bg-primary/[0.08] text-primary px-2.5 py-1 cursor-pointer font-inherit hover:bg-primary/[0.14] transition-colors"
+          className="inline-flex items-center gap-1.5 text-[13px] rounded-md border border-primary/35 bg-primary/[0.08] text-primary px-2.5 py-1 cursor-pointer font-inherit hover:bg-primary/[0.14] transition-colors"
         >
           <ArrowRight size={12} /> Resume
         </button>

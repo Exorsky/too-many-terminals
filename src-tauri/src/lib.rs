@@ -6,6 +6,7 @@ mod env_sources;
 mod files;
 mod hook_server;
 mod hooks;
+mod jira;
 mod namer;
 mod pty;
 mod session_history;
@@ -79,6 +80,8 @@ pub fn run() {
             commands::list_dir,
             commands::read_file,
             commands::write_file,
+            commands::jira_issue,
+            commands::jira_token_found,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

@@ -11,6 +11,35 @@ listed here; see `git log` for the full history.
 
 ## [Unreleased]
 
+### Added
+
+- **Jira issue keys are links.** Set a Jira URL in Settings › Integrations and
+  keys like `PROJ-4821` link in session names, tabs, terminal output and
+  transcripts, lifted into a chip so the name gets its words back. Hover shows the
+  issue's title, status, assignee, reporter, priority and dates (read-only; the token stays in your
+  environment or `~/.claude/settings.json` — the app stores only its variable name).
+- **Start a session from a ticket.** New session takes a Jira key or link: the
+  session is named after the ticket and Claude's prompt is pre-filled with it.
+- **Claude Code's global files from Settings.** Settings › Claude Code opens
+  `~/.claude/settings.json`, `CLAUDE.md` and `keybindings.json` in the editor.
+- **Click the usage meter to open the logbook** as a tab of its own, beside your
+  sessions, instead of only seeing it when nothing is open.
+- **⌘⇧U** jumps to the session that most recently started waiting on you;
+  **⌘1…⌘9** pick a tab (macOS); **⌘,** opens Settings.
+
+### Changed
+
+- **A tab is a session, and its splits live inside it.** Split right / down
+  (⌘D / ⌘⇧D) open a new shell beside Claude in the same tab instead of adding
+  another tab; switching tabs brings each session's own layout back.
+- **New tabs open at the left edge**, newest first (Settings › Interface can put
+  them after the current tab instead).
+- **Navigation is in one place.** Search, Sessions, To-Do, Library and Settings
+  sit together at the top of the sidebar (and in the folded rail); the title bar
+  shows where you are and your usage.
+- **Larger type and softer corners.** 13px rows with nothing below 10.5px, taller
+  rows, 6px corners.
+
 ## [0.26.0] - 2026-10-15
 
 ### Added

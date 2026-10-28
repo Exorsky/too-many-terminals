@@ -19,7 +19,7 @@ export interface TaskInspectorProps {
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="px-3 pt-4 pb-1 text-[9.5px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">
+    <div className="px-3 pt-4 pb-1 text-[11px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">
       {children}
     </div>
   );
@@ -27,14 +27,14 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex items-center gap-3 px-3 py-[3px] text-[11px]">
+    <div className="flex items-center gap-3 px-3 py-[3px] text-[12px]">
       <span className="w-[62px] shrink-0 text-muted-foreground">{label}</span>
       <div className="flex-1 min-w-0">{children}</div>
     </div>
   );
 }
 
-const control = 'w-full h-[24px] px-1.5 rounded-sm bg-transparent border border-border hover:border-border-hover focus:border-border-hover outline-none font-inherit text-[11px] text-foreground';
+const control = 'w-full h-[24px] px-1.5 rounded-sm bg-transparent border border-border hover:border-border-hover focus:border-border-hover outline-none font-inherit text-[12px] text-foreground';
 
 /** A task's details, in the same language as the session inspector: a panel
  *  on the right that is closed until you ask for it, fields as plain rows, and
@@ -71,7 +71,7 @@ export default function TaskInspector({
           className="shrink-0 w-3 h-3 accent-primary cursor-pointer"
           onChange={() => updateTask(task.id, { done: !task.done, inProgress: false })}
         />
-        <span className="flex-1 text-[10px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">
+        <span className="flex-1 text-[11px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">
           Task
         </span>
         <button
@@ -113,7 +113,7 @@ export default function TaskInspector({
           onChange={(e) => setDescription(e.target.value)}
           onBlur={() => updateTask(task.id, { description })}
           onKeyDown={(e) => e.stopPropagation()}
-          className="w-full px-2 py-1.5 rounded-sm bg-transparent border border-border hover:border-border-hover focus:border-border-hover outline-none resize-y font-inherit text-[11px] leading-relaxed text-foreground placeholder:text-muted-foreground"
+          className="w-full px-2 py-1.5 rounded-sm bg-transparent border border-border hover:border-border-hover focus:border-border-hover outline-none resize-y font-inherit text-[12px] leading-relaxed text-foreground placeholder:text-muted-foreground"
         />
       </div>
 
@@ -172,7 +172,7 @@ export default function TaskInspector({
         />
       </Row>
       <Row label="Status">
-        <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground cursor-pointer">
+        <label className="flex items-center gap-1.5 text-[12px] text-muted-foreground cursor-pointer">
           <input
             type="checkbox"
             checked={task.inProgress}
@@ -186,7 +186,7 @@ export default function TaskInspector({
       <SectionLabel>Sessions</SectionLabel>
       <div className="flex flex-col px-1">
         {linked.length === 0 ? (
-          <p className="px-2 py-0.5 m-0 text-[10.5px] text-muted-foreground">
+          <p className="px-2 py-0.5 m-0 text-[11.5px] text-muted-foreground">
             None linked. Starting one is optional — this stays a To-Do either way.
           </p>
         ) : (
@@ -194,7 +194,7 @@ export default function TaskInspector({
             <button
               key={s.id}
               type="button"
-              className={cn(ACTION_ROW, 'h-[24px] px-2 text-[11px]')}
+              className={cn(ACTION_ROW, 'h-[24px] px-2 text-[12px]')}
               onClick={() => onOpenSession(s.id)}
               title={s.cwd}
             >
@@ -205,7 +205,7 @@ export default function TaskInspector({
         )}
         <button
           type="button"
-          className={cn(ACTION_ROW, 'h-[24px] px-2 mt-0.5 text-[11px]')}
+          className={cn(ACTION_ROW, 'h-[24px] px-2 mt-0.5 text-[12px]')}
           onClick={onStartSession}
         >
           <Sparkles size={12} className="shrink-0" />
@@ -216,7 +216,7 @@ export default function TaskInspector({
       <div className="mt-auto px-1 pt-4 pb-3">
         <button
           type="button"
-          className={cn(ACTION_ROW_DANGER, 'h-[26px] px-2 text-[11px]')}
+          className={cn(ACTION_ROW_DANGER, 'h-[30px] px-2 text-[12px]')}
           onClick={async () => {
             if (!await confirmAction({ title: `Delete "${task.title}"?`, body: 'The task is gone for good. Sessions linked to it are not touched.', confirmLabel: 'Delete task' })) return;
             deleteTask(task.id);

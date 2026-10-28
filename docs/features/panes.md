@@ -1,9 +1,10 @@
-# Panes (removed in v0.25)
+# Panes
 
-> **This feature no longer exists.** The 2×2 pane grid, its per-pane tab strips,
-> and drag-to-split were removed when the app's information architecture was
-> rebuilt around one selected session. This page is kept because the reasoning
-> is worth having, not because the code is.
+> **Panes live inside a session tab now.** The 2×2 grid came back after v0.25
+> as one global layout with a tab strip per pane; since the UI rethink each
+> session tab owns its own grid, the way a terminal's tab owns its splits. See
+> [session-workspace.md](session-workspace.md#tabs-and-splits) for the shipped
+> shape. The history below is kept because the reasoning is worth having.
 
 ## What it was
 

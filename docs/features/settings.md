@@ -1,12 +1,13 @@
 # Settings
 
-The Settings item (sidebar footer menu, or the icon rail when collapsed) swaps the main
+The Settings item (the navigation block at the top of the sidebar, the folded rail, or
+⌘,) swaps the main
 pane to `SettingsView`, mirroring how the History button swaps in
 `SessionHistoryPanel` — terminals stay mounted but hidden underneath. Opening one
 of History/Settings closes the other; selecting or spawning a tab closes both.
 
 `SettingsView` owns its own category state (`interface` | `notifications` |
-`sessions` | `customize`) with a left rail — no router, no top tab strip. Each
+`sessions` | `integrations` | `claude` | `customize`) with a left rail — no router, no top tab strip. Each
 category is one focused screen instead of one long scrolling list; the rail
 uses the same active-row look (left accent bar) as the sidebar's own tab rows.
 Interface/Notifications/Sessions hold plain preferences; Customize hosts the
@@ -23,6 +24,11 @@ Two switches, persisted in `settings.json`:
   sidebar's search field and status chips, leaving the session list under a 4px
   [spectrum](attention-inbox.md#the-compact-list). Not a second sidebar: it is
   the same layout with `SidebarSearch` and `LedgerStrip` simply not rendered.
+- **New tabs open** (`newTabPosition`, default `start`) — at the left edge of
+  the session tab strip (newest first, ⌘1 is the one you just opened) or
+  `afterCurrent`, as most terminals do. See
+  [session-workspace.md](session-workspace.md#tabs-and-splits).
+
 ## Notifications
 
 One switch — **Notify when a session needs you** (`notificationsEnabled`,
@@ -43,6 +49,18 @@ Two dropdowns, both about background behavior while a session is idle:
   re-fetches your rate-limit percentages. Nothing faster is offered because
   Anthropic's usage endpoint rate-limits and the backend enforces its own
   5-minute floor. See [usage-meter.md](usage-meter.md).
+
+## Integrations
+
+Jira: base URL, project keys and the *name* of a token variable. See
+[jira-links.md](jira-links.md).
+
+## Claude Code
+
+Claude Code's global files in `~/.claude` — `settings.json`, `CLAUDE.md`,
+`keybindings.json` — each with **Open**, which puts it in the workspace's editor
+beside the session you're in, plus a button that opens the folder in Finder.
+A file that doesn't exist yet says so instead of opening an empty editor.
 
 ## Settings store
 

@@ -121,8 +121,8 @@ export default function CustomizeTab() {
     <div className="flex flex-col gap-4 px-5 py-4">
       <div className="flex items-center justify-between">
         <div>
-          <div className="text-[12.5px] text-foreground">Theme</div>
-          <div className="text-[11px] text-muted-foreground">
+          <div className="text-[13.5px] text-foreground">Theme</div>
+          <div className="text-[12px] text-muted-foreground">
             Applies to the app and terminal colors.
           </div>
         </div>
@@ -151,7 +151,7 @@ export default function CustomizeTab() {
               )}
             >
               <div className="flex items-center gap-1.5">
-                <span className="text-[12px] text-foreground truncate flex-1">{theme.name}</span>
+                <span className="text-[13px] text-foreground truncate flex-1">{theme.name}</span>
                 {isSelected && <Check size={12} className="text-primary shrink-0" />}
               </div>
               <div className="flex items-center gap-1">
@@ -165,7 +165,7 @@ export default function CustomizeTab() {
               </div>
               <div className="flex items-center gap-1 min-h-6">
                 {theme.builtIn ? (
-                  <span className="text-[10px] uppercase tracking-[0.06em] text-muted-foreground">Built-in</span>
+                  <span className="text-[11px] uppercase tracking-[0.06em] text-muted-foreground">Built-in</span>
                 ) : (
                   <>
                     <Button
@@ -216,7 +216,7 @@ export default function CustomizeTab() {
             <Input
               value={editing.name}
               aria-label="Theme name"
-              className="h-7 max-w-55 text-[12px]"
+              className="h-7 max-w-55 text-[13px]"
               onChange={(e) => updateEditing({ name: e.target.value })}
             />
             <div className="flex-1" />
@@ -230,7 +230,7 @@ export default function CustomizeTab() {
 
           <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-x-4 gap-y-2">
             {THEME_COLOR_KEYS.map((key) => (
-              <label key={key} className="flex items-center gap-2 text-[11px] text-muted-foreground cursor-pointer">
+              <label key={key} className="flex items-center gap-2 text-[12px] text-muted-foreground cursor-pointer">
                 <input
                   type="color"
                   value={editing.colors[key]}
@@ -243,7 +243,7 @@ export default function CustomizeTab() {
             ))}
           </div>
 
-          <div className="text-[10.5px] text-muted-foreground leading-relaxed">
+          <div className="text-[11.5px] text-muted-foreground leading-relaxed">
             Changes preview live. Save to keep them across restarts.
           </div>
         </div>

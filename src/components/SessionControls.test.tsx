@@ -5,6 +5,8 @@ import SessionControls from './SessionControls';
 
 function renderControls(overrides: Partial<React.ComponentProps<typeof SessionControls>> = {}) {
   const props = {
+    canRead: true,
+    onSplitShell: vi.fn(),
     mode: 'terminal' as const,
     splitDirection: 'right' as const,
     onSetMode: vi.fn(),
@@ -16,7 +18,7 @@ function renderControls(overrides: Partial<React.ComponentProps<typeof SessionCo
 }
 
 const previewButton = () => screen.getByRole('button', { name: 'Markdown Preview' });
-const splitButton = () => screen.getByRole('button', { name: 'Split view' });
+const splitButton = () => screen.getByRole('button', { name: 'Split' });
 
 afterEach(cleanup);
 
@@ -41,7 +43,7 @@ describe('SessionControls', () => {
   it('opens the layout menu and picks a direction', async () => {
     const props = renderControls();
     await userEvent.click(splitButton());
-    await userEvent.click(await screen.findByText('Split right'));
+    await userEvent.click(await screen.findByText('Transcript to the right'));
     expect(props.onSetMode).toHaveBeenCalledWith('split');
     expect(props.onSetSplitDirection).toHaveBeenCalledWith('right');
   });
@@ -49,21 +51,39 @@ describe('SessionControls', () => {
   it('splits down from the same menu', async () => {
     const props = renderControls();
     await userEvent.click(splitButton());
-    await userEvent.click(await screen.findByText('Split down'));
+    await userEvent.click(await screen.findByText('Transcript below'));
     expect(props.onSetMode).toHaveBeenCalledWith('split');
     expect(props.onSetSplitDirection).toHaveBeenCalledWith('down');
   });
 
-  it('hides Unsplit while not split', async () => {
+  it('hides Close transcript while not split', async () => {
     renderControls();
     await userEvent.click(splitButton());
-    expect(screen.queryByText('Unsplit')).not.toBeInTheDocument();
+    expect(screen.queryByText('Close transcript')).not.toBeInTheDocument();
   });
 
-  it('unsplits back to terminal', async () => {
+  it('closes the transcript back to terminal', async () => {
     const props = renderControls({ mode: 'split' });
     await userEvent.click(splitButton());
-    await userEvent.click(await screen.findByText('Unsplit'));
+    await userEvent.click(await screen.findByText('Close transcript'));
     expect(props.onSetMode).toHaveBeenCalledWith('terminal');
+  });
+
+  it('opens a new shell beside, right or below, from the same menu', async () => {
+    const props = renderControls();
+    await userEvent.click(splitButton());
+    await userEvent.click(await screen.findByText('Shell to the right'));
+    expect(props.onSplitShell).toHaveBeenCalledWith('right');
+    await userEvent.click(splitButton());
+    await userEvent.click(await screen.findByText('Shell below'));
+    expect(props.onSplitShell).toHaveBeenCalledWith('bottom');
+  });
+
+  it('without a transcript, offers only shells and no Preview', async () => {
+    renderControls({ canRead: false });
+    expect(screen.queryByRole('button', { name: 'Markdown Preview' })).toBeNull();
+    await userEvent.click(splitButton());
+    expect(await screen.findByText('Shell to the right')).toBeInTheDocument();
+    expect(screen.queryByText('Transcript to the right')).toBeNull();
   });
 });

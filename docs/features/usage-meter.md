@@ -1,6 +1,6 @@
 # Usage meter
 
-The sidebar's bottom band is **two labeled rows**, one per rate-limit window
+The title bar's trailing end carries **two labeled meters**, one per rate-limit window
 Anthropic actually enforces, carrying the **official** numbers — the same
 figures `/usage` prints inside Claude Code:
 
@@ -9,10 +9,16 @@ Session  ▬▬▬▬│▬▬▬▬▬▬▬▬   42%   3h 45m
 Week     ▬▬│▬▬▬▬▬▬▬▬▬▬   18%   4d 6h
 ```
 
-Which window, a bar, the percentage, and the countdown to reset. Nothing is
-behind a menu any more, because there is no longer a menu: navigation moved to
-the [rail](terminals.md#the-rail-folders-and-navigation), which left the band
-free to spell out what it was compressing.
+Which window, a bar and the percentage; the countdown to reset is in each
+meter's tooltip. It moved from the sidebar's foot to the title bar in the
+navigation rethink: the title bar holds context and status, never navigation,
+and this is status. `SidebarFooter` still renders the stacked two-row form when
+called without `inline`.
+
+**Clicking the meter opens the logbook** ([home-screen.md](home-screen.md)) as a
+tab of its own at the leading edge of the session strip — the meter says how
+much is gone, the logbook says where it went. It's not a session: switching to a
+session tab leaves it on the strip, and × closes it.
 
 It was compressing badly. The old strip showed `⚡ 42%  📅 18%` — two numbers
 you had to learn a lightning bolt and a calendar to tell apart, with the labels,

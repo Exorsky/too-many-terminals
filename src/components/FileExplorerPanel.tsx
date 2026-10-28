@@ -75,7 +75,7 @@ export default function FileExplorerPanel({
     <div className="flex flex-col w-full h-full bg-card">
       <div className="flex items-center gap-1.5 h-8 px-2.5 border-b border-border shrink-0">
         <FolderTree size={12} className="text-muted-foreground shrink-0" />
-        <span className="text-[11px] font-semibold text-foreground/90">Files</span>
+        <span className="text-[12px] font-semibold text-foreground/90">Files</span>
         {onTogglePin && (
           <button
             type="button"
@@ -88,25 +88,25 @@ export default function FileExplorerPanel({
             )}
             onClick={onTogglePin}
           >
-            {pinned ? <PinOff size={11} /> : <Pin size={11} />}
+            {pinned ? <PinOff size={12} /> : <Pin size={12} />}
           </button>
         )}
       </div>
       <div className="flex items-center gap-1.5 mx-2 mt-1.5 mb-1 px-2 py-1 rounded-md border border-border bg-background shrink-0">
-        <Search size={11} className="text-muted-foreground shrink-0" />
+        <Search size={12} className="text-muted-foreground shrink-0" />
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Find files"
-          className="flex-1 min-w-0 bg-transparent border-none outline-none text-[11px] text-foreground placeholder:text-muted-foreground font-inherit"
+          className="flex-1 min-w-0 bg-transparent border-none outline-none text-[12px] text-foreground placeholder:text-muted-foreground font-inherit"
         />
       </div>
       <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-thin py-1">
         {searching ? (
           results === null ? (
-            <div className="px-3 py-2 text-[11px] text-muted-foreground">Searching…</div>
+            <div className="px-3 py-2 text-[12px] text-muted-foreground">Searching…</div>
           ) : results.length === 0 ? (
-            <div className="px-3 py-2 text-[11px] text-muted-foreground">No files match &ldquo;{query.trim()}&rdquo;.</div>
+            <div className="px-3 py-2 text-[12px] text-muted-foreground">No files match &ldquo;{query.trim()}&rdquo;.</div>
           ) : (
             results.map((m) => (
               <RevealMenu key={m.path} path={m.path}>
@@ -119,7 +119,7 @@ export default function FileExplorerPanel({
                 }}
                 className={cn(
                   'flex items-center gap-1.5 w-[calc(100%-8px)] mx-1 my-0.5 px-2 py-1 rounded-sm text-left',
-                  'text-[11px] text-muted-foreground hover:text-foreground hover:bg-hover border-none bg-transparent cursor-pointer font-inherit',
+                  'text-[12px] text-muted-foreground hover:text-foreground hover:bg-hover border-none bg-transparent cursor-pointer font-inherit',
                   m.path === activePath && 'text-foreground bg-selected',
                 )}
                 onClick={() => onOpenFile(m.root, m.path)}
@@ -132,7 +132,7 @@ export default function FileExplorerPanel({
             ))
           )
         ) : projects.length === 0 ? (
-          <div className="px-3 py-6 text-center text-[11px] text-muted-foreground">No folders open</div>
+          <div className="px-3 py-6 text-center text-[12px] text-muted-foreground">No folders open</div>
         ) : (
           projects.map((dir) => (
             <FileTree

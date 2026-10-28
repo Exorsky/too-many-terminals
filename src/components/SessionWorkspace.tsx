@@ -20,6 +20,9 @@ const LIVE_FOLLOW_MS = 1200;
 export interface SessionWorkspaceProps {
   session: Tab;
   tool: SessionTool;
+  /** Which of the session's split shells this is (1, 2, …); absent for the
+   *  session's own terminal. */
+  shellN?: number;
   /** The session is on screen and should hold a live pty. False while an
    *  overlay (Settings, the archive browser, To-Do) covers it. */
   active: boolean;
@@ -58,7 +61,7 @@ function toolsFor(session: Tab): SessionTool[] {
  *  pane on chrome instead of three.
  *  See docs/features/session-workspace.md. */
 export default function SessionWorkspace({
-  session, tool, active, paneFocused = true, mode, splitDirection,
+  session, tool, shellN, active, paneFocused = true, mode, splitDirection,
   mdView, onSetMdView, showMarkdownToggle, onInterrupt, onNeedShell,
 }: SessionWorkspaceProps) {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -71,9 +74,8 @@ export default function SessionWorkspace({
    *  not a session, so it neither persists nor appears anywhere in the list. */
   const [openFile, setOpenFile] = useState<Tab | null>(null);
   const [filesTreeWidth, setFilesTreeWidth] = useState(240);
-  /** Which session we've already asked for a shell for. Keyed by session, not
-   *  a bare boolean: this component is reused across session switches, and a
-   *  boolean would leave every session after the first without a shell. */
+  /** Which shell pty we've already asked for. Keyed by pty id, not a bare
+   *  boolean, so a reused component still asks for each new shell once. */
   const shellStarted = useRef<string | null>(null);
 
   const tools = toolsFor(session);
@@ -87,11 +89,13 @@ export default function SessionWorkspace({
   const splitActive = effectiveMode === 'split';
   const onClaude = current === 'claude';
 
+  // A shell session's own pane *is* its pty; only a derived shell needs one.
+  const shellId = session.kind === 'shell' && !shellN ? session.id : shellPtyId(session.id, shellN);
   useEffect(() => {
-    if (current !== 'shell' || shellStarted.current === session.id) return;
-    shellStarted.current = session.id;
+    if (current !== 'shell' || shellId === session.id || shellStarted.current === shellId) return;
+    shellStarted.current = shellId;
     onNeedShell();
-  }, [current, session.id, onNeedShell]);
+  }, [current, shellId, session.id, onNeedShell]);
 
   const [draggingSeam, startSeam] = useDragValue(
     (e) => {
@@ -140,7 +144,6 @@ export default function SessionWorkspace({
   // from; switching sessions must not carry it across.
   useEffect(() => { setOpenFile(null); }, [session.id]);
 
-  const shellId = shellPtyId(session.id);
   // A pane only takes keystrokes when it has focus; without this every pane
   // calls `term.focus()` on attach and the last one to render steals them.
   const live = active && paneFocused;
@@ -184,8 +187,8 @@ export default function SessionWorkspace({
           >
             {splitActive && (
               <div className="flex items-center gap-1.5 h-7 px-3 shrink-0 border-b border-border bg-card">
-                <SquareTerminal size={11} className="text-muted-foreground shrink-0" />
-                <span className="text-[10px] tracking-[0.12em] uppercase text-muted-foreground">Terminal</span>
+                <SquareTerminal size={12} className="text-muted-foreground shrink-0" />
+                <span className="text-[11px] tracking-[0.12em] uppercase text-muted-foreground">Terminal</span>
               </div>
             )}
             <div className="relative flex-1 min-h-0">
@@ -237,7 +240,7 @@ export default function SessionWorkspace({
           {/* A shell-kind session *is* its shell; a Claude session gets a
               derived one. Either way, one terminal. */}
           <Terminal
-            tabId={session.kind === 'shell' ? session.id : shellId}
+            tabId={shellId}
             isVisible={active}
             focused={live}
           />
@@ -272,7 +275,7 @@ export default function SessionWorkspace({
                 onOpenFile={openFileAt}
               />
             ) : (
-              <div className="absolute inset-0 flex items-center justify-center text-[11px] text-muted-foreground">
+              <div className="absolute inset-0 flex items-center justify-center text-[12px] text-muted-foreground">
                 Pick a file to read or edit.
               </div>
             )}

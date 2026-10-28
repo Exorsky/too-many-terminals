@@ -411,6 +411,35 @@ pub fn save_settings(settings: AppSettings) -> Result<(), String> {
     settings::save_settings(&root, &settings)
 }
 
+fn claude_settings_path() -> Option<std::path::PathBuf> {
+    dirs::home_dir().map(|h| h.join(".claude").join("settings.json"))
+}
+
+/// One Jira issue for the hover card. Reads the base URL and the token's
+/// variable name from saved settings, so the token itself never crosses IPC.
+#[tauri::command]
+pub async fn jira_issue(key: String) -> Result<crate::jira::JiraIssue, String> {
+    let root = workspace::config_dir().ok_or("could not resolve config directory")?;
+    let s = settings::load_settings(&root);
+    if s.jira_base_url.is_empty() {
+        return Err("Jira URL is not set".into());
+    }
+    let token = claude_settings_path().and_then(|p| crate::jira::resolve_token(&s.jira_token_var, &p));
+    // A variable that's named but doesn't resolve would send an anonymous
+    // request — a pointless 401 that then pauses every lookup for 5 minutes.
+    if !s.jira_token_var.is_empty() && token.is_none() {
+        return Err(format!("{} not found", s.jira_token_var));
+    }
+    crate::jira::fetch_issue(&s.jira_base_url, token.as_deref(), &key).await
+}
+
+/// Whether a token variable resolves to anything — a yes/no for Settings,
+/// never the value.
+#[tauri::command(async)]
+pub fn jira_token_found(var: String) -> bool {
+    claude_settings_path().and_then(|p| crate::jira::resolve_token(&var, &p)).is_some()
+}
+
 #[tauri::command(async)]
 pub fn uninstall_hooks(cwd: String) -> Result<(), String> {
     hooks::uninstall_hooks(std::path::Path::new(&cwd))

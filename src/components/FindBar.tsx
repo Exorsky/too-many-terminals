@@ -112,9 +112,9 @@ export default function FindBar({ scrollRef }: { scrollRef: React.RefObject<HTML
           if (e.key === 'Enter') { e.preventDefault(); step(e.shiftKey ? -1 : 1); }
           else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); }
         }}
-        className="w-40 bg-transparent border-none outline-none text-[12px] text-foreground placeholder:text-muted-foreground"
+        className="w-40 bg-transparent border-none outline-none text-[13px] text-foreground placeholder:text-muted-foreground"
       />
-      <span className={cn('shrink-0 font-mono tabular-nums text-[11px] mr-0.5', total === 0 && query ? 'text-warning' : 'text-muted-foreground')}>
+      <span className={cn('shrink-0 font-mono tabular-nums text-[12px] mr-0.5', total === 0 && query ? 'text-warning' : 'text-muted-foreground')}>
         {query ? `${total ? index + 1 : 0}/${total}` : ''}
       </span>
       <button

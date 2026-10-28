@@ -28,7 +28,7 @@ export default function CopyButton({ text, label, className }: {
     <button
       onClick={(e) => { e.stopPropagation(); copy(); }}
       className={cn(
-        'inline-flex items-center gap-1.5 text-[11px] rounded-md border px-2 py-1 cursor-pointer font-inherit transition-colors',
+        'inline-flex items-center gap-1.5 text-[12px] rounded-md border px-2 py-1 cursor-pointer font-inherit transition-colors',
         done
           ? 'border-success/40 text-success'
           : 'border-border bg-card text-muted-foreground hover:text-foreground hover:border-border-hover',

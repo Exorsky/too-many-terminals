@@ -109,11 +109,21 @@ function lastCall<T extends unknown[]>(calls: T[]): T {
  *  than `fireEvent.click`. See src/tests/setup.ts for the jsdom shim. */
 const openMenu = (trigger: HTMLElement) => userEvent.click(trigger);
 
-/** The label of the active tab in each pane — what the strip says you are
- *  looking at. */
+/** The label of the active view in each pane's header. A lone pane has no
+ *  header — the session tab above already names it. */
 function activeTabLabels(): string[] {
   return [...document.querySelectorAll('[data-pane-tab][data-active]')]
     .map((n) => n.textContent?.replace(/×$/, '').trim() ?? '');
+}
+
+/** The session tabs across the top, in strip order. */
+function sessionTabs(): string[] {
+  return [...document.querySelectorAll('[data-session-tab-name]')].map((n) => n.textContent ?? '');
+}
+
+/** The session tab on screen. */
+function currentSessionTab(): string | null {
+  return document.querySelector('[data-session-tab][aria-selected="true"] [data-session-tab-name]')?.textContent ?? null;
 }
 
 function painted(): string[] {
@@ -134,7 +144,7 @@ describe('information architecture', () => {
     expect(groupOfRow(sessionRow('Alpha'))).toContain('proj');
   });
 
-  it('shows one session list and no global session tabs', async () => {
+  it('lists each session once in the sidebar', async () => {
     render(<App />);
     await ready();
     // Every session appears exactly once in the chrome. The old layout had the
@@ -149,19 +159,32 @@ describe('information architecture', () => {
     await ready();
     fireEvent.click(sessionRow('Alpha'));
     await waitFor(() => expect(painted()).toEqual(['tab-alpha']));
-    expect(activeTabLabels()).toEqual(['Alpha']);
+    expect(currentSessionTab()).toBe('Alpha');
+    // One pane showing one thing needs no header of its own.
+    expect(activeTabLabels()).toEqual([]);
   });
 
-  it('gives a pane real tabs — draggable, closable, one per thing', async () => {
+  it('opens sessions as tabs, newest at the left', async () => {
     render(<App />);
     await ready();
     fireEvent.click(sessionRow('Alpha'));
-    await waitFor(() => expect(painted()).toEqual(['tab-alpha']));
+    fireEvent.click(sessionRow('Beta'));
+    await waitFor(() => expect(sessionTabs()).toEqual(['Beta', 'Alpha']));
+    // Opening one that's already there doesn't shuffle the strip.
+    fireEvent.click(sessionRow('Alpha'));
+    await waitFor(() => expect(currentSessionTab()).toBe('Alpha'));
+    expect(sessionTabs()).toEqual(['Beta', 'Alpha']);
+  });
 
-    const tab = document.querySelector('[data-pane-tab]') as HTMLElement;
-    expect(tab).toHaveAttribute('draggable', 'true');
-    expect(within(tab).getByLabelText('Close Alpha')).toBeInTheDocument();
-    expect(screen.getByLabelText('Add a tool to the workspace')).toBeInTheDocument();
+  it('closing a tab keeps the session running in the sidebar', async () => {
+    render(<App />);
+    await ready();
+    fireEvent.click(sessionRow('Alpha'));
+    await waitFor(() => expect(sessionTabs()).toEqual(['Alpha']));
+    await userEvent.click(screen.getByLabelText('Close tab Alpha'));
+    await waitFor(() => expect(sessionTabs()).toEqual([]));
+    expect(sessionRow('Alpha')).toBeInTheDocument();
+    expect(ipc.killPty).not.toHaveBeenCalled();
   });
 
   it('keeps the inspector closed until asked', async () => {
@@ -245,7 +268,7 @@ describe('navigation', () => {
     // Still the same live terminal, still saying which session you're in —
     // the strip stays, its controls don't.
     expect(painted()).toEqual(['tab-alpha']);
-    expect(activeTabLabels()).toEqual(['Alpha']);
+    expect(currentSessionTab()).toBe('Alpha');
     expect(screen.queryByLabelText('Session actions')).toBeNull();
   });
 
@@ -474,38 +497,33 @@ describe('the pane grid', () => {
     return [...document.querySelectorAll('[data-pane]')] as HTMLElement[];
   }
 
-  it('adds to the workspace as a tab, and splits only when you drag', async () => {
+  it('opens another session beside this one, inside the same tab', async () => {
     render(<App />);
     await ready();
     fireEvent.click(sessionRow('Alpha'));
     await waitFor(() => expect(painted()).toEqual(['tab-alpha']));
 
     await openMenu(within(sessionRow('Beta')).getByLabelText('Actions for Beta'));
-    await userEvent.click(await screen.findByRole('menuitem', { name: 'Add to workspace…' }));
-    await userEvent.click(await screen.findByRole('menuitem', { name: 'Claude' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Open beside current' }));
 
-    // One pane, two tabs. Geometry costs a drag, not a menu click.
-    await waitFor(() => expect(document.querySelectorAll('[data-pane-tab]')).toHaveLength(2));
-    expect(panes()).toHaveLength(1);
-    expect(activeTabLabels()).toEqual(['Beta']);
-    // And the sessions are still listed exactly once, in the sidebar.
-    expect([...document.querySelectorAll('[data-session-name]')]
-      .filter((n) => n.textContent === 'Alpha')).toHaveLength(1);
+    await waitFor(() => expect(panes()).toHaveLength(2));
+    expect(painted().sort()).toEqual(['tab-alpha', 'tab-beta']);
+    // Its own view is named by tool; the guest by its session.
+    expect(activeTabLabels()).toEqual(['Claude', 'Beta']);
+    expect(sessionTabs()).toEqual(['Alpha']);
   });
 
-  it('closing a tab leaves the session open and running', async () => {
+  it('closing a pane leaves its session open and running', async () => {
     render(<App />);
     await ready();
     fireEvent.click(sessionRow('Alpha'));
     await openMenu(within(sessionRow('Beta')).getByLabelText('Actions for Beta'));
-    await userEvent.click(await screen.findByRole('menuitem', { name: 'Add to workspace…' }));
-    await userEvent.click(await screen.findByRole('menuitem', { name: 'Claude' }));
-    await waitFor(() => expect(document.querySelectorAll('[data-pane-tab]')).toHaveLength(2));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Open beside current' }));
+    await waitFor(() => expect(panes()).toHaveLength(2));
 
     await userEvent.click(screen.getByLabelText('Close Beta'));
 
-    await waitFor(() => expect(document.querySelectorAll('[data-pane-tab]')).toHaveLength(1));
-    // Still in the sidebar, still not killed: a tab is a view, not a life.
+    await waitFor(() => expect(panes()).toHaveLength(1));
     expect(sessionRow('Beta')).toBeInTheDocument();
     expect(ipc.killPty).not.toHaveBeenCalled();
   });
@@ -530,38 +548,95 @@ describe('the inspector', () => {
 });
 
 describe('adding a shell', () => {
-  it('is one visible button beside the tabs, not a buried menu', async () => {
-    // The regression this guards: it used to live two levels deep in the
-    // header's ⋯, which is not where anyone looks for "Shell" — the word is
-    // right there in the tool strip.
+  function panes() {
+    return [...document.querySelectorAll('[data-pane]')] as HTMLElement[];
+  }
+
+  it('splits a new shell beside Claude, in the same tab', async () => {
     render(<App />);
     await ready();
     fireEvent.click(sessionRow('Alpha'));
     await waitFor(() => expect(painted()).toEqual(['tab-alpha']));
 
-    await userEvent.click(screen.getByLabelText('Add a tool to the workspace'));
-    await userEvent.click(await screen.findByRole('menuitem', { name: 'Shell' }));
+    await userEvent.click(screen.getByLabelText('Split'));
+    await userEvent.click(await screen.findByRole('menuitem', { name: /Shell to the right/ }));
 
-    // Two tabs of one session: its Claude and its own shell, two real ptys,
-    // still one row in the sidebar.
-    await waitFor(() => expect(document.querySelectorAll('[data-pane-tab]')).toHaveLength(2));
-    expect(activeTabLabels()).toEqual(['Alpha · Shell']);
-    await waitFor(() => expect(painted()).toEqual(['tab-alpha::shell']));
+    // Two panes of one session: its Claude and a new shell, two real ptys,
+    // still one tab and one row in the sidebar.
+    await waitFor(() => expect(panes()).toHaveLength(2));
+    expect(activeTabLabels()).toEqual(['Claude', 'Shell']);
+    await waitFor(() => expect(painted().sort()).toEqual(['tab-alpha', 'tab-alpha::shell:1']));
+    expect(sessionTabs()).toEqual(['Alpha']);
     expect([...document.querySelectorAll('[data-session-name]')]
       .filter((n) => n.textContent === 'Alpha')).toHaveLength(1);
   });
 
-  it('can also be added straight from the sidebar', async () => {
+  it('each split is another shell, and closing one kills only that shell', async () => {
     render(<App />);
     await ready();
     fireEvent.click(sessionRow('Alpha'));
     await waitFor(() => expect(painted()).toEqual(['tab-alpha']));
 
-    await openMenu(within(sessionRow('Beta')).getByLabelText('Actions for Beta'));
-    await userEvent.click(await screen.findByRole('menuitem', { name: 'Add to workspace…' }));
-    await userEvent.click(await screen.findByRole('menuitem', { name: 'Shell' }));
+    // Ctrl+Shift+D off macOS (jsdom isn't a Mac); ⌘D on one.
+    fireEvent.keyDown(window, { key: 'd', ctrlKey: true, shiftKey: true });
+    fireEvent.keyDown(window, { key: 'd', ctrlKey: true, shiftKey: true, altKey: true });
+    await waitFor(() => expect(panes()).toHaveLength(3));
+    expect(activeTabLabels().sort()).toEqual(['Claude', 'Shell', 'Shell 2']);
 
-    await waitFor(() => expect(painted()).toEqual(['tab-beta::shell']));
+    await userEvent.click(screen.getByLabelText('Close Shell 2'));
+    await waitFor(() => expect(panes()).toHaveLength(2));
+    expect(ipc.killPty).toHaveBeenCalledWith('tab-alpha::shell:2');
+    expect(ipc.killPty).not.toHaveBeenCalledWith('tab-alpha');
+  });
+});
+
+describe('closing a tab with splits', () => {
+  it('kills its split shells, so the next split is a fresh one', async () => {
+    render(<App />);
+    await ready();
+    fireEvent.click(sessionRow('Alpha'));
+    await waitFor(() => expect(painted()).toEqual(['tab-alpha']));
+    fireEvent.keyDown(window, { key: 'd', ctrlKey: true, shiftKey: true });
+    await waitFor(() => expect(painted().sort()).toEqual(['tab-alpha', 'tab-alpha::shell:1']));
+    await waitFor(() => expect(vi.mocked(ipc.spawnPty).mock.calls.some((c) => c[0].tabId === 'tab-alpha::shell:1')).toBe(true));
+
+    await userEvent.click(screen.getByLabelText('Close tab Alpha'));
+    expect(ipc.killPty).toHaveBeenCalledWith('tab-alpha::shell:1');
+    expect(ipc.killPty).not.toHaveBeenCalledWith('tab-alpha');
+
+    vi.mocked(ipc.spawnPty).mockClear();
+    fireEvent.click(sessionRow('Alpha'));
+    fireEvent.keyDown(window, { key: 'd', ctrlKey: true, shiftKey: true });
+    await waitFor(() => expect(vi.mocked(ipc.spawnPty).mock.calls.some((c) => c[0].tabId === 'tab-alpha::shell:1')).toBe(true));
+  });
+});
+
+describe('the logbook', () => {
+  it('opens from the usage meter as a tab of its own, beside the sessions', async () => {
+    const soon = new Date(Date.now() + 3600_000).toISOString();
+    vi.mocked(ipc.getSessionUsageStats).mockResolvedValue({
+      available: true, session: { percent: 42, resetsAtIso: soon }, week: { percent: 18, resetsAtIso: soon },
+      fetchedAtMs: Date.now(), fromCache: false,
+    } as never);
+    render(<App />);
+    await ready();
+    fireEvent.click(sessionRow('Alpha'));
+    await waitFor(() => expect(painted()).toEqual(['tab-alpha']));
+
+    await userEvent.click(await screen.findByLabelText('Open the logbook'));
+    const logbook = () => document.querySelector('[data-extra-tab]') as HTMLElement | null;
+    await waitFor(() => expect(logbook()).toHaveAttribute('aria-selected', 'true'));
+    // Nothing of Alpha's is painted while the logbook is up, but its tab stays.
+    expect(painted()).toEqual([]);
+    expect(sessionTabs()).toEqual(['Alpha']);
+    expect(currentSessionTab()).toBeNull();
+
+    // Back to the session; the logbook keeps its tab until closed.
+    fireEvent.mouseDown(document.querySelector('[data-session-tab]')!, { button: 0 });
+    await waitFor(() => expect(painted()).toEqual(['tab-alpha']));
+    expect(logbook()).toHaveAttribute('aria-selected', 'false');
+    await userEvent.click(screen.getByLabelText('Close tab Logbook'));
+    expect(logbook()).toBeNull();
   });
 });
 
@@ -639,13 +714,13 @@ describe('the New session dialog', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /New session/ }));
     await userEvent.click(await screen.findByRole('radio', { name: /proj/ }));
-    await userEvent.type(screen.getByPlaceholderText('ITA-29789 Mailapp migration'), 'ITA-1 move mail');
+    await userEvent.type(screen.getByLabelText(/^Name/), 'ABC-1 move repo');
     await userEvent.click(screen.getByRole('button', { name: 'Start session' }));
 
     await waitFor(() => expect(ipc.spawnPty).toHaveBeenCalled());
     expect(lastCall(vi.mocked(ipc.spawnPty).mock.calls)[0].cwd).toBe('/proj');
     expect(ipc.createScratchDir).not.toHaveBeenCalled();
-    await waitFor(() => expect(groupOfRow(sessionRow('ITA-1 move mail'))).toBe('proj'));
+    await waitFor(() => expect(groupOfRow(sessionRow('ABC-1 move repo'))).toBe('proj'));
   });
 
   it('Cancel starts nothing', async () => {
@@ -673,17 +748,14 @@ describe('dragging tabs around the workspace', () => {
     };
   }
 
-  it('a tab dragged onto a pane edge splits the grid', async () => {
+  it('a session dragged from the sidebar onto a pane edge splits it', async () => {
     render(<App />);
     await ready();
     fireEvent.click(sessionRow('Alpha'));
-    await openMenu(within(sessionRow('Beta')).getByLabelText('Actions for Beta'));
-    await userEvent.click(await screen.findByRole('menuitem', { name: 'Add to workspace…' }));
-    await userEvent.click(await screen.findByRole('menuitem', { name: 'Claude' }));
-    await waitFor(() => expect(document.querySelectorAll('[data-pane-tab]')).toHaveLength(2));
+    await waitFor(() => expect(painted()).toEqual(['tab-alpha']));
     expect(document.querySelectorAll('[data-pane]')).toHaveLength(1);
 
-    const tab = document.querySelectorAll('[data-pane-tab]')[1] as HTMLElement;
+    const tab = sessionRow('Beta');
     const dataTransfer = fakeDataTransfer();
     fireEvent.dragStart(tab, { dataTransfer });
 
@@ -706,6 +778,6 @@ describe('dragging tabs around the workspace', () => {
     // Two panes, one tab each, both terminals live.
     await waitFor(() => expect(document.querySelectorAll('[data-pane]')).toHaveLength(2));
     expect(painted().sort()).toEqual(['tab-alpha', 'tab-beta']);
-    expect(activeTabLabels().sort()).toEqual(['Alpha', 'Beta']);
+    expect(activeTabLabels().sort()).toEqual(['Beta', 'Claude']);
   });
 });

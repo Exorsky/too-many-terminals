@@ -7,12 +7,12 @@ export default function CodeBlock({ lang, code }: { lang?: string; code: string 
   return (
     <div className="group relative rounded-lg border border-border bg-[#0a0b0e] overflow-hidden">
       {lang && (
-        <div className="px-3 py-1.5 border-b border-border text-[10.5px] tracking-[0.04em] text-muted-foreground">
+        <div className="px-3 py-1.5 border-b border-border text-[11.5px] tracking-[0.04em] text-muted-foreground">
           {lang}
         </div>
       )}
       <div className="overflow-x-auto scrollbar-thin">
-        <pre className="m-0 p-3 font-mono text-[12.5px] leading-[1.6] text-foreground whitespace-pre">{code}</pre>
+        <pre className="m-0 p-3 font-mono text-[13.5px] leading-[1.6] text-foreground whitespace-pre">{code}</pre>
       </div>
       <CopyButton
         text={code}

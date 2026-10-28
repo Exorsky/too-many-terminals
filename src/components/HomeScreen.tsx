@@ -34,7 +34,7 @@ const hue = (h: number, l = 58) => `hsl(${h} 55% ${l}%)`;
 
 /** An uppercase panel eyebrow. */
 function Eyebrow({ children }: { children: React.ReactNode }) {
-  return <span className="text-[10px] tracking-[0.16em] uppercase text-muted-foreground">{children}</span>;
+  return <span className="text-[11px] tracking-[0.16em] uppercase text-muted-foreground">{children}</span>;
 }
 
 /** One labelled horizontal bar (command / folder rows). */
@@ -43,14 +43,14 @@ function BarRow({ label, swatch, value, frac, barColor }: {
 }) {
   return (
     <div className="grid grid-cols-[76px_1fr_46px] items-center gap-2.5">
-      <span className="flex items-center gap-2 min-w-0 text-[11px] text-muted-foreground">
+      <span className="flex items-center gap-2 min-w-0 text-[12px] text-muted-foreground">
         {swatch && <span className="w-[7px] h-[7px] rounded-[2px] shrink-0" style={{ background: swatch }} />}
         <span className="truncate">{label}</span>
       </span>
       <span className="h-2 rounded-[2px] bg-raised overflow-hidden">
         <span className="dash-grow block h-full rounded-[2px]" style={{ width: `${(frac * 100).toFixed(1)}%`, background: barColor }} />
       </span>
-      <span className="text-[11px] text-right font-mono tabular-nums text-muted-foreground">{value}</span>
+      <span className="text-[12px] text-right font-mono tabular-nums text-muted-foreground">{value}</span>
     </div>
   );
 }
@@ -60,7 +60,7 @@ function Stat({ value, label }: { value: string; label: string }) {
   return (
     <div>
       <div className="text-[17px] font-medium text-foreground font-mono tabular-nums leading-none">{value}</div>
-      <div className="mt-1 text-[9px] tracking-[0.1em] uppercase text-muted-foreground">{label}</div>
+      <div className="mt-1 text-[10.5px] tracking-[0.1em] uppercase text-muted-foreground">{label}</div>
     </div>
   );
 }
@@ -73,15 +73,15 @@ function UsagePanel({ usage }: { usage: SessionUsageStats | null }) {
     <section className="border-b border-border">
       <div className="flex items-center justify-between px-4 pt-2.5 pb-2">
         <Eyebrow>Rate limit — live</Eyebrow>
-        <span className="text-[9.5px] tracking-[0.08em] uppercase text-muted-foreground">official /usage</span>
+        <span className="text-[11px] tracking-[0.08em] uppercase text-muted-foreground">official /usage</span>
       </div>
       <div className="px-4 pb-4">
         {windows.length === 0 ? (
-          <p className="text-[11px] text-muted-foreground m-0 py-1.5">Usage unavailable — sign in with Claude Code to see your limits.</p>
+          <p className="text-[12px] text-muted-foreground m-0 py-1.5">Usage unavailable — sign in with Claude Code to see your limits.</p>
         ) : windows.map(([label, w]) => (
           <div key={label} className="mt-3 first:mt-1">
             <div className="flex items-baseline justify-between gap-2.5">
-              <span className="text-[10.5px] tracking-[0.06em] uppercase text-muted-foreground">{label}</span>
+              <span className="text-[11.5px] tracking-[0.06em] uppercase text-muted-foreground">{label}</span>
               <span className="text-[15px] font-medium text-foreground font-mono tabular-nums">{Math.round(w!.percent)}%</span>
             </div>
             <span className="mt-1.5 block h-[5px] rounded-[3px] bg-selected overflow-hidden">
@@ -152,7 +152,7 @@ export default function HomeScreen({ projects, onAddProject }: HomeScreenProps) 
   return (
     <div className="absolute inset-0 bg-background flex flex-col overflow-hidden select-none">
       <header className="flex items-center justify-between gap-4 h-10 px-4 shrink-0 border-b border-border">
-        <span className="text-[10.5px] tracking-[0.32em] uppercase text-muted-foreground">
+        <span className="text-[11.5px] tracking-[0.32em] uppercase text-muted-foreground">
           <b className="font-medium text-foreground">Too many</b> terminals
           <span className="text-muted-foreground"> · logbook</span>
         </span>
@@ -163,7 +163,7 @@ export default function HomeScreen({ projects, onAddProject }: HomeScreenProps) 
               aria-pressed={range === r.value}
               onClick={() => setRange(r.value)}
               className={cn(
-                'text-[9.5px] tracking-[0.14em] uppercase px-2.5 py-1 rounded-sm border border-transparent transition-colors cursor-pointer',
+                'text-[11px] tracking-[0.14em] uppercase px-2.5 py-1 rounded-sm border border-transparent transition-colors cursor-pointer',
                 range === r.value ? 'text-foreground bg-raised border-border' : 'text-muted-foreground hover:text-muted-foreground',
               )}
             >
@@ -181,13 +181,13 @@ export default function HomeScreen({ projects, onAddProject }: HomeScreenProps) 
           </p>
           <button
             onClick={onAddProject}
-            className="flex items-center gap-2 px-3.5 py-2 text-[11.5px] text-foreground/90 border border-border-hover rounded-sm hover:bg-raised cursor-pointer"
+            className="flex items-center gap-2 px-3.5 py-2 text-[13px] text-foreground/90 border border-border-hover rounded-sm hover:bg-raised cursor-pointer"
           >
             <FolderOpen size={13} /> Open folder
           </button>
         </div>
       ) : stats === null ? (
-        <div className="flex-1 grid place-items-center text-[11px] tracking-[0.1em] uppercase text-muted-foreground">
+        <div className="flex-1 grid place-items-center text-[12px] tracking-[0.1em] uppercase text-muted-foreground">
           Reading your sessions…
         </div>
       ) : (
@@ -199,11 +199,11 @@ export default function HomeScreen({ projects, onAddProject }: HomeScreenProps) 
                 <span key={u} className="flex items-baseline gap-1.5">
                   {i > 0 && <span className="text-border-hover text-lg self-center mr-2">·</span>}
                   <span className="text-[30px] leading-none font-medium text-foreground font-mono tabular-nums">{v}</span>
-                  <span className="text-[10px] tracking-[0.13em] uppercase text-muted-foreground">{u}</span>
+                  <span className="text-[11px] tracking-[0.13em] uppercase text-muted-foreground">{u}</span>
                 </span>
               ))}
             </div>
-            <p className="mt-2.5 text-[10px] tracking-[0.04em] text-muted-foreground m-0">
+            <p className="mt-2.5 text-[11px] tracking-[0.04em] text-muted-foreground m-0">
               Read from the transcripts Claude Code writes under <span className="text-muted-foreground">~/.claude/projects</span> — offline, nothing uploaded.
             </p>
           </section>
@@ -212,7 +212,7 @@ export default function HomeScreen({ projects, onAddProject }: HomeScreenProps) 
           <section className="border-b border-border">
             <div className="flex items-center justify-between px-4 pt-2.5 pb-1.5">
               <Eyebrow>Cadence — sessions per day, tinted by folder</Eyebrow>
-              <span className="text-[9.5px] tracking-[0.08em] uppercase text-muted-foreground">
+              <span className="text-[11px] tracking-[0.08em] uppercase text-muted-foreground">
                 {range === 'all' ? 'last 3 months' : `${range} days`}
               </span>
             </div>
@@ -231,13 +231,13 @@ export default function HomeScreen({ projects, onAddProject }: HomeScreenProps) 
             <section className="border-b border-border">
               <div className="flex items-center justify-between px-4 pt-2.5 pb-2">
                 <Eyebrow>Top commands</Eyebrow>
-                <span className="text-[9.5px] tracking-[0.08em] uppercase text-muted-foreground font-mono tabular-nums">
+                <span className="text-[11px] tracking-[0.08em] uppercase text-muted-foreground font-mono tabular-nums">
                   {commands.reduce((s, [, n]) => s + n, 0).toLocaleString()} runs
                 </span>
               </div>
               <div className="px-4 pb-4 flex flex-col gap-2">
                 {commands.length === 0
-                  ? <p className="text-[11px] text-muted-foreground m-0 py-1">No shell commands in this window.</p>
+                  ? <p className="text-[12px] text-muted-foreground m-0 py-1">No shell commands in this window.</p>
                   : commands.map(([name, n]) => (
                     <BarRow key={name} label={name} value={n.toLocaleString()} frac={n / cmdMax} barColor="rgb(255 255 255 / 0.22)" />
                   ))}
@@ -249,7 +249,7 @@ export default function HomeScreen({ projects, onAddProject }: HomeScreenProps) 
               <div className="px-4 pt-2.5 pb-2"><Eyebrow>Where the time went</Eyebrow></div>
               <div className="px-4 pb-4 flex flex-col gap-2">
                 {folders.length === 0
-                  ? <p className="text-[11px] text-muted-foreground m-0 py-1">Nothing in this window.</p>
+                  ? <p className="text-[12px] text-muted-foreground m-0 py-1">Nothing in this window.</p>
                   : folders.map((f) => (
                     <BarRow key={f.projectDir} label={f.name} swatch={hue(f.hue)} value={String(f.count)} frac={f.count / folderMax} barColor={hue(f.hue, 50)} />
                   ))}
@@ -260,7 +260,7 @@ export default function HomeScreen({ projects, onAddProject }: HomeScreenProps) 
             <section className="border-b border-border">
               <div className="flex items-center justify-between px-4 pt-2.5 pb-2">
                 <Eyebrow>Rhythm</Eyebrow>
-                <span className="text-[9.5px] tracking-[0.08em] uppercase text-muted-foreground">local time</span>
+                <span className="text-[11px] tracking-[0.08em] uppercase text-muted-foreground">local time</span>
               </div>
               <div className="px-4 pb-4">
                 <div className="flex gap-6">
@@ -278,7 +278,7 @@ export default function HomeScreen({ projects, onAddProject }: HomeScreenProps) 
                     />
                   ))}
                 </div>
-                <div className="flex justify-between mt-1.5 text-[8.5px] tracking-[0.08em] text-muted-foreground font-mono tabular-nums">
+                <div className="flex justify-between mt-1.5 text-[10.5px] tracking-[0.08em] text-muted-foreground font-mono tabular-nums">
                   <span>00</span><span>06</span><span>12</span><span>18</span><span>23</span>
                 </div>
               </div>
@@ -288,7 +288,7 @@ export default function HomeScreen({ projects, onAddProject }: HomeScreenProps) 
             <section className="border-b border-border sm:col-span-2">
               <div className="flex items-center justify-between px-4 pt-2.5 pb-2">
                 <Eyebrow>Depth &amp; models</Eyebrow>
-                <span className="text-[9.5px] tracking-[0.08em] uppercase text-muted-foreground font-mono tabular-nums">
+                <span className="text-[11px] tracking-[0.08em] uppercase text-muted-foreground font-mono tabular-nums">
                   {summary.turns.toLocaleString()} turns total
                 </span>
               </div>
@@ -308,7 +308,7 @@ export default function HomeScreen({ projects, onAddProject }: HomeScreenProps) 
                     </div>
                     <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-2.5">
                       {models.map((m) => (
-                        <span key={m.family} className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                        <span key={m.family} className="flex items-center gap-2 text-[11px] text-muted-foreground">
                           <span className="w-2 h-2 rounded-[2px]" style={{ background: MODEL_HUE[m.family] }} />
                           {m.family}<span className="text-muted-foreground font-mono tabular-nums ml-0.5">{m.pct}%</span>
                         </span>

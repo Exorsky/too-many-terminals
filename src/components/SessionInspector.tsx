@@ -29,7 +29,7 @@ export interface SessionInspectorProps {
  *  no cards, no panels within panels. */
 function Field({ label, children, title }: { label: string; children: React.ReactNode; title?: string }) {
   return (
-    <div className="flex items-baseline gap-3 px-3 py-[5px] text-[11px]">
+    <div className="flex items-baseline gap-3 px-3 py-[5px] text-[12px]">
       <span className="w-[86px] shrink-0 text-muted-foreground">{label}</span>
       <span className="flex-1 min-w-0 break-words text-foreground/90" title={title}>{children}</span>
     </div>
@@ -38,7 +38,7 @@ function Field({ label, children, title }: { label: string; children: React.Reac
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="px-3 pt-4 pb-1 text-[9.5px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">
+    <div className="px-3 pt-4 pb-1 text-[11px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">
       {children}
     </div>
   );
@@ -54,8 +54,8 @@ function Action({ icon: Icon, label, onClick, destructive }: {
     <button
       type="button"
       className={cn(
-        'flex items-center gap-2 w-full h-[26px] px-3 shrink-0 rounded-sm border-none cursor-pointer',
-        'bg-transparent font-inherit text-left text-[11px]',
+        'flex items-center gap-2 w-full h-[30px] px-3 shrink-0 rounded-sm border-none cursor-pointer',
+        'bg-transparent font-inherit text-left text-[12px]',
         destructive
           ? 'text-destructive/85 hover:text-destructive hover:bg-destructive/10'
           : 'text-muted-foreground hover:text-foreground hover:bg-hover',
@@ -105,7 +105,7 @@ export default function SessionInspector({
       className="flex flex-col w-[280px] shrink-0 h-full min-h-0 bg-card border-l border-border overflow-y-auto scrollbar-thin"
     >
       <div className="flex items-center h-9 px-3 shrink-0 border-b border-border">
-        <span className="flex-1 text-[10px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">
+        <span className="flex-1 text-[11px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">
           Session
         </span>
         <button
@@ -121,7 +121,7 @@ export default function SessionInspector({
       {/* The name is editable here rather than being a read-only field: this is
           where you come when the auto-generated title turned out wrong. */}
       <div className="px-3 pt-3 pb-1">
-        <label className="block mb-1 text-[9.5px] uppercase tracking-[0.13em] text-muted-foreground" htmlFor="session-title">
+        <label className="block mb-1 text-[11px] uppercase tracking-[0.13em] text-muted-foreground" htmlFor="session-title">
           Title
         </label>
         <input
@@ -135,7 +135,7 @@ export default function SessionInspector({
             if (e.key === 'Enter') { e.preventDefault(); commit(); (e.target as HTMLInputElement).blur(); }
             else if (e.key === 'Escape') { e.preventDefault(); setDraft(session.name); (e.target as HTMLInputElement).blur(); }
           }}
-          className="w-full h-[26px] px-2 rounded-sm bg-transparent border border-border focus:border-border-hover outline-none font-inherit text-[11.5px] text-foreground"
+          className="w-full h-[30px] px-2 rounded-sm bg-transparent border border-border focus:border-border-hover outline-none font-inherit text-[13px] text-foreground"
         />
       </div>
 
@@ -145,13 +145,13 @@ export default function SessionInspector({
         {session.projectDir === null ? 'Inbox' : folderName(session.projectDir)}
       </Field>
       <Field label="Directory" title={session.cwd}>
-        <span className="text-[10.5px] text-muted-foreground">{session.cwd}</span>
+        <span className="text-[11.5px] text-muted-foreground">{session.cwd}</span>
       </Field>
       {created && <Field label="Created">{created}</Field>}
       {age && <Field label="Last used">{age} ago</Field>}
       {session.resumeSessionId && (
         <Field label="Claude id" title={session.resumeSessionId}>
-          <span className="text-[10px] text-muted-foreground">{session.resumeSessionId.slice(0, 8)}…</span>
+          <span className="text-[11px] text-muted-foreground">{session.resumeSessionId.slice(0, 8)}…</span>
         </Field>
       )}
 
@@ -162,7 +162,7 @@ export default function SessionInspector({
             <button
               key={task.id}
               type="button"
-              className="flex items-center gap-2 w-full px-3 py-1 shrink-0 border-none cursor-pointer bg-transparent font-inherit text-left text-[11px] text-muted-foreground hover:text-foreground hover:bg-hover"
+              className="flex items-center gap-2 w-full px-3 py-1 shrink-0 border-none cursor-pointer bg-transparent font-inherit text-left text-[12px] text-muted-foreground hover:text-foreground hover:bg-hover"
               onClick={() => onOpenTask(task.id)}
               title={task.title}
             >
@@ -179,7 +179,7 @@ export default function SessionInspector({
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              className={cn(ACTION_ROW, 'h-[26px] px-3 text-[11px]')}
+              className={cn(ACTION_ROW, 'h-[30px] px-3 text-[12px]')}
             >
               <FolderInput size={12} className="shrink-0" />
               <span>Move to project…</span>

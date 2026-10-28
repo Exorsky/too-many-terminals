@@ -278,6 +278,30 @@ export function saveSettings(settings: AppSettings): Promise<void> {
   return invoke('save_settings', { settings });
 }
 
+export interface JiraIssue {
+  key: string;
+  summary: string;
+  status: string;
+  /** "new" | "indeterminate" | "done" — Jira's status category. */
+  statusCategory: string;
+  assignee: string | null;
+  reporter: string | null;
+  priority: string | null;
+  created: string | null;
+  updated: string | null;
+}
+
+/** One Jira issue, read-only. The backend reads the URL and token variable
+ *  from saved settings; rejects with a human-readable reason. */
+export function jiraIssue(key: string): Promise<JiraIssue> {
+  return invoke('jira_issue', { key });
+}
+
+/** Whether a token variable resolves (env or ~/.claude/settings.json). */
+export function jiraTokenFound(variable: string): Promise<boolean> {
+  return invoke('jira_token_found', { var: variable });
+}
+
 /** One level of a directory (folders first, then files, alphabetical). */
 export function listDir(dir: string): Promise<DirEntry[]> {
   return invoke('list_dir', { dir });
