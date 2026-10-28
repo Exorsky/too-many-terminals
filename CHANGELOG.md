@@ -11,6 +11,8 @@ listed here; see `git log` for the full history.
 
 ## [Unreleased]
 
+## [0.27.0] - 2026-10-28
+
 ### Added
 
 - **Jira issue keys are links.** Set a Jira URL in Settings › Integrations and
@@ -522,7 +524,8 @@ listed here; see `git log` for the full history.
 - The transcript reader now renders pipe tables, nested/checkbox lists,
   italics, autolinks, and horizontal rules.
 
-[Unreleased]: https://github.com/Exorsky/too-many-terminals/compare/v0.26.0...HEAD
+[Unreleased]: https://github.com/Exorsky/too-many-terminals/compare/v0.27.0...HEAD
+[0.27.0]: https://github.com/Exorsky/too-many-terminals/compare/v0.26.0...v0.27.0
 [0.26.0]: https://github.com/Exorsky/too-many-terminals/compare/v0.25.1...v0.26.0
 [0.25.1]: https://github.com/Exorsky/too-many-terminals/compare/v0.25.0...v0.25.1
 [0.25.0]: https://github.com/Exorsky/too-many-terminals/compare/v0.24.0...v0.25.0
