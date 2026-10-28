@@ -1,0 +1,532 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Too Many Terminals — UI/UX rethink (proposal)</title>
+<style>
+  :root {
+    --bg: #0a0a0c; --card: #101014; --fg: #e9e9ee; --dim: #ababaf; --muted: #7c7c87; --faint: #494950;
+    --border: #1e1e24; --border-h: #303036; --primary: #8b7df7;
+    --success: #45b96a; --warning: #d9a441; --attention: #df7c46; --destructive: #e5534b;
+    --hover: rgba(255,255,255,.04); --selected: rgba(255,255,255,.075); --raised: rgba(255,255,255,.055);
+    --jira: #4c9aff;
+    --sans: -apple-system, "SF Pro Text", "Inter", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace;
+    /* proposed scale */
+    --t-xs: 11px; --t-sm: 12px; --t-base: 13px; --t-lg: 15px;
+    --r: 6px;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #050506; color: var(--fg); font: var(--t-base)/1.45 var(--sans); -webkit-font-smoothing: antialiased; }
+  .doc { max-width: 1360px; margin: 0 auto; padding: 48px 40px 120px; }
+  h1 { font-size: 28px; font-weight: 650; letter-spacing: -.01em; margin: 0 0 6px; }
+  h2 { font-size: 20px; font-weight: 600; margin: 72px 0 6px; letter-spacing: -.005em; }
+  h3 { font-size: 14px; font-weight: 600; margin: 0 0 8px; color: var(--fg); }
+  .lede { color: var(--dim); max-width: 860px; font-size: 14px; }
+  .sub { color: var(--muted); font-size: 13px; margin: 0 0 20px; max-width: 900px; }
+  .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+  /* window frame */
+  .win { position: relative; width: 1280px; height: 780px; border: 1px solid #26262c; border-radius: 12px; overflow: hidden;
+         background: var(--bg); box-shadow: 0 30px 80px rgba(0,0,0,.55); display: flex; flex-direction: column; }
+  .titlebar { height: 40px; display: flex; align-items: center; gap: 8px; padding: 0 10px 0 14px; border-bottom: 1px solid var(--border); background: var(--card); flex-shrink: 0; }
+  .lights { display: flex; gap: 8px; margin-right: 14px; }
+  .lights i { width: 12px; height: 12px; border-radius: 50%; background: #ff5f57; display: block; }
+  .lights i:nth-child(2) { background: #febc2e; } .lights i:nth-child(3) { background: #28c840; }
+  .ib { width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--r); color: var(--muted); }
+  .ib:hover, .ib.on { background: var(--raised); color: var(--fg); }
+  .crumb { position: absolute; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 6px; font-size: var(--t-sm); color: var(--muted); }
+  .crumb b { color: var(--fg); font-weight: 500; }
+  .tb-right { margin-left: auto; display: flex; align-items: center; gap: 12px; font-size: var(--t-xs); color: var(--muted); }
+  .meter { display: flex; align-items: center; gap: 6px; }
+  .meter .bar { width: 44px; height: 4px; border-radius: 2px; background: var(--border-h); position: relative; overflow: hidden; }
+  .meter .bar i { position: absolute; inset: 0 auto 0 0; background: var(--primary); border-radius: 2px; }
+
+  .body { flex: 1; display: flex; min-height: 0; }
+
+  /* sidebar */
+  .side { width: 268px; flex-shrink: 0; background: var(--card); border-right: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; }
+  .search { margin: 10px 10px 6px; height: 30px; border: 1px solid var(--border); border-radius: var(--r); display: flex; align-items: center; gap: 8px; padding: 0 10px; color: var(--muted); font-size: var(--t-base); }
+  .search kbd, kbd { margin-left: auto; font: 10.5px var(--mono); color: var(--muted); border: 1px solid var(--border-h); border-radius: 4px; padding: 0 4px; line-height: 16px; }
+  .nav { padding: 2px 6px 8px; border-bottom: 1px solid var(--border); }
+  .nav a { display: flex; align-items: center; gap: 10px; height: 28px; padding: 0 8px; border-radius: var(--r); color: var(--dim); font-size: var(--t-base); text-decoration: none; }
+  .nav a:hover { background: var(--hover); }
+  .nav a.on { background: var(--selected); color: var(--fg); }
+  .nav a .n { margin-left: auto; font: var(--t-xs) var(--mono); color: var(--muted); }
+  .nav a .n.att { color: var(--attention); }
+  .newbtn { margin: 10px 10px 4px; height: 30px; border: 1px solid var(--border-h); border-radius: var(--r); display: flex; align-items: center; gap: 8px; padding: 0 10px; font-size: var(--t-base); color: var(--fg); }
+  .newbtn kbd { margin-left: auto; }
+  .list { flex: 1; overflow: hidden; padding: 0 6px; }
+  .grp { display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px; margin-top: 8px; font-size: var(--t-sm); font-weight: 600; color: var(--muted); }
+  .grp .n { margin-left: auto; font: var(--t-xs) var(--mono); font-weight: 400; }
+  .grp.fold { font-weight: 500; color: var(--dim); margin-top: 0; }
+  .row { position: relative; display: flex; flex-direction: column; justify-content: center; gap: 1px; min-height: 30px; padding: 5px 8px 5px 10px; border-radius: var(--r); }
+  .row.two { min-height: 44px; }
+  .row:hover { background: var(--hover); }
+  .row.sel { background: var(--selected); }
+  .row .l1 { display: flex; align-items: center; gap: 8px; font-size: var(--t-base); color: var(--dim); }
+  .row.sel .l1 { color: var(--fg); }
+  .row .l1 .name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .l1 .t { font: var(--t-xs) var(--mono); color: var(--muted); }
+  .row .l2 { display: flex; align-items: center; gap: 6px; padding-left: 16px; font-size: var(--t-xs); color: var(--muted); white-space: nowrap; overflow: hidden; }
+  .row .l2 .act b { color: var(--warning); font-weight: 500; }
+  .spine { position: absolute; left: 2px; top: 7px; bottom: 7px; width: 2px; border-radius: 2px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .d-idle { background: var(--success); } .d-work { background: var(--warning); } .d-att { background: var(--attention); box-shadow: 0 0 0 3px rgba(223,124,70,.18); }
+  .d-new { border: 1.5px solid var(--muted); } .d-sleep { background: var(--faint); }
+  .hue { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+  .side-foot { border-top: 1px solid var(--border); padding: 8px 14px 10px; font-size: var(--t-xs); color: var(--muted); display: grid; grid-template-columns: 44px 1fr 34px; row-gap: 6px; align-items: center; }
+  .side-foot .bar { height: 4px; border-radius: 2px; background: var(--border-h); position: relative; overflow: hidden; }
+  .side-foot .bar i { position: absolute; inset: 0 auto 0 0; background: var(--primary); }
+
+  /* jira chip */
+  .jk { display: inline-flex; align-items: center; gap: 4px; height: 18px; padding: 0 6px; border-radius: 4px; font: 500 var(--t-xs)/18px var(--mono);
+        color: #8fbcff; background: rgba(76,154,255,.10); border: 1px solid rgba(76,154,255,.22); white-space: nowrap; flex-shrink: 0; }
+  .jk.s { height: 16px; line-height: 16px; padding: 0 4px; font-size: 10.5px; }
+  .jk .st { width: 6px; height: 6px; border-radius: 2px; background: var(--jira); }
+  .jk .st.done { background: var(--success); } .jk .st.todo { background: var(--muted); }
+
+  /* main */
+  .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .tabs { height: 36px; display: flex; align-items: stretch; border-bottom: 1px solid var(--border); background: var(--card); flex-shrink: 0; }
+  .tabs .plus { width: 36px; display: flex; align-items: center; justify-content: center; color: var(--muted); border-right: 1px solid var(--border); }
+  .tab { position: relative; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 12px; max-width: 240px; border-right: 1px solid var(--border); font-size: var(--t-sm); color: var(--muted); }
+  .tab .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tab.on { background: var(--bg); color: var(--fg); }
+  .tab.on::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 2px; background: var(--primary); }
+  .tab .x { color: var(--faint); margin-left: 2px; }
+  .tab .panes { font: 10.5px var(--mono); color: var(--muted); border: 1px solid var(--border-h); border-radius: 4px; padding: 0 4px; line-height: 15px; }
+  .tabs .tools { margin-left: auto; display: flex; align-items: center; gap: 2px; padding-right: 8px; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; height: 26px; }
+  .seg span { display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; font-size: var(--t-sm); color: var(--muted); }
+  .seg span.on { background: var(--selected); color: var(--fg); }
+
+  .split { flex: 1; display: flex; min-height: 0; }
+  .pane { position: relative; display: flex; flex-direction: column; min-width: 0; }
+  .pane + .pane { border-left: 1px solid var(--border); }
+  .ph { height: 28px; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 12px; font-size: var(--t-sm); color: var(--muted); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .ph .cwd { font: var(--t-xs) var(--mono); color: var(--faint); }
+  .ph .sp { margin-left: auto; display: flex; gap: 2px; }
+  .pane.focus .ph { color: var(--fg); box-shadow: inset 0 -1px 0 var(--primary); }
+  .term { flex: 1; padding: 12px 14px; font: 13px/1.5 var(--mono); color: #cfcfd6; white-space: pre; overflow: hidden; }
+  .term .p { color: var(--success); } .term .c { color: var(--muted); } .term .y { color: var(--warning); } .term .a { color: #b6aaff; }
+  .term u { text-decoration: none; border-bottom: 1px solid currentColor; color: #8fbcff; cursor: pointer; }
+  .term .key { color: #8fbcff; }
+
+  /* hover card */
+  .card { position: absolute; width: 372px; background: #15151a; border: 1px solid var(--border-h); border-radius: 8px; box-shadow: 0 16px 40px rgba(0,0,0,.6); padding: 12px 14px; font-family: var(--sans); white-space: normal; z-index: 5; }
+  .card .top { display: flex; align-items: center; gap: 8px; font-size: var(--t-xs); color: var(--muted); }
+  .card .ttl { font-size: var(--t-base); color: var(--fg); margin: 6px 0 10px; line-height: 1.35; font-weight: 500; }
+  .card .meta { display: grid; grid-template-columns: 74px 1fr; gap: 4px 8px; font-size: var(--t-xs); color: var(--muted); }
+  .card .meta span:nth-child(even) { color: var(--dim); }
+  .card .acts { display: flex; gap: 6px; margin-top: 12px; }
+  .btn { white-space: nowrap; height: 26px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; border: 1px solid var(--border-h); border-radius: var(--r); font-size: var(--t-sm); color: var(--dim); background: transparent; }
+  .btn.pri { border-color: rgba(139,125,247,.5); color: var(--fg); background: rgba(139,125,247,.12); }
+  .pill { font-size: 10.5px; padding: 1px 6px; border-radius: 4px; background: rgba(76,154,255,.14); color: #8fbcff; font-weight: 500; }
+
+  /* annotation badges */
+  .ann { position: absolute; width: 20px; height: 20px; border-radius: 50%; background: #ffd84d; color: #111; font: 700 11px/20px var(--sans); text-align: center; box-shadow: 0 0 0 3px rgba(255,216,77,.25); z-index: 9; }
+  .notes { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px 32px; margin-top: 18px; max-width: 1280px; }
+  .note { display: flex; gap: 10px; font-size: 13px; color: var(--dim); }
+  .note .ann { position: static; flex-shrink: 0; }
+  .note b { color: var(--fg); font-weight: 600; }
+
+  /* panels for detail screens */
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; max-width: 1280px; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; max-width: 1280px; }
+  .panel { position: relative; background: var(--bg); border: 1px solid #26262c; border-radius: 10px; padding: 16px; }
+  .panel .cap { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: 12px; font-weight: 600; }
+  .panel p { margin: 10px 0 0; font-size: 12.5px; color: var(--muted); }
+  .bad { color: var(--destructive); } .good { color: var(--success); }
+  table.scale { border-collapse: collapse; width: 100%; font-size: 13px; }
+  table.scale th { text-align: left; font-weight: 600; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  table.scale td { padding: 9px 10px; border-bottom: 1px solid var(--border); color: var(--dim); vertical-align: middle; }
+  table.scale td.old { color: var(--muted); text-decoration: line-through; text-decoration-color: rgba(229,83,75,.6); }
+  .stripdemo { display: flex; height: 32px; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; background: var(--card); font-size: 12px; }
+  .stripdemo > div { display: flex; align-items: center; gap: 6px; padding: 0 10px; border-right: 1px solid var(--border); color: var(--muted); }
+  .stripdemo > div.on { background: var(--bg); color: var(--fg); box-shadow: inset 0 2px 0 var(--primary); }
+  .stripdemo > div.new { color: var(--fg); background: rgba(139,125,247,.10); }
+  .mini { display: flex; height: 150px; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; background: var(--bg); font: 11px var(--mono); color: var(--muted); }
+  .mini > div { flex: 1; padding: 8px; }
+  .mini > div + div { border-left: 1px solid var(--border); }
+  .mini .h { font-family: var(--sans); font-size: 11px; color: var(--dim); margin-bottom: 6px; }
+  .kbdrow { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 12.5px; color: var(--dim); }
+  .kbdrow:last-child { border-bottom: 0; }
+  .schem { display: flex; height: 230px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; font-size: 11px; color: var(--muted); }
+  .schem .s { width: 34%; background: var(--card); border-right: 1px solid var(--border); padding: 8px; display: flex; flex-direction: column; gap: 4px; }
+  .schem .m { flex: 1; position: relative; }
+  .schem .blk { border: 1px dashed var(--border-h); border-radius: 4px; padding: 4px 6px; }
+  .schem .hot { border: 1px solid #ffd84d; color: #ffd84d; }
+  .schem .top { height: 26px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: center; }
+  .rail { width: 52px; background: var(--card); border-right: 1px solid var(--border); display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 0; }
+  .rail .ib { width: 32px; height: 32px; }
+  .rail .sq { width: 32px; height: 32px; border-radius: var(--r); display: flex; align-items: center; justify-content: center; position: relative; }
+  .rail .sep { width: 24px; height: 1px; background: var(--border); margin: 6px 0; }
+  svg.i { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+  svg.i.s { width: 13px; height: 13px; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+    <symbol id="i-term" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="m8 12 3 3 5-6"/></symbol>
+    <symbol id="i-lib" viewBox="0 0 24 24"><path d="M4 4v16M9 4v16M14 4l5 16"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-side" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></symbol>
+    <symbol id="i-split" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/></symbol>
+    <symbol id="i-splitd" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 12h18"/></symbol>
+    <symbol id="i-files" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+    <symbol id="i-doc" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 13h6M9 17h6"/></symbol>
+    <symbol id="i-insp" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+    <symbol id="i-chevd" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-ext" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 17v5M8 3h8l-1 6 3 3v2H6v-2l3-3z"/></symbol>
+    <symbol id="i-jira" viewBox="0 0 24 24"><path d="M12 3 3 12l9 9 9-9z"/><path d="m12 8-4 4 4 4 4-4z"/></symbol>
+  </defs>
+</svg>
+
+<div class="doc">
+  <h1>UI/UX rethink — proposal</h1>
+  <p class="lede">Five changes, one screen each: <b>one navigation column</b>, <b>tabs that hold splits</b> (the <code>+</code> splits instead of adding a tab, newest tab on the left), <b>Jira keys linked everywhere</b>, and a <b>13px type scale</b> with 4px-grid spacing. Today/Yesterday/This week grouping stays exactly as it is — it's what works.</p>
+
+  <!-- ============ SCREEN A ============ -->
+  <h2>A · The Sessions screen, after</h2>
+  <p class="sub">Everything you navigate to is in one block at the top-left. Tabs are your working set of sessions; each tab owns its own splits. The selected session's ticket is in the title bar.</p>
+
+  <div class="win" id="screenA">
+    <div class="titlebar">
+      <div class="lights"><i></i><i></i><i></i></div>
+      <span class="ib on" title="Hide sidebar ⌘B"><svg class="i"><use href="#i-side"/></svg></span>
+      <div class="crumb">
+        <span class="hue" style="background:hsl(210 70% 60%)"></span> monitoring
+        <svg class="i s" style="color:var(--faint)"><use href="#i-chev"/></svg>
+        <span class="jk s"><span class="st"></span>PROJ-4821</span>
+        <b>Fix Grafana alert noise</b>
+      </div>
+      <div class="tb-right">
+        <span class="meter">Session <span class="bar"><i style="width:42%"></i></span><span class="mono">42%</span></span>
+        <span class="meter">Week <span class="bar"><i style="width:18%"></i></span><span class="mono">18%</span></span>
+      </div>
+    </div>
+
+    <div class="body">
+      <aside class="side">
+        <div class="search"><svg class="i s"><use href="#i-search"/></svg> Search or jump… <kbd>⌘K</kbd></div>
+        <nav class="nav">
+          <a class="on"><svg class="i"><use href="#i-term"/></svg>Sessions<span class="n">14</span></a>
+          <a><svg class="i"><use href="#i-check"/></svg>To-Do<span class="n">4</span></a>
+          <a><svg class="i"><use href="#i-lib"/></svg>Library</a>
+          <a><svg class="i"><use href="#i-gear"/></svg>Settings<span class="n">⌘,</span></a>
+        </nav>
+        <div class="newbtn"><svg class="i s" style="color:var(--primary)"><use href="#i-plus"/></svg>New session<kbd>⌘N</kbd></div>
+
+        <div class="list">
+          <div class="grp">Now<span class="n">3</span></div>
+          <div class="row two"><span class="spine" style="background:var(--attention)"></span>
+            <div class="l1"><span class="dot d-att"></span><span class="name">Login fails on staging</span><span class="jk s">HELP-1203</span></div>
+            <div class="l2"><span class="hue" style="background:hsl(140 60% 55%)"></span> support · <span>waiting 4m</span></div>
+          </div>
+          <div class="row two sel"><span class="spine" style="background:var(--warning)"></span>
+            <div class="l1"><span class="dot d-work"></span><span class="name">Fix Grafana alert noise</span><span class="jk s">PROJ-4821</span></div>
+            <div class="l2"><span class="hue" style="background:hsl(210 70% 60%)"></span> infra · <span class="act">editing <b>alerts.yaml</b></span></div>
+          </div>
+          <div class="row"><span class="spine" style="background:var(--warning)"></span>
+            <div class="l1"><span class="dot d-work"></span><span class="name">Terraform DNS cleanup</span><span class="t">2m</span></div>
+          </div>
+
+          <div class="grp">Today<span class="n">5</span></div>
+          <div class="row"><div class="l1"><span class="dot d-idle"></span><span class="name">Upgrade openssh on bastion</span><span class="jk s">SECU-77</span></div></div>
+          <div class="row"><div class="l1"><span class="dot d-idle"></span><span class="name">Rotate staging certificates</span><span class="jk s">TASK-15211</span></div></div>
+          <div class="row"><div class="l1"><span class="dot d-idle"></span><span class="name">tmt: tabs open on the left</span><span class="t">1h</span></div></div>
+          <div class="row"><div class="l1"><span class="dot d-sleep"></span><span class="name">Shell · monitoring</span><span class="t">3h</span></div></div>
+
+          <div class="grp fold"><svg class="i s"><use href="#i-chev"/></svg>Yesterday<span class="n">6</span></div>
+          <div class="grp fold"><svg class="i s"><use href="#i-chev"/></svg>This week<span class="n">11</span></div>
+          <div class="grp fold"><svg class="i s"><use href="#i-chev"/></svg>Projects<span class="n">5</span></div>
+        </div>
+      </aside>
+
+      <section class="main">
+        <div class="tabs">
+          <span class="plus" title="New session tab ⌘T"><svg class="i"><use href="#i-plus"/></svg></span>
+          <div class="tab on"><span class="dot d-work"></span><span class="name">Fix Grafana alert noise</span><span class="panes">2</span><svg class="i s x"><use href="#i-x"/></svg></div>
+          <div class="tab"><span class="dot d-att"></span><span class="name">Login fails on staging</span></div>
+          <div class="tab"><span class="dot d-idle"></span><span class="name">Upgrade openssh</span></div>
+          <div class="tab"><span class="dot d-idle"></span><span class="name">Rotate certs…</span></div>
+          <div class="tools">
+            <span class="ib" title="Split right ⌘D"><svg class="i"><use href="#i-split"/></svg></span>
+            <span class="ib" title="Split down ⌘⇧D"><svg class="i"><use href="#i-splitd"/></svg></span>
+            <span class="ib" title="Files ⌘E"><svg class="i"><use href="#i-files"/></svg></span>
+            <span class="ib" title="Transcript ⌘R"><svg class="i"><use href="#i-doc"/></svg></span>
+            <span class="ib" title="Details ⌘I"><svg class="i"><use href="#i-insp"/></svg></span>
+          </div>
+        </div>
+
+        <div class="split">
+          <div class="pane focus" style="flex: 1.45">
+            <div class="ph"><span class="dot d-work"></span>Claude<span class="cwd">~/work/monitoring</span><span class="sp"><span class="ib"><svg class="i s"><use href="#i-x"/></svg></span></span></div>
+<div class="term"><span class="a">●</span> Reading the alert rules for <u>PROJ-4821</u>. The noisy one is
+  <span class="y">prod1-node-disk-pressure</span>, firing 212× in 7 days.
+
+<span class="a">●</span> Update(alerts/prod1.yaml)
+  <span class="c">⎿  for: 5m → for: 20m</span>
+  <span class="c">⎿  threshold 85% → 90% (backtest: 212 → 9 firings)</span>
+
+<span class="a">●</span> Related: <u>PROJ-4790</u> (same rule, closed as duplicate),
+  and <u>HELP-1180</u> reported the same page storm.
+
+<span class="c">  ✻ Running terraform plan… (12s · esc to interrupt)</span>
+
+<span class="c">────────────────────────────────────────────────</span>
+<span class="p">&gt;</span> <span style="background:#cfcfd6;color:#0a0a0c"> </span>
+</div>
+            <div class="card" style="left:190px; top:52px;">
+              <div class="top"><svg class="i s" style="color:var(--jira)"><use href="#i-jira"/></svg><span class="mono">PROJ-4821</span><span class="pill">In Progress</span><span style="margin-left:auto">⌘-click opens</span></div>
+              <div class="ttl">Grafana: prod1 disk-pressure alert pages on-call ~30× per day</div>
+              <div class="meta"><span>Assignee</span><span>A.Smith</span><span>Priority</span><span>High</span><span>Updated</span><span>28.10.2026 13:02</span><span>Sessions</span><span>this one, +1 yesterday</span></div>
+              <div class="acts"><span class="btn pri"><svg class="i s"><use href="#i-ext"/></svg>Open in Jira</span><span class="btn">Copy key</span><span class="btn">New session for this</span></div>
+            </div>
+          </div>
+          <div class="pane" style="flex: 1">
+            <div class="ph"><svg class="i s"><use href="#i-term"/></svg>Shell<span class="cwd">~/work/monitoring</span><span class="sp"><span class="ib"><svg class="i s"><use href="#i-x"/></svg></span></span></div>
+<div class="term"><span class="p">➜</span> terraform plan -target=module.alerts
+<span class="c">module.alerts.grafana_rule_group.prod1:
+  Refreshing state... [id=prod1-node]</span>
+
+  <span class="y">~</span> for       = "5m" -> "20m"
+  <span class="y">~</span> threshold = 85 -> 90
+
+<span class="p">Plan:</span> 0 to add, 1 to change, 0 to destroy.
+
+<span class="p">➜</span> git commit -m "fix(alerts): <span class="key">PROJ-4821</span>
+  calm prod1 disk pressure"
+<span class="p">➜</span> <span style="background:#cfcfd6;color:#0a0a0c"> </span>
+</div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <span class="ann" style="left:252px; top:96px">1</span>
+    <span class="ann" style="left:252px; top:224px">2</span>
+    <span class="ann" style="left:252px; top:292px">3</span>
+    <span class="ann" style="left:842px; top:10px">4</span>
+    <span class="ann" style="left:296px; top:30px">5</span>
+    <span class="ann" style="left:486px; top:30px">6</span>
+    <span class="ann" style="left:1250px; top:30px">7</span>
+    <span class="ann" style="left:446px; top:120px">8</span>
+    <span class="ann" style="left:1000px; top:10px">9</span>
+  </div>
+
+  <div class="notes">
+    <div class="note"><span class="ann">1</span><div><b>One navigation block.</b> Sessions / To-Do / Library / Settings live together, top-left, same row height as the list. The centered Sessions|To-Do switch and the Library/Settings footer are both gone.</div></div>
+    <div class="note"><span class="ann">2</span><div><b>One create button</b>, full width, under the nav — "New session in infra" when you're inside a project.</div></div>
+    <div class="note"><span class="ann">3</span><div><b>Jira key chip</b> on any row whose name holds a key. The time moves into line 2 when a chip takes its place.</div></div>
+    <div class="note"><span class="ann">4</span><div><b>Title-bar breadcrumb</b>: project › ticket › session. Replaces the centered nav switch; answers "where am I" even with the sidebar hidden.</div></div>
+    <div class="note"><span class="ann">5</span><div><b>New tabs appear on the left</b>, right next to the <code>+</code> that made them. Newest-first, same as the sidebar.</div></div>
+    <div class="note"><span class="ann">6</span><div><b>A tab is a session; its splits live inside it.</b> The <span class="mono">2</span> badge counts its panes. Switching tabs brings that session's whole layout back.</div></div>
+    <div class="note"><span class="ann">7</span><div><b>Split right / down</b> are first-class buttons (⌘D / ⌘⇧D, iTerm/Ghostty convention). Splitting opens a Shell in the session's cwd — no menu.</div></div>
+    <div class="note"><span class="ann">8</span><div><b>Keys in terminal output are links</b>: underline on hover, ⌘-click opens Jira, hover shows the card (title, status, assignee, other sessions on this ticket).</div></div>
+    <div class="note"><span class="ann">9</span><div><b>Usage meter moved to the title bar</b>, still with words. The sidebar footer is now empty, so the list gets that height back.</div></div>
+  </div>
+
+  <!-- ============ SCREEN B ============ -->
+  <h2>B · Navigation in one place</h2>
+  <p class="sub">Today the destinations are split across three places: a centered switch in the title bar, a footer at the bottom of the sidebar, and ⌘K in the title-bar corner. After: one block. Collapsing the sidebar keeps the same icons in the same order.</p>
+  <div class="grid3">
+    <div class="panel">
+      <div class="cap">Now (v0.26)</div>
+      <div class="schem">
+        <div class="s" style="justify-content:space-between">
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <div class="blk">search · ‹ sidebar</div>
+            <div class="blk">New session</div>
+            <div class="blk" style="height:70px">Now / Today / …</div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <div class="blk hot">Library · Settings</div>
+            <div class="blk">usage meter</div>
+          </div>
+        </div>
+        <div class="m"><div class="top"><span class="blk hot">Sessions | To-Do</span></div></div>
+      </div>
+      <p><span class="bad">3 places</span> to look for "where do I go". The mode switch sits in the title bar, far from the list it changes.</p>
+    </div>
+    <div class="panel">
+      <div class="cap">After</div>
+      <div class="schem">
+        <div class="s">
+          <div class="blk hot">⌘K search<br>Sessions · To-Do · Library · Settings</div>
+          <div class="blk">New session</div>
+          <div class="blk" style="flex:1">Now / Today / …</div>
+        </div>
+        <div class="m"><div class="top">project › ticket › session &nbsp;·&nbsp; usage</div></div>
+      </div>
+      <p><span class="good">1 place.</span> The title bar holds only context (breadcrumb) and status (usage) — nothing you navigate with.</p>
+    </div>
+    <div class="panel" style="display:flex;gap:16px">
+      <div>
+        <div class="cap">Collapsed (⌘B)</div>
+        <div class="rail" style="height:330px;border:1px solid var(--border);border-radius:8px">
+          <span class="ib"><svg class="i"><use href="#i-search"/></svg></span>
+          <span class="ib on"><svg class="i"><use href="#i-term"/></svg></span>
+          <span class="ib"><svg class="i"><use href="#i-check"/></svg></span>
+          <span class="ib"><svg class="i"><use href="#i-lib"/></svg></span>
+          <span class="ib"><svg class="i"><use href="#i-gear"/></svg></span>
+          <span class="sep"></span>
+          <span class="sq" style="background:rgba(223,124,70,.14)"><span class="dot d-att"></span></span>
+          <span class="sq" style="background:var(--selected)"><span class="dot d-work"></span></span>
+          <span class="sq"><span class="dot d-work"></span></span>
+          <span class="sq"><span class="dot d-idle"></span></span>
+        </div>
+      </div>
+      <div style="font-size:12.5px;color:var(--muted);padding-top:26px">
+        Same five items, same order, same top position as the expanded sidebar — collapsing never moves a target.<br><br>
+        <b style="color:var(--dim)">⌘1 – ⌘4</b> jump to Sessions / To-Do / Library / Settings.<br><br>
+        Below the line: live sessions as status squares, as today.
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ SCREEN C ============ -->
+  <h2>C · Tabs and splits</h2>
+  <p class="sub">The model every terminal you've used (iTerm2, Ghostty, Warp, WezTerm) teaches: <b>a window has tabs, a tab has panes</b>. Today a pane has tabs instead, so "+ Shell" lands as another tab in the same strip rather than beside Claude.</p>
+  <div class="grid2">
+    <div class="panel">
+      <div class="cap">Tab order — now</div>
+      <div class="stripdemo"><div>Alpha</div><div>Beta</div><div>Gamma</div><div class="on">Delta</div><div class="new">● newest</div></div>
+      <p>New tab is appended at the right end; after a dozen it's off-screen and you scroll for the thing you just opened.</p>
+      <div class="cap" style="margin-top:18px">Tab order — after</div>
+      <div class="stripdemo"><div style="padding:0 12px">+</div><div class="new">● newest</div><div class="on">Delta</div><div>Gamma</div><div>Beta</div><div>Alpha</div></div>
+      <p>New tab goes to the left edge, beside the <code>+</code>. The strip reads newest → oldest, like the sidebar's Today list. Old tabs fall off the right end, which is where overflow already hides them. ⌘1 is always "the one I just opened".</p>
+      <p><b style="color:var(--attention)">Trade-off:</b> no terminal I checked (iTerm2, Ghostty, Warp, VS Code) does this. They insert after the current tab, because newest-left shifts every tab's position and its ⌘-number on each open. So it becomes a setting, <span class="mono">New tabs: left edge | after current</span>, defaulting to left as you asked.</p>
+    </div>
+    <div class="panel">
+      <div class="cap">"+ Shell" — now</div>
+      <div class="stripdemo" style="margin-bottom:6px"><div class="on">Fix alert noise</div><div class="new">Fix alert noise · Shell</div></div>
+      <div class="mini"><div><div class="h">Claude (hidden behind the Shell tab)</div></div></div>
+      <div class="cap" style="margin-top:18px">"Split" — after</div>
+      <div class="stripdemo" style="margin-bottom:6px"><div class="on">Fix alert noise <span class="mono" style="font-size:10px;border:1px solid var(--border-h);border-radius:3px;padding:0 3px">2</span></div><div>VPN drops…</div></div>
+      <div class="mini"><div><div class="h">Claude</div>&gt; working…</div><div><div class="h">Shell · same cwd</div>➜ terraform plan</div></div>
+      <p>Split opens a <b>new shell beside Claude in the same tab</b>. Several shells per session are allowed (today it's one: <span class="mono">&lt;id&gt;::shell</span>). Closing a pane never closes the session.</p>
+    </div>
+  </div>
+  <div class="grid2" style="margin-top:20px">
+    <div class="panel">
+      <div class="cap">Shortcuts</div>
+      <div class="kbdrow"><span>New session (tab, left edge)</span><kbd>⌘T / ⌘N</kbd></div>
+      <div class="kbdrow"><span>Split right — new shell</span><kbd>⌘D</kbd></div>
+      <div class="kbdrow"><span>Split down — new shell</span><kbd>⌘⇧D</kbd></div>
+      <div class="kbdrow"><span>Close pane (session keeps running)</span><kbd>⌘W</kbd></div>
+      <div class="kbdrow"><span>Move focus between panes</span><kbd>⌘⌥ ←→↑↓</kbd></div>
+      <div class="kbdrow"><span>Go to tab 1…9 (1 = newest)</span><kbd>⌘1…9</kbd></div>
+      <div class="kbdrow"><span>Jump to the session waiting on you (cmux)</span><kbd>⌘⇧U</kbd></div>
+      <div class="kbdrow"><span>Files / Transcript as a pane</span><kbd>⌘E / ⌘R</kbd></div>
+    </div>
+    <div class="panel">
+      <div class="cap">What changes underneath</div>
+      <p style="margin-top:0">The pane algebra in <span class="mono">lib/panes.ts</span> (grid, split, seams, drop zones) stays as is; it just moves from <b>one global layout</b> to <b>one layout per session tab</b>. Pane tab strips go away — a pane gets a 28px header (tool, cwd, ×) instead.</p>
+      <p>Dragging a pane header onto another pane's edge still re-splits; dragging a sidebar row onto a pane edge still puts another session beside this one ("compare two sessions").</p>
+      <p>Tab order: <span class="mono">splice(at === -1 ? length : at)</span> → insert at 0 in <span class="mono">addToPane</span>; one place, every opener goes through it.</p>
+    </div>
+  </div>
+
+  <!-- ============ SCREEN D ============ -->
+  <h2>D · Jira, everywhere a key shows up</h2>
+  <p class="sub">One detector (<span class="mono">[A-Z][A-Z0-9]+-\d+</span>, limited to your project keys so <span class="mono">UTF-8</span> or <span class="mono">SHA-256</span> never link) applied to four surfaces. Works with just a base URL; with a token it also shows title and status.</p>
+  <div class="grid2">
+    <div class="panel">
+      <div class="cap">1 · Session names & tabs</div>
+      <div style="background:var(--card);border-radius:8px;padding:6px;width:280px">
+        <div class="row two"><div class="l1"><span class="dot d-att"></span><span class="name">Login fails on staging</span><span class="jk s">HELP-1203</span></div><div class="l2">support · waiting 4m</div></div>
+        <div class="row two sel"><div class="l1"><span class="dot d-work"></span><span class="name">Fix Grafana alert noise</span><span class="jk s">PROJ-4821</span></div><div class="l2">infra · editing <b style="color:var(--warning);font-weight:500">alerts.yaml</b></div></div>
+      </div>
+      <p>The key is lifted out of the auto-generated name into a chip, so the name gets its words back. Click the chip → Jira. Search matches keys too: type <span class="mono">4821</span>.</p>
+    </div>
+    <div class="panel">
+      <div class="cap">2 · Terminal output & transcript</div>
+      <div class="term" style="padding:0;font-size:12.5px;white-space:pre;color:#cfcfd6">● Related: <u>PROJ-4790</u> (closed as duplicate)
+  and <u>HELP-1180</u> reported the same storm.
+  Checksum: SHA-256 <span class="c">← not a link: SHA isn't a project</span></div>
+      <p>xterm link provider, the same one URLs already use: underline on hover, <b>⌘-click</b> opens, hover shows the card from screen A. The Markdown transcript renders the same keys as links.</p>
+    </div>
+    <div class="panel">
+      <div class="cap">3 · Start from a ticket</div>
+      <div style="background:var(--card);border:1px solid var(--border-h);border-radius:10px;padding:14px;width:100%">
+        <div style="font-size:15px;font-weight:600;margin-bottom:10px">New session</div>
+        <div class="search" style="margin:0 0 10px;height:32px"><svg class="i s" style="color:var(--jira)"><use href="#i-jira"/></svg><span style="color:var(--fg)" class="mono">PROJ-4821</span><span class="pill" style="margin-left:auto">In Progress</span></div>
+        <div style="font-size:13px;color:var(--dim);margin-bottom:10px">Grafana: prod1 disk-pressure alert pages on-call ~30× per day</div>
+        <div style="display:flex;gap:8px;font-size:12px;color:var(--muted);margin-bottom:12px">Project <span class="btn" style="height:22px"><span class="hue" style="background:hsl(210 70% 60%)"></span>monitoring <svg class="i s"><use href="#i-chevd"/></svg></span></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end"><span class="btn">Cancel</span><span class="btn pri">Start Claude on PROJ-4821</span></div>
+      </div>
+      <p>Paste a key or a Jira URL into New session: the session is named <i>"PROJ-4821 · Grafana: prod1 …"</i> and Claude's first prompt is pre-filled with the key. Its project is remembered per Jira project (PROJ → monitoring).</p>
+    </div>
+    <div class="panel">
+      <div class="cap">4 · Settings › Integrations</div>
+      <div style="display:grid;grid-template-columns:150px 1fr;gap:12px 14px;font-size:13px;align-items:center">
+        <span style="color:var(--dim)">Jira URL</span><span class="search mono" style="margin:0;height:30px;color:var(--fg);font-size:12px">https://jira.example.com</span>
+        <span style="color:var(--dim)">Project keys</span><span style="display:flex;gap:6px;flex-wrap:wrap"><span class="jk s">PROJ</span><span class="jk s">HELP</span><span class="jk s">SECU</span><span class="jk s">TASK</span><span class="jk s">SEC</span><span class="btn" style="height:18px;font-size:11px">Fetch from Jira</span></span>
+        <span style="color:var(--dim)">Token <span style="color:var(--muted)">(optional)</span></span><span class="search" style="margin:0;height:30px">•••••••••••• <span style="margin-left:auto;font-size:11px;color:var(--success)">● stored in Keychain</span></span>
+        <span style="color:var(--dim)">CVE ids</span><span style="font-size:12px;color:var(--muted)">Link <span class="mono">CVE-…</span> to cve.org</span>
+      </div>
+      <p>Read-only by design: the app only ever GETs <span class="mono">/rest/api/2/issue/{key}?fields=summary,status,assignee,priority</span>, cached for 5 min. No token → keys still link, just without the card. A 302 to SSO (off VPN) shows "Jira unreachable — VPN?" on the card instead of an empty one.</p>
+    </div>
+  </div>
+
+  <!-- ============ SCREEN E ============ -->
+  <h2>E · Type, spacing, shape</h2>
+  <p class="sub">The chrome is currently 11.5px rows with 9.5px metadata on 26px rows — denser than Linear, VS Code or Zed, and at 9.5px the metadata is hard to read on a non-Retina display. Proposal: one step up everywhere, on a 4px grid.</p>
+  <div class="grid2">
+    <div class="panel">
+      <table class="scale">
+        <tr><th>Token</th><th>Now</th><th>After</th><th>Used for</th></tr>
+        <tr><td>Body / row name</td><td class="old">11.5px</td><td><b>13px</b></td><td>session names, nav, buttons</td></tr>
+        <tr><td>Secondary</td><td class="old">10.5–11px</td><td><b>12px</b></td><td>tabs, pane headers, group labels</td></tr>
+        <tr><td>Meta (floor)</td><td class="old">9–9.5px</td><td><b>11px</b></td><td>times, counts, cwd, kbd hints</td></tr>
+        <tr><td>Heading</td><td class="old">12.5–13px</td><td><b>15px</b> / 600</td><td>dialog & page titles</td></tr>
+        <tr><td>Row height</td><td class="old">26 / 34px</td><td><b>30 / 44px</b></td><td>one-line / two-line row</td></tr>
+        <tr><td>Bars</td><td class="old">32 / 40 / 54px</td><td><b>28 / 36 / 40px</b></td><td>pane header / tab strip / title bar</td></tr>
+        <tr><td>Sidebar</td><td class="old">user-sized</td><td><b>268px</b> default</td><td>still resizable 220–400</td></tr>
+        <tr><td>Radius</td><td class="old">0px rows, 2px menus</td><td><b>6px</b> rows/inputs, 8px menus</td><td>matches macOS 15 controls</td></tr>
+        <tr><td>Group labels</td><td class="old">UPPERCASE 10px</td><td><b>Sentence case</b> 12px/600</td><td>Now · Today · Yesterday</td></tr>
+        <tr><td>Terminal</td><td class="old">14px Cascadia → fallback</td><td><b>13px</b> JetBrains Mono / SF Mono, lh 1.35</td><td>setting, default changed</td></tr>
+      </table>
+    </div>
+    <div class="panel">
+      <div class="cap">Same row, before → after</div>
+      <div style="display:flex;gap:18px;align-items:flex-start">
+        <div style="width:236px;background:var(--card);padding:6px 4px;border-radius:2px">
+          <div style="font-size:10px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);padding:6px 12px 2px">Today</div>
+          <div style="position:relative;height:34px;padding:0 6px 0 10px;background:var(--selected);display:flex;flex-direction:column;justify-content:center">
+            <div style="display:flex;gap:8px;align-items:center;font-size:11.5px"><span class="dot d-work" style="width:7px;height:7px"></span><span style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">PROJ-4821 Fix Grafana alert no…</span></div>
+            <div style="font-size:9.5px;color:var(--muted);padding-left:15px">infra · editing alerts.yaml</div>
+          </div>
+          <div style="height:26px;padding:0 6px 0 10px;display:flex;gap:8px;align-items:center;font-size:11.5px;color:var(--dim)"><span class="dot d-idle" style="width:7px;height:7px"></span><span style="flex:1">TASK-15211 Repair or repl…</span><span style="font:9.5px var(--mono);color:var(--muted)">2h</span></div>
+        </div>
+        <div style="width:268px;background:var(--card);padding:6px;border-radius:8px">
+          <div class="grp" style="margin-top:0">Today<span class="n">5</span></div>
+          <div class="row two sel"><div class="l1"><span class="dot d-work"></span><span class="name">Fix Grafana alert noise</span><span class="jk s">PROJ-4821</span></div><div class="l2">infra · <span class="act">editing <b>alerts.yaml</b></span></div></div>
+          <div class="row"><div class="l1"><span class="dot d-idle"></span><span class="name">Rotate certs</span><span class="jk s">TASK-15211</span></div></div>
+        </div>
+      </div>
+      <p><b style="color:var(--dim)">Fonts.</b> Chrome stays on the system font (SF Pro on macOS, Segoe UI on Windows) — native beats bundled for a desktop app. The terminal is the one place a bundled font pays: today it asks for Cascadia Code → Consolas, neither of which is installed on this Mac, so it falls through to WebKit's generic monospace. Proposal: bundle JetBrains Mono (OFL), list <span class="mono">ui-monospace, SF Mono, Menlo</span> as fallbacks, and make family/size a Settings field.</p>
+      <p><b style="color:var(--dim)">Color.</b> Unchanged, with one addition: Jira blue <span class="mono">#4c9aff</span> as a <i>link</i> color only — never a status, so it can't collide with the reserved success/warning/attention/destructive set.</p>
+    </div>
+  </div>
+
+  <h2>Rollout order</h2>
+  <p class="sub" style="font-size:13.5px;color:var(--dim)">
+    1. <b>Quick fixes</b> — new tabs at the left; "+ Shell" splits beside instead of adding a tab. Small diffs in <span class="mono">addToPane</span> and <span class="mono">PaneSessionMenu</span>.<br>
+    2. <b>Navigation</b> — one block in the sidebar, breadcrumb + usage in the title bar, ⌘1–4.<br>
+    3. <b>Jira links</b> — detector + chips + terminal/transcript links with just a URL; then the hover card and "start from ticket" once a token is set.<br>
+    4. <b>Type scale</b> — tokens in <span class="mono">globals.css</span>, then a sweep of the hardcoded <span class="mono">text-[11.5px]</span>/<span class="mono">text-[9.5px]</span> literals.<br>
+    5. <b>Tabs own their splits</b> — per-session layout; the biggest change, last, once 1–4 have settled.
+  </p>
+</div>
+</body>
+</html>
