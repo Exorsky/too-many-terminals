@@ -11,6 +11,8 @@ listed here; see `git log` for the full history.
 
 ## [Unreleased]
 
+## [0.28.0] - 2026-10-29
+
 ### Added
 
 - **Fifteen new themes, light ones included.** Catppuccin Mocha and Latte,
