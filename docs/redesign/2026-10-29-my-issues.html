@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Too Many Terminals — My issues, three directions</title>
+<style>
+  :root {
+    --bg: #0a0a0c; --card: #101014; --fg: #e9e9ee; --dim: #ababaf; --muted: #7c7c87; --faint: #494950;
+    --border: #1e1e24; --border-h: #303036; --primary: #8b7df7;
+    --success: #45b96a; --warning: #d9a441; --attention: #df7c46; --destructive: #e5534b;
+    --hover: rgba(255,255,255,.04); --selected: rgba(255,255,255,.075); --raised: rgba(255,255,255,.055);
+    --link: #7fb2ff;
+    --sans: -apple-system, "SF Pro Text", "Inter", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace;
+    --r: 6px;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #050506; color: var(--fg); font: 13px/1.45 var(--sans); -webkit-font-smoothing: antialiased; }
+  .doc { max-width: 1360px; margin: 0 auto; padding: 48px 40px 120px; }
+  h1 { font-size: 28px; font-weight: 650; letter-spacing: -.01em; margin: 0 0 6px; }
+  h2 { font-size: 20px; font-weight: 600; margin: 72px 0 6px; }
+  .lede { color: var(--dim); max-width: 860px; font-size: 14px; }
+  .sub { color: var(--muted); font-size: 13px; margin: 0 0 20px; max-width: 900px; }
+  .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .notes { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 18px; max-width: 1280px; color: var(--dim); font-size: 13px; }
+  .notes h4 { margin: 0 0 6px; font-size: 12px; font-weight: 600; color: var(--muted); }
+  .notes ul { margin: 0; padding-left: 18px; } .notes li { margin: 3px 0; }
+
+  /* window */
+  .win { width: 1280px; height: 720px; border: 1px solid #26262c; border-radius: 12px; overflow: hidden; background: var(--bg);
+         box-shadow: 0 30px 80px rgba(0,0,0,.55); display: flex; flex-direction: column; }
+  .titlebar { position: relative; height: 40px; display: flex; align-items: center; padding: 0 14px; border-bottom: 1px solid var(--border); background: var(--card); flex-shrink: 0; }
+  .lights { display: flex; gap: 8px; } .lights i { width: 12px; height: 12px; border-radius: 50%; background: #ff5f57; display: block; }
+  .lights i:nth-child(2) { background: #febc2e; } .lights i:nth-child(3) { background: #28c840; }
+  .crumb { position: absolute; left: 50%; transform: translateX(-50%); font-size: 12px; color: var(--muted); }
+  .crumb b { color: var(--fg); font-weight: 500; }
+  .body { flex: 1; display: flex; min-height: 0; }
+  .side { width: 220px; flex-shrink: 0; background: var(--card); border-right: 1px solid var(--border); padding: 10px 6px; }
+  .side a { display: flex; align-items: center; gap: 10px; height: 28px; padding: 0 8px; border-radius: var(--r); color: var(--dim); text-decoration: none; }
+  .side a.on { background: var(--selected); color: var(--fg); }
+  .side a .n { margin-left: auto; font: 11px var(--mono); color: var(--muted); }
+  .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .head { height: 44px; display: flex; align-items: center; gap: 10px; padding: 0 16px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .head .t { font-weight: 600; } .head .c { font: 12px var(--mono); color: var(--muted); }
+  .head .sp { flex: 1; }
+  .btn { height: 26px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--r); color: var(--dim); font-size: 12px; white-space: nowrap; }
+  .btn.pri { border-color: rgba(139,125,247,.5); background: rgba(139,125,247,.14); color: var(--fg); }
+  .muted { color: var(--muted); } .faint { color: var(--faint); }
+  .content { flex: 1; display: flex; min-height: 0; }
+  .scroll { flex: 1; min-width: 0; overflow: hidden; }
+
+  /* shared atoms */
+  .grp { display: flex; align-items: baseline; gap: 6px; padding: 14px 16px 4px; font-size: 12px; font-weight: 600; color: var(--muted); }
+  .grp .n { font: 11px var(--mono); font-weight: 400; }
+  .key { font: 12px var(--mono); color: var(--muted); }
+  .st { font-size: 11px; color: var(--dim); background: var(--raised); padding: 0 6px; border-radius: 4px; line-height: 18px; white-space: nowrap; }
+  .date { font: 11px var(--mono); color: var(--faint); white-space: nowrap; }
+  /* Priority as a glyph: bars like a signal meter. Only critical/high carry
+     color; medium and low stay quiet so they don't compete for the eye. */
+  .pri { width: 14px; height: 12px; display: inline-flex; align-items: flex-end; gap: 1.5px; flex-shrink: 0; }
+  .pri i { width: 3px; border-radius: 1px; background: var(--border-h); display: block; }
+  .pri i:nth-child(1) { height: 4px; } .pri i:nth-child(2) { height: 8px; } .pri i:nth-child(3) { height: 12px; }
+  .p-low i:nth-child(1) { background: var(--muted); }
+  .p-med i:nth-child(-n+2) { background: var(--muted); }
+  .p-high i { background: var(--warning); }
+  .p-crit { width: 14px; height: 14px; border-radius: 3px; background: var(--destructive); color: #fff; font: 700 10px/14px var(--sans); text-align: center; flex-shrink: 0; }
+  .sdot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
+  .s-wait { background: var(--attention); box-shadow: 0 0 0 3px rgba(223,124,70,.18); } .s-run { background: var(--warning); } .s-idle { background: var(--success); }
+  .s-none { border: 1.5px dashed var(--border-h); }
+
+  /* inspector (all variants) */
+  .insp { width: 380px; flex-shrink: 0; border-left: 1px solid var(--border); background: var(--card); padding: 16px; display: flex; flex-direction: column; gap: 12px; overflow: hidden; }
+  .insp .k { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+  .insp .k a { font-family: var(--mono); color: var(--link); text-decoration: none; }
+  .insp .ttl { font-size: 15px; font-weight: 600; line-height: 1.35; }
+  .insp dl { display: grid; grid-template-columns: 78px 1fr; gap: 5px 10px; margin: 0; font-size: 12px; }
+  .insp dt { color: var(--muted); } .insp dd { margin: 0; color: var(--dim); }
+  .insp .sec { font-size: 11px; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
+  .insp .desc { color: var(--dim); font-size: 12.5px; line-height: 1.55; }
+  .insp .cmt { border-left: 2px solid var(--border-h); padding-left: 10px; color: var(--dim); font-size: 12.5px; }
+  .insp .cmt b { color: var(--fg); font-weight: 500; }
+  .insp .acts { display: flex; gap: 6px; margin-top: auto; padding-top: 12px; border-top: 1px solid var(--border); }
+  .sess { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--r); font-size: 12.5px; }
+
+  /* A — quiet list */
+  .a-row { display: flex; align-items: center; gap: 12px; height: 34px; margin: 0 8px; padding: 0 10px; border-radius: var(--r); }
+  .a-row:hover { background: var(--hover); } .a-row.sel { background: var(--selected); }
+  .a-row .key { width: 92px; flex-shrink: 0; }
+  .a-row .ti { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--dim); }
+  .a-row.sel .ti, .a-row:hover .ti { color: var(--fg); }
+
+  /* B — two lanes */
+  .lanes { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 14px 16px; height: 100%; }
+  .lane-h { display: flex; align-items: baseline; gap: 6px; font-size: 12px; font-weight: 600; color: var(--muted); margin: 0 2px 8px; }
+  .lane-h .n { font: 11px var(--mono); font-weight: 400; }
+  .card { position: relative; padding: 9px 10px 9px 12px; margin-bottom: 6px; border: 1px solid var(--border); border-radius: var(--r); background: var(--card); }
+  .card.sel { border-color: var(--border-h); background: #15151a; }
+  .card .top { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .card .ti { font-size: 13px; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .card .bot { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 11px; color: var(--muted); }
+
+  /* C — two-line rows, session-aware */
+  .filters { display: flex; gap: 6px; padding: 10px 16px 0; }
+  .chip { height: 24px; display: inline-flex; align-items: center; gap: 6px; padding: 0 9px; border: 1px solid var(--border); border-radius: 12px; font-size: 12px; color: var(--muted); }
+  .chip.on { border-color: var(--border-h); background: var(--selected); color: var(--fg); }
+  .chip .n { font: 11px var(--mono); }
+  .c-row { display: flex; align-items: center; gap: 12px; min-height: 48px; margin: 0 8px; padding: 6px 10px; border-radius: var(--r); }
+  .c-row:hover { background: var(--hover); } .c-row.sel { background: var(--selected); }
+  .c-row .mid { flex: 1; min-width: 0; }
+  .c-row .l1 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .c-row .l2 { display: flex; gap: 6px; font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+  .c-row .l2 .key { font-size: 11.5px; }
+  .c-row .right { width: 150px; flex-shrink: 0; display: flex; align-items: center; justify-content: flex-end; gap: 7px; font-size: 12px; color: var(--muted); }
+  .c-row .right.live { color: var(--dim); }
+</style>
+</head>
+<body>
+<div class="doc">
+  <h1>My issues — three directions</h1>
+  <p class="lede">All three keep what was decided: a page of its own, grouped by status, priority as a glyph instead of a word,
+    and details on click in an inspector on the right — the same pattern as To-Do. What changes is what a row is for.</p>
+  <p class="sub">Shared rules: the status chip shows only when it says something the group doesn't (Escalated, Feedback, In Fixing,
+    Backlog — not "In Progress" under In progress). One action per issue, in the inspector, instead of a button on every row.
+    Session dots use the session status colors because they <em>are</em> session status. Data below is made up.</p>
+
+  <!-- ============================== A ============================== -->
+  <h2>A · Quiet list</h2>
+  <p class="sub">Closest to today, with the noise removed: one line, nothing on the right but the date. A dot before the title says
+    a session exists (and its state); no dot, no session. Enter or double-click starts or opens it.</p>
+  <div class="win">
+    <div class="titlebar"><div class="lights"><i></i><i></i><i></i></div><div class="crumb"><b>My issues</b></div></div>
+    <div class="body">
+      <div class="side">
+        <a>Sessions <span class="n">9</span></a><a>To-Do <span class="n">3</span></a><a class="on">My issues <span class="n">12</span></a><a>Library</a><a>Settings</a>
+      </div>
+      <div class="main">
+        <div class="head"><span class="t">My issues</span><span class="c">12</span><span class="sp"></span><span class="muted" style="font-size:11px">updated 14:02</span><span class="btn">↻ Refresh</span></div>
+        <div class="content">
+          <div class="scroll">
+            <div class="grp">In progress <span class="n">8</span></div>
+            <div class="a-row sel"><span class="p-crit">!</span><span class="key">PROJ-2847</span><span class="sdot s-wait"></span><span class="ti">Move example.org mail to the new provider</span><span class="date">29.10 12:43</span></div>
+            <div class="a-row"><span class="pri p-med"><i></i><i></i><i></i></span><span class="key">HELP-6430</span><span class="ti">Disable legacy privacy mailboxes and verify forwarding</span><span class="st">Escalated</span><span class="date">29.10 12:43</span></div>
+            <div class="a-row"><span class="pri p-high"><i></i><i></i><i></i></span><span class="key">HELP-6254</span><span class="ti">Rebranding: mailbox naming changes</span><span class="st">Feedback</span><span class="date">29.10 12:43</span></div>
+            <div class="a-row"><span class="pri p-med"><i></i><i></i><i></i></span><span class="key">PROJ-2781</span><span class="sdot s-idle"></span><span class="ti">Dismissed users missing from the backup report</span><span class="date">28.10 17:02</span></div>
+            <div class="a-row"><span class="pri p-med"><i></i><i></i><i></i></span><span class="key">PROJ-2801</span><span class="sdot s-run"></span><span class="ti">Access revoke for a leaver</span><span class="date">28.10 17:02</span></div>
+            <div class="a-row"><span class="pri p-med"><i></i><i></i><i></i></span><span class="key">PROJ-2739</span><span class="ti">Pre-installation setup for a vendor tool</span><span class="date">28.10 13:09</span></div>
+            <div class="a-row"><span class="pri p-low"><i></i><i></i><i></i></span><span class="key">OPS-51</span><span class="ti">Logging of calls on the emergency line</span><span class="st">In Fixing</span><span class="date">18.10 23:46</span></div>
+            <div class="a-row"><span class="pri p-med"><i></i><i></i><i></i></span><span class="key">OPS-128</span><span class="ti">Migrate automation flows to n8n</span><span class="date">15.10 20:49</span></div>
+            <div class="grp">To do <span class="n">4</span></div>
+            <div class="a-row"><span class="pri p-med"><i></i><i></i><i></i></span><span class="key">PROJ-2784</span><span class="ti">Clean up guest accounts</span><span class="date">28.10 17:02</span></div>
+            <div class="a-row"><span class="pri p-med"><i></i><i></i><i></i></span><span class="key">PROJ-2812</span><span class="sdot s-idle"></span><span class="ti">Licence investigation</span><span class="date">28.10 17:02</span></div>
+            <div class="a-row"><span class="pri p-low"><i></i><i></i><i></i></span><span class="key">OPS-154</span><span class="ti">Server-side aggregations instead of pulling raw logs</span><span class="st">Backlog</span><span class="date">28.10 13:11</span></div>
+            <div class="a-row"><span class="pri p-med"><i></i><i></i><i></i></span><span class="key">OPS-153</span><span class="ti">Review the investigation skill</span><span class="st">Backlog</span><span class="date">28.10 10:59</span></div>
+          </div>
+          <div class="insp">
+            <div class="k"><a href="#">PROJ-2847</a><span class="st" style="background:rgba(127,178,255,.14);color:var(--link)">In Progress</span><span class="p-crit" style="margin-left:auto">!</span><span class="muted">Critical</span></div>
+            <div class="ttl">Move example.org mail to the new provider</div>
+            <dl>
+              <dt>Reporter</dt><dd>A. Roe</dd>
+              <dt>Created</dt><dd class="mono">20.10.2026 09:00</dd>
+              <dt>Updated</dt><dd class="mono">29.10.2026 12:43</dd>
+            </dl>
+            <div><div class="sec">Description</div><div class="desc">Cut over MX for example.org, migrate 140 mailboxes over the weekend window, keep the old tenant read-only for 30 days…</div></div>
+            <div><div class="sec">Latest comment</div><div class="cmt"><b>J. Doe</b> · 29.10 12:40<br>DNS TTL lowered to 300, ready for Saturday.</div></div>
+            <div><div class="sec">Session</div><div class="sess"><span class="sdot s-wait"></span>Mail cutover <span class="muted" style="margin-left:auto">waiting for you</span></div></div>
+            <div class="acts"><span class="btn pri">Open session ↵</span><span class="btn">Open in Jira ↗</span><span class="btn">Copy key</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="notes">
+    <div><h4>Good at</h4><ul><li>Scanning twelve titles in two seconds — the title is the widest thing on the row.</li><li>Least new to learn: today's page, minus three columns.</li></ul></div>
+    <div><h4>Weaker at</h4><ul><li>"Which ones am I already on?" is a small dot — readable, but not the first thing you see.</li><li>Reporter and description only after a click.</li></ul></div>
+  </div>
+
+  <!-- ============================== B ============================== -->
+  <h2>B · Two lanes</h2>
+  <p class="sub">In progress and To do side by side, as cards: two lines of title, so nothing is cut off. A colored edge only for
+    critical/high. A card footer says whether there's a session. Good when the split between "doing" and "next" is the point.</p>
+  <div class="win">
+    <div class="titlebar"><div class="lights"><i></i><i></i><i></i></div><div class="crumb"><b>My issues</b></div></div>
+    <div class="body">
+      <div class="side">
+        <a>Sessions <span class="n">9</span></a><a>To-Do <span class="n">3</span></a><a class="on">My issues <span class="n">12</span></a><a>Library</a><a>Settings</a>
+      </div>
+      <div class="main">
+        <div class="head"><span class="t">My issues</span><span class="c">12</span><span class="sp"></span><span class="muted" style="font-size:11px">updated 14:02</span><span class="btn">↻ Refresh</span></div>
+        <div class="content">
+          <div class="scroll">
+            <div class="lanes">
+              <div>
+                <div class="lane-h">In progress <span class="n">8</span></div>
+                <div class="card sel" style="box-shadow: inset 2px 0 0 var(--destructive)"><div class="top"><span class="p-crit">!</span><span class="key">PROJ-2847</span><span class="date" style="margin-left:auto">29.10 12:43</span></div><div class="ti">Move example.org mail to the new provider</div><div class="bot"><span class="sdot s-wait"></span>Mail cutover · waiting for you</div></div>
+                <div class="card"><div class="top"><span class="pri p-med"><i></i><i></i><i></i></span><span class="key">HELP-6430</span><span class="st">Escalated</span><span class="date" style="margin-left:auto">29.10 12:43</span></div><div class="ti">Disable legacy privacy mailboxes and verify forwarding</div><div class="bot"><span class="sdot s-none"></span>No session</div></div>
+                <div class="card" style="box-shadow: inset 2px 0 0 var(--warning)"><div class="top"><span class="pri p-high"><i></i><i></i><i></i></span><span class="key">HELP-6254</span><span class="st">Feedback</span><span class="date" style="margin-left:auto">29.10 12:43</span></div><div class="ti">Rebranding: mailbox naming changes</div><div class="bot"><span class="sdot s-none"></span>No session</div></div>
+                <div class="card"><div class="top"><span class="pri p-med"><i></i><i></i><i></i></span><span class="key">PROJ-2781</span><span class="date" style="margin-left:auto">28.10 17:02</span></div><div class="ti">Dismissed users missing from the backup report</div><div class="bot"><span class="sdot s-idle"></span>Backup report · idle</div></div>
+                <div class="card"><div class="top"><span class="pri p-med"><i></i><i></i><i></i></span><span class="key">PROJ-2801</span><span class="date" style="margin-left:auto">28.10 17:02</span></div><div class="ti">Access revoke for a leaver</div><div class="bot"><span class="sdot s-run"></span>Leaver access · running</div></div>
+                <div class="card"><div class="top"><span class="pri p-med"><i></i><i></i><i></i></span><span class="key">PROJ-2739</span><span class="date" style="margin-left:auto">28.10 13:09</span></div><div class="ti">Pre-installation setup for a vendor tool</div><div class="bot"><span class="sdot s-none"></span>No session</div></div>
+              </div>
+              <div>
+                <div class="lane-h">To do <span class="n">4</span></div>
+                <div class="card"><div class="top"><span class="pri p-med"><i></i><i></i><i></i></span><span class="key">PROJ-2784</span><span class="date" style="margin-left:auto">28.10 17:02</span></div><div class="ti">Clean up guest accounts</div><div class="bot"><span class="sdot s-none"></span>No session</div></div>
+                <div class="card"><div class="top"><span class="pri p-med"><i></i><i></i><i></i></span><span class="key">PROJ-2812</span><span class="date" style="margin-left:auto">28.10 17:02</span></div><div class="ti">Licence investigation</div><div class="bot"><span class="sdot s-idle"></span>Licences · idle</div></div>
+                <div class="card"><div class="top"><span class="pri p-low"><i></i><i></i><i></i></span><span class="key">OPS-154</span><span class="st">Backlog</span><span class="date" style="margin-left:auto">28.10 13:11</span></div><div class="ti">Server-side aggregations instead of pulling raw logs</div><div class="bot"><span class="sdot s-none"></span>No session</div></div>
+                <div class="card"><div class="top"><span class="pri p-med"><i></i><i></i><i></i></span><span class="key">OPS-153</span><span class="st">Backlog</span><span class="date" style="margin-left:auto">28.10 10:59</span></div><div class="ti">Review the investigation skill</div><div class="bot"><span class="sdot s-none"></span>No session</div></div>
+              </div>
+            </div>
+          </div>
+          <div class="insp" style="width:340px">
+            <div class="k"><a href="#">PROJ-2847</a><span class="st" style="background:rgba(127,178,255,.14);color:var(--link)">In Progress</span><span class="p-crit" style="margin-left:auto">!</span><span class="muted">Critical</span></div>
+            <div class="ttl">Move example.org mail to the new provider</div>
+            <dl><dt>Reporter</dt><dd>A. Roe</dd><dt>Created</dt><dd class="mono">20.10.2026 09:00</dd><dt>Updated</dt><dd class="mono">29.10.2026 12:43</dd></dl>
+            <div><div class="sec">Description</div><div class="desc">Cut over MX for example.org, migrate 140 mailboxes over the weekend window…</div></div>
+            <div><div class="sec">Latest comment</div><div class="cmt"><b>J. Doe</b> · 29.10 12:40<br>DNS TTL lowered to 300, ready for Saturday.</div></div>
+            <div class="acts"><span class="btn pri">Open session ↵</span><span class="btn">Open in Jira ↗</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="notes">
+    <div><h4>Good at</h4><ul><li>Long titles read in full — no ellipsis at "(ooj…".</li><li>"Doing vs next" is spatial, not a header you scroll past.</li><li>Session state is spelled out on every card.</li></ul></div>
+    <div><h4>Weaker at</h4><ul><li>Fewer issues per screen (≈6 per lane before scrolling).</li><li>With the inspector open, each lane is narrow — on a laptop the inspector should overlay instead.</li></ul></div>
+  </div>
+
+  <!-- ============================== C ============================== -->
+  <h2>C · Two-line rows, session column</h2>
+  <p class="sub">Each row is a title on top and the facts under it (key · status · reporter · updated). The right column is
+    reserved for the session: its live state if there is one, empty otherwise. Filter chips above answer "what am I
+    already on" and narrow by project in one click.</p>
+  <div class="win">
+    <div class="titlebar"><div class="lights"><i></i><i></i><i></i></div><div class="crumb"><b>My issues</b></div></div>
+    <div class="body">
+      <div class="side">
+        <a>Sessions <span class="n">9</span></a><a>To-Do <span class="n">3</span></a><a class="on">My issues <span class="n">12</span></a><a>Library</a><a>Settings</a>
+      </div>
+      <div class="main">
+        <div class="head"><span class="t">My issues</span><span class="c">12</span><span class="sp"></span><span class="muted" style="font-size:11px">updated 14:02</span><span class="btn">↻ Refresh</span></div>
+        <div class="filters"><span class="chip on">All <span class="n">12</span></span><span class="chip">With session <span class="n">4</span></span><span class="chip">No session <span class="n">8</span></span><span class="faint" style="padding:0 4px">|</span><span class="chip">PROJ <span class="n">6</span></span><span class="chip">HELP <span class="n">2</span></span><span class="chip">OPS <span class="n">4</span></span></div>
+        <div class="content">
+          <div class="scroll">
+            <div class="grp">In progress <span class="n">8</span></div>
+            <div class="c-row sel"><span class="p-crit">!</span><div class="mid"><div class="l1">Move example.org mail to the new provider</div><div class="l2"><span class="key">PROJ-2847</span>· A. Roe · <span class="mono">29.10 12:43</span></div></div><div class="right live"><span class="sdot s-wait"></span>waiting for you</div></div>
+            <div class="c-row"><span class="pri p-med"><i></i><i></i><i></i></span><div class="mid"><div class="l1">Disable legacy privacy mailboxes and verify forwarding</div><div class="l2"><span class="key">HELP-6430</span>· <span style="color:var(--dim)">Escalated</span> · B. Poe · <span class="mono">29.10 12:43</span></div></div><div class="right"></div></div>
+            <div class="c-row"><span class="pri p-high"><i></i><i></i><i></i></span><div class="mid"><div class="l1">Rebranding: mailbox naming changes</div><div class="l2"><span class="key">HELP-6254</span>· <span style="color:var(--dim)">Feedback</span> · C. Moe · <span class="mono">29.10 12:43</span></div></div><div class="right"></div></div>
+            <div class="c-row"><span class="pri p-med"><i></i><i></i><i></i></span><div class="mid"><div class="l1">Dismissed users missing from the backup report</div><div class="l2"><span class="key">PROJ-2781</span>· A. Roe · <span class="mono">28.10 17:02</span></div></div><div class="right live"><span class="sdot s-idle"></span>idle · 2h</div></div>
+            <div class="c-row"><span class="pri p-med"><i></i><i></i><i></i></span><div class="mid"><div class="l1">Access revoke for a leaver</div><div class="l2"><span class="key">PROJ-2801</span>· HR bot · <span class="mono">28.10 17:02</span></div></div><div class="right live"><span class="sdot s-run"></span>running</div></div>
+            <div class="c-row"><span class="pri p-med"><i></i><i></i><i></i></span><div class="mid"><div class="l1">Pre-installation setup for a vendor tool</div><div class="l2"><span class="key">PROJ-2739</span>· D. Loe · <span class="mono">28.10 13:09</span></div></div><div class="right"></div></div>
+            <div class="grp">To do <span class="n">4</span></div>
+            <div class="c-row"><span class="pri p-med"><i></i><i></i><i></i></span><div class="mid"><div class="l1">Clean up guest accounts</div><div class="l2"><span class="key">PROJ-2784</span>· A. Roe · <span class="mono">28.10 17:02</span></div></div><div class="right"></div></div>
+            <div class="c-row"><span class="pri p-med"><i></i><i></i><i></i></span><div class="mid"><div class="l1">Licence investigation</div><div class="l2"><span class="key">PROJ-2812</span>· E. Zoe · <span class="mono">28.10 17:02</span></div></div><div class="right live"><span class="sdot s-idle"></span>idle · 1d</div></div>
+          </div>
+          <div class="insp">
+            <div class="k"><a href="#">PROJ-2847</a><span class="st" style="background:rgba(127,178,255,.14);color:var(--link)">In Progress</span><span class="p-crit" style="margin-left:auto">!</span><span class="muted">Critical</span></div>
+            <div class="ttl">Move example.org mail to the new provider</div>
+            <dl><dt>Reporter</dt><dd>A. Roe</dd><dt>Created</dt><dd class="mono">20.10.2026 09:00</dd><dt>Updated</dt><dd class="mono">29.10.2026 12:43</dd></dl>
+            <div><div class="sec">Description</div><div class="desc">Cut over MX for example.org, migrate 140 mailboxes over the weekend window, keep the old tenant read-only for 30 days…</div></div>
+            <div><div class="sec">Latest comment</div><div class="cmt"><b>J. Doe</b> · 29.10 12:40<br>DNS TTL lowered to 300, ready for Saturday.</div></div>
+            <div class="acts"><span class="btn pri">Open session ↵</span><span class="btn">Open in Jira ↗</span><span class="btn">Copy key</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="notes">
+    <div><h4>Good at</h4><ul><li>All three jobs at once — pick next (priority + title), jump back in (session column), overview (filters + counts).</li><li>Reporter visible without a click.</li></ul></div>
+    <div><h4>Weaker at</h4><ul><li>Two lines per row: ~8 issues per screen instead of ~14.</li><li>Most to build: filter chips, live session state per row.</li></ul></div>
+  </div>
+</div>
+</body>
+</html>
