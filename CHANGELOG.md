@@ -11,6 +11,8 @@ listed here; see `git log` for the full history.
 
 ## [Unreleased]
 
+## [0.28.1] - 2026-10-29
+
 ### Fixed
 
 - The usage meter in the title bar shows the time until each limit resets
