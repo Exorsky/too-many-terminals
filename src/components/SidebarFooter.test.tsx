@@ -77,6 +77,14 @@ describe('SidebarFooter', () => {
     expect(screen.getByRole('progressbar', { name: 'Session usage' })).toHaveAttribute('aria-valuenow', '14');
   });
 
+  it('the title-bar form shows the countdown too, not only in a tooltip', async () => {
+    mockStats(STATS);
+    render(<SidebarFooter inline />);
+
+    expect(await screen.findByText(/^2h/)).toBeInTheDocument();
+    expect(screen.getByText(/^3d/)).toBeInTheDocument();
+  });
+
   it('renders nothing at all when neither window is available', async () => {
     mockStats({ available: false, session: null, week: null, fetchedAtMs: null, fromCache: false });
     render(<SidebarFooter />);

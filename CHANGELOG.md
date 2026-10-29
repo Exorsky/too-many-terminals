@@ -11,6 +11,11 @@ listed here; see `git log` for the full history.
 
 ## [Unreleased]
 
+### Fixed
+
+- The usage meter in the title bar shows the time until each limit resets
+  again, instead of only in its tooltip.
+
 ## [0.28.0] - 2026-10-29
 
 ### Added

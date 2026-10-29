@@ -54,7 +54,8 @@ function UsageRow({ label, window: w, windowSeconds, now, inline }: {
   window: UsageWindow;
   windowSeconds: number;
   now: number;
-  /** Title-bar form: no countdown column — it moves into the tooltip. */
+  /** Title-bar form: one line, tighter, the countdown right after the
+   *  percentage instead of in a fixed column. */
   inline?: boolean;
 }) {
   const secondsLeft = (new Date(w.resetsAtIso).getTime() - now) / 1000;
@@ -83,11 +84,12 @@ function UsageRow({ label, window: w, windowSeconds, now, inline }: {
         />
       </div>
       <span className={cn('shrink-0 text-right font-mono tabular-nums text-foreground', inline ? 'w-8' : 'w-6')}>{w.percent}%</span>
-      {!inline && (
-        <span className="w-11 shrink-0 text-right font-mono tabular-nums text-muted-foreground" title="Resets in">
-          {formatDuration(secondsLeft)}
-        </span>
-      )}
+      <span
+        className={cn('shrink-0 font-mono tabular-nums text-muted-foreground', inline ? '' : 'w-11 text-right')}
+        title="Resets in"
+      >
+        {formatDuration(secondsLeft)}
+      </span>
     </div>
   );
 }

@@ -9,8 +9,9 @@ Session  ▬▬▬▬│▬▬▬▬▬▬▬▬   42%   3h 45m
 Week     ▬▬│▬▬▬▬▬▬▬▬▬▬   18%   4d 6h
 ```
 
-Which window, a bar and the percentage; the countdown to reset is in each
-meter's tooltip. It moved from the sidebar's foot to the title bar in the
+Which window, a bar, the percentage and the countdown to reset — the
+countdown spent 0.27 hidden in a tooltip, which turned out to be the number
+people look for first, so it's back on the line. It moved from the sidebar's foot to the title bar in the
 navigation rethink: the title bar holds context and status, never navigation,
 and this is status. `SidebarFooter` still renders the stacked two-row form when
 called without `inline`.
