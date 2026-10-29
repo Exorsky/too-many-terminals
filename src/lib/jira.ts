@@ -109,7 +109,12 @@ export function fetchMyIssues(tokenVar: string, fresh = false): Promise<JiraIssu
   const entry = { at: Date.now(), tokenVar, promise };
   mine = entry;
   promise.then(
-    (issues) => { for (const i of issues) cache.set(i.key, { at: entry.at, ttl: TTL_MS, promise: Promise.resolve(i) }); },
+    (issues) => {
+      for (const i of issues) {
+        cache.set(i.key, { at: entry.at, ttl: TTL_MS, promise: Promise.resolve(i) });
+        if (i.detail) details.set(i.key, { at: entry.at, ttl: TTL_MS, promise: Promise.resolve(i.detail) });
+      }
+    },
     // A failure isn't kept: the next open (or Refresh) asks again.
     () => { if (mine === entry) mine = null; },
   );

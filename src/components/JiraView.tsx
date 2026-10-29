@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ExternalLink, Plus, RefreshCw, SquareTerminal, X } from 'lucide-react';
+import { ExternalLink, MessageSquareReply, Plus, RefreshCw, SquareTerminal, X } from 'lucide-react';
 import * as ipc from '@/lib/ipc';
 import type { JiraIssue, JiraIssueDetail } from '@/lib/ipc';
 import { fetchIssueDetail, fetchMyIssues, findIssueKeys, issueUrl } from '@/lib/jira';
@@ -101,6 +101,7 @@ export default function JiraView({ sessions, onOpenSession, onNewSession }: {
     { category: 'other', label: 'Other', usual: [], items: (issues ?? []).filter((i) => !GROUPS.some((g) => g.category === i.statusCategory)) },
   ].filter((g) => g.items.length > 0);
   const selected = issues?.find((i) => i.key === selectedKey) ?? null;
+  const replies = (issues ?? []).filter((i) => i.replyFrom).length;
   const hhmm = (d: Date) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 
   return (
@@ -108,6 +109,11 @@ export default function JiraView({ sessions, onOpenSession, onNewSession }: {
       <div className="flex items-center gap-2 h-11 px-4 shrink-0 border-b border-border">
         <span className="text-[13px] font-semibold text-foreground">My issues</span>
         {issues && <span className="text-[12px] font-mono tabular-nums text-muted-foreground">{issues.length}</span>}
+        {replies > 0 && (
+          <span className="inline-flex items-center gap-1 text-[12px] text-dim" title="Issues where someone else wrote the latest comment">
+            <MessageSquareReply size={12} />{replies} {replies === 1 ? 'reply' : 'replies'}
+          </span>
+        )}
         {loadedAt && <span className="ml-auto text-[11px] text-muted-foreground">updated {hhmm(loadedAt)}</span>}
         <button
           type="button"
@@ -174,6 +180,17 @@ export default function JiraView({ sessions, onOpenSession, onNewSession }: {
                     >
                       {issue.summary}
                     </span>
+                    {issue.replyFrom && (
+                      // Not a status color: those are reserved for sessions.
+                      // A plain chip with an icon reads as "something new here".
+                      <span
+                        title={`${issue.replyFrom} wrote the latest comment${issue.replyAt ? ` · ${formatIssueDate(issue.replyAt)}` : ''}`}
+                        className="inline-flex items-center gap-1 shrink-0 max-w-[140px] px-1.5 rounded-sm bg-raised text-foreground text-[11px] leading-[18px]"
+                      >
+                        <MessageSquareReply size={11} className="shrink-0" />
+                        <span className="truncate">{issue.replyFrom}</span>
+                      </span>
+                    )}
                     {showStatus && (
                       <span className={cn('shrink-0 px-1.5 rounded-sm text-[11px] leading-[18px]', STATUS_CLASS[issue.statusCategory] ?? 'bg-raised text-dim')}>
                         {issue.status}
@@ -281,7 +298,7 @@ function IssueInspector({ issue, session, baseUrl, onAct, onClose }: {
             </div>
           </Section>
           {comment && (
-            <Section label="Latest comment">
+            <Section label={issue.replyFrom ? 'Latest comment — not yours' : 'Latest comment'}>
               <div className="pl-2.5 border-l-2 border-border-hover text-[12.5px] leading-relaxed text-dim">
                 <div className="mb-0.5">
                   <span className="text-foreground font-medium">{comment.author ?? 'Someone'}</span>

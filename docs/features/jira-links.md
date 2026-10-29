@@ -88,15 +88,24 @@ critical — only critical and high carry color, `priorityLevel` folds each
 scheme's names onto four levels), the key, a session's status dot when a
 session's name already carries the key, the title, and the last update. A
 status chip shows only when the status says something the group doesn't
-(Escalated, Feedback, Backlog — not "In Progress" under In progress). No
+(Escalated, Feedback, Backlog — not "In Progress" under In progress). When
+someone other than you wrote the latest comment, a reply chip with their name
+sits on the row and the header counts them ("3 replies") — your move. People
+are compared by account (`name` on Server/DC, `accountId` on Cloud), never by
+display name, and "you" is the assignee, which in this list is always you. The
+comments come in the same search (`fields=…,description,comment`), so it costs no extra
+request — the answer is bigger (all comments of up to 50 issues, a few
+hundred KB), which once per five minutes is fine. No
 buttons on rows: double-click or Enter does the one thing — **Open session**
 if there is one, **New session** otherwise.
 
 A click opens the inspector on the right: status, priority, reporter, created
 and updated, the description and latest comment, the session, and the action
 with **Open in Jira** and **Copy key**. Description and comment are one more
-request (`fetchIssueDetail`, cached like a card), asked 300ms after the
-selection settles so clicking through the list doesn't ask for every row.
+request (`fetchIssueDetail`, cached like a card) only when they aren't
+already known: the My issues search carries descriptions and comments, so
+selecting from the list asks nothing. Otherwise it's asked 300ms after the
+selection settles, so clicking through doesn't ask for every row.
 
 It costs one request when you open it, reused for five minutes (`fetchMyIssues`);
 **Refresh** asks again, but never more than once per 30 seconds, and a failed

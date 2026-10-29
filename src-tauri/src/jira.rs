@@ -24,6 +24,14 @@ pub struct JiraIssue {
     pub priority: Option<String>,
     pub created: Option<String>,
     pub updated: Option<String>,
+    /// Who wrote the latest comment, when that isn't the assignee — someone
+    /// answered and it's your move. Only filled where comments were asked for
+    /// (My issues); the hover card leaves it empty.
+    pub reply_from: Option<String>,
+    pub reply_at: Option<String>,
+    /// Description and latest comment, when the search already carried them
+    /// (My issues) — so the inspector needn't ask again.
+    pub detail: Option<JiraIssueDetail>,
 }
 
 /// What the inspector adds to an issue: its description and latest comment.
@@ -82,7 +90,28 @@ fn parse_issue(json: &Value) -> Option<JiraIssue> {
         priority: s(fields.pointer("/priority/name")),
         created: s(fields.get("created")),
         updated: s(fields.get("updated")),
+        reply_from: reply(fields).map(|c| c.0),
+        reply_at: reply(fields).and_then(|c| c.1),
+        detail: fields.get("comment").map(|_| parse_detail(json)),
     })
+}
+
+/// The latest comment's author and time, if someone other than the assignee
+/// wrote it. People are compared by account (`name` on Server/DC, `accountId`
+/// on Cloud), not display name — two people can share one.
+fn account(person: Option<&Value>) -> Option<&str> {
+    let p = person?;
+    p.get("name").or_else(|| p.get("accountId"))?.as_str()
+}
+
+fn reply(fields: &Value) -> Option<(String, Option<String>)> {
+    let last = fields.pointer("/comment/comments")?.as_array()?.last()?;
+    let author = account(last.get("author"));
+    if author.is_some() && author == account(fields.get("assignee")) {
+        return None;
+    }
+    let who = last.pointer("/author/displayName").and_then(Value::as_str).or(author).unwrap_or("Someone");
+    Some((who.to_string(), last.get("created").and_then(Value::as_str).map(str::to_string)))
 }
 
 /// Until when the app sends Jira nothing at all. Set by a 429 (for as long as
@@ -136,7 +165,10 @@ pub async fn fetch_issue(base_url: &str, token: Option<&str>, key: &str) -> Resu
 /// One request; at most 50 — a list longer than that isn't a to-do list.
 pub async fn fetch_my_issues(base_url: &str, token: &str) -> Result<Vec<JiraIssue>, String> {
     let jql = "assignee = currentUser() AND resolution = Unresolved ORDER BY updated DESC";
-    let json = get_json(base_url, Some(token), "search", &[("jql", jql), ("fields", FIELDS), ("maxResults", "50")]).await?;
+    // With comments (whose move is it) and descriptions (the inspector) —
+    // still the one request, and clicking through the list asks nothing.
+    let fields = format!("{FIELDS},description,comment");
+    let json = get_json(base_url, Some(token), "search", &[("jql", jql), ("fields", &fields), ("maxResults", "50")]).await?;
     Ok(parse_search(&json))
 }
 
@@ -309,6 +341,27 @@ mod tests {
         assert_eq!(d.comment.unwrap().body, "latest");
         let empty = parse_detail(&serde_json::json!({ "fields": { "description": "  ", "comment": { "comments": [] } } }));
         assert_eq!(empty, JiraIssueDetail { description: None, comment: None });
+    }
+
+    #[test]
+    fn a_reply_is_a_latest_comment_by_someone_else() {
+        let issue = |last_by: &str| serde_json::json!({ "key": "PROJ-1", "fields": {
+            "assignee": { "name": "me", "displayName": "Me" },
+            "comment": { "comments": [
+                { "author": { "name": "other", "displayName": "A. Roe" }, "created": "1" },
+                { "author": { "name": last_by, "displayName": "Whoever" }, "created": "2" }
+            ]}
+        }});
+        let theirs = parse_issue(&issue("other")).unwrap();
+        assert_eq!(theirs.reply_from.as_deref(), Some("Whoever"));
+        assert_eq!(theirs.reply_at.as_deref(), Some("2"));
+        assert_eq!(parse_issue(&issue("me")).unwrap().reply_from, None);
+        // No comments asked for (the hover card): no reply.
+        let bare = serde_json::json!({ "key": "PROJ-1", "fields": { "summary": "x" } });
+        assert_eq!(parse_issue(&bare).unwrap().reply_from, None);
+        // Comments carried by the search fill the inspector's detail too.
+        assert_eq!(theirs.detail.unwrap().comment.unwrap().created.as_deref(), Some("2"));
+        assert!(parse_issue(&bare).unwrap().detail.is_none());
     }
 
     #[test]

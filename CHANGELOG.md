@@ -13,16 +13,28 @@ listed here; see `git log` for the full history.
 
 ### Added
 
+- **Fifteen new themes, light ones included.** Catppuccin Mocha and Latte,
+  Tokyo Night, Gruvbox Dark, Nord, Rosé Pine and Dawn, Dracula, Solarized Dark
+  and Light, GitHub Dark and Light, One Dark, Kanagawa Wave and Everforest
+  Dark, from each project's own palette. The picker groups them Dark and Light,
+  and light themes now work end to end: row highlights, the terminal's
+  black/white, Markdown and diagrams all follow.
+- **Import a theme.** Paste a color scheme from Windows Terminal, Ghostty,
+  kitty or Alacritty and it becomes a custom theme you can tweak.
 - **My issues.** With Jira on, a My issues item in the navigation lists the
   open issues assigned to you, in progress first: one line each with a
   priority glyph, a session dot when a session already carries the key, and
   the status only when it's unusual. A click opens details on the right —
   description, latest comment, reporter — with Open session or New session;
   double-click or Enter does it straight away. One request when opened,
-  reused for five minutes; Refresh asks again.
+  reused for five minutes; Refresh asks again. An issue whose latest comment
+  is someone else's gets a reply chip with their name, and the header counts
+  them, so you see where it's your move.
 
 ### Changed
 
+- Themes have a separate ansi blue instead of reusing the accent, so a
+  scheme like Gruvbox keeps its orange accent and its own blue.
 - **Settings are grouped.** The rail now reads General (Interface,
   Notifications, Sessions, Appearance), Claude Code (Global files) and
   Integrations, where each integration is its own page with its own switch and

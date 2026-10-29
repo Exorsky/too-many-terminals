@@ -289,6 +289,12 @@ export interface JiraIssue {
   priority: string | null;
   created: string | null;
   updated: string | null;
+  /** Author of the latest comment when it isn't the assignee — someone
+   *  answered. Only in My issues results. */
+  replyFrom?: string | null;
+  replyAt?: string | null;
+  /** Description and latest comment, when the search carried them. */
+  detail?: JiraIssueDetail | null;
 }
 
 /** One Jira issue, read-only. The backend reads the URL and token variable

@@ -71,6 +71,16 @@ describe('My issues', () => {
     expect(priorityLevel(null)).toBeNull();
   });
 
+  it('marks issues where someone else wrote the latest comment', async () => {
+    vi.mocked(ipc.jiraMyIssues).mockResolvedValue([
+      { ...issue('PROJ-1', 'Answered one', 'indeterminate', 'In Progress'), replyFrom: 'A. Roe', replyAt: null },
+      issue('PROJ-2', 'Quiet one', 'indeterminate', 'In Progress'),
+    ]);
+    render(<JiraView sessions={[]} onOpenSession={vi.fn()} onNewSession={vi.fn()} />);
+    expect(await screen.findByText('A. Roe')).toBeInTheDocument();
+    expect(screen.getByText(/1 reply/)).toBeInTheDocument();
+  });
+
   it('asks nothing without a token', () => {
     patchSettings({ jiraTokenVar: '' });
     render(<JiraView sessions={[]} onOpenSession={vi.fn()} onNewSession={vi.fn()} />);

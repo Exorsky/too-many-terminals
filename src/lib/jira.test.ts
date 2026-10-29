@@ -81,16 +81,20 @@ describe('Jira lookups stay cheap', () => {
 
   it('asks for your issues once, and hovering one of them asks nothing more', async () => {
     const ipc = await import('./ipc');
-    const { fetchIssue, fetchMyIssues, clearIssueCache } = await import('./jira');
+    const { fetchIssue, fetchIssueDetail, fetchMyIssues, clearIssueCache } = await import('./jira');
     const { vi } = await import('vitest');
     clearIssueCache();
-    const mine = vi.spyOn(ipc, 'jiraMyIssues').mockResolvedValue([{ key: 'PROJ-7', summary: 'Mine' } as never]);
+    const mine = vi.spyOn(ipc, 'jiraMyIssues').mockResolvedValue([{ key: 'PROJ-7', summary: 'Mine', detail: { description: 'D', comment: null } } as never]);
     const one = vi.spyOn(ipc, 'jiraIssue');
 
     await fetchMyIssues('JIRA_API_TOKEN');
     await fetchMyIssues('JIRA_API_TOKEN');
     expect(mine).toHaveBeenCalledTimes(1);
     expect((await fetchIssue('PROJ-7')).summary).toBe('Mine');
+    const detailSpy = vi.spyOn(ipc, 'jiraIssueDetail');
+    expect((await fetchIssueDetail('PROJ-7')).description).toBe('D');
+    expect(detailSpy).not.toHaveBeenCalled();
+    detailSpy.mockRestore();
     expect(one).not.toHaveBeenCalled();
     // Refresh right away: inside the 30s floor, nothing leaves.
     await fetchMyIssues('JIRA_API_TOKEN', true);
