@@ -5,19 +5,34 @@ import {
 import { cn } from '@/lib/utils';
 import { patchSettings, useSettings } from '@/lib/settings-store';
 import * as ipc from '@/lib/ipc';
-import type { NewTabPosition } from '@/types';
+import { jiraOn } from '@/lib/jira';
+import type { AppSettings, NewTabPosition } from '@/types';
 import CustomizeTab from './CustomizeTab';
 
-type SettingsCategory = 'interface' | 'notifications' | 'sessions' | 'integrations' | 'claude' | 'customize';
+type SettingsCategory = 'interface' | 'notifications' | 'sessions' | 'appearance' | 'claude' | 'jira';
 
-const CATEGORIES: { id: SettingsCategory; label: string; icon: typeof SlidersHorizontal }[] = [
-  { id: 'interface', label: 'Interface', icon: SlidersHorizontal },
-  { id: 'notifications', label: 'Notifications', icon: Bell },
-  { id: 'sessions', label: 'Sessions', icon: Moon },
-  { id: 'integrations', label: 'Integrations', icon: Link2 },
-  { id: 'claude', label: 'Claude Code', icon: Bot },
-  { id: 'customize', label: 'Customize', icon: Sparkles },
+/** The rail, in three groups: the app itself, Claude Code's own files, and
+ *  one page per integration — each with its own switch, so adding the next
+ *  one is a row here, not another field on a shared page. */
+const GROUPS: { label: string; items: { id: SettingsCategory; label: string; icon: typeof SlidersHorizontal }[] }[] = [
+  {
+    label: 'General',
+    items: [
+      { id: 'interface', label: 'Interface', icon: SlidersHorizontal },
+      { id: 'notifications', label: 'Notifications', icon: Bell },
+      { id: 'sessions', label: 'Sessions', icon: Moon },
+      { id: 'appearance', label: 'Appearance', icon: Sparkles },
+    ],
+  },
+  { label: 'Claude Code', items: [{ id: 'claude', label: 'Global files', icon: Bot }] },
+  { label: 'Integrations', items: [{ id: 'jira', label: 'Jira', icon: Link2 }] },
 ];
+
+/** Which integrations actually work, for the dot beside each in the rail —
+ *  switched on *and* configured, so the dot never says on while nothing is. */
+function integrationOn(id: SettingsCategory, s: AppSettings): boolean | null {
+  return id === 'jira' ? jiraOn(s) : null;
+}
 
 const NEW_TAB_OPTIONS: { label: string; value: NewTabPosition }[] = [
   { label: 'At the left edge', value: 'start' },
@@ -245,7 +260,7 @@ export function isEnvVarName(v: string): boolean {
   return /^[A-Z_][A-Z0-9_]*$/.test(v);
 }
 
-function IntegrationsCategory() {
+function JiraIntegration() {
   const settings = useSettings();
   const [tokenFound, setTokenFound] = useState<boolean | null>(null);
   const [tokenVarError, setTokenVarError] = useState(false);
@@ -258,13 +273,15 @@ function IntegrationsCategory() {
 
   return (
     <div className="flex flex-col px-5 py-4 max-w-xl">
-      <div className="text-[12px] text-muted-foreground leading-relaxed pb-2">
-        Jira issue keys like <span className="font-mono">PROJ-4821</span> become links in session names, tabs,
-        terminal output and transcripts. Read-only: the app only ever reads an issue's title and status.
-      </div>
+      <SettingRow
+        title="Jira"
+        description="Issue keys like PROJ-4821 become links with a hover card in session names, tabs, terminal output and transcripts, and My issues joins the navigation. Read-only: the app never changes anything in Jira."
+        checked={settings.jiraEnabled}
+        onChange={(v) => patchSettings({ jiraEnabled: v })}
+      />
       <TextRow
         title="Jira URL"
-        description="Leave empty to turn issue links off."
+        description="The address issue keys link to. https only."
         value={settings.jiraBaseUrl}
         placeholder="https://jira.example.com"
         mono
@@ -282,7 +299,7 @@ function IntegrationsCategory() {
       />
       <TextRow
         title="Token variable"
-        description="The name of an environment variable holding a personal access token — looked up in the app's environment, then in the env block of ~/.claude/settings.json. The app stores the name, never the token. Without one, keys still link; the hover card just can't show the title and status."
+        description="The name of an environment variable holding a personal access token — looked up in the app's environment, then in the env block of ~/.claude/settings.json. The app stores the name, never the token. Without one, keys still link, but the hover card can't show the title and status, and My issues stays empty."
         value={settings.jiraTokenVar}
         placeholder="JIRA_API_TOKEN"
         mono
@@ -420,6 +437,7 @@ export default function SettingsView({ onOpenFile }: {
   onOpenFile?: (dir: string, path: string) => void;
 } = {}) {
   const [category, setCategory] = useState<SettingsCategory>('interface');
+  const settings = useSettings();
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -431,34 +449,47 @@ export default function SettingsView({ onOpenFile }: {
       </div>
 
       <div className="flex flex-1 min-h-0">
-        <div className="w-36 shrink-0 border-r border-border py-2 overflow-y-auto scrollbar-thin">
-          {CATEGORIES.map(({ id, label, icon: Icon }) => {
-            const isActive = id === category;
-            return (
-              <button
-                key={id}
-                className={cn(
-                  'relative flex items-center gap-2 w-[calc(100%-12px)] mx-1.5 mb-0.5 px-2.5 py-1.5 rounded-sm text-[13px] cursor-pointer',
-                  'bg-transparent border-none font-inherit transition-colors duration-100',
-                  isActive ? 'text-foreground bg-raised' : 'text-muted-foreground hover:text-foreground hover:bg-hover',
-                )}
-                onClick={() => setCategory(id)}
-              >
-                {isActive && <span className="absolute left-0 top-1 bottom-1 w-0.5 rounded-full bg-primary" />}
-                <Icon size={13} className="shrink-0" />
-                <span>{label}</span>
-              </button>
-            );
-          })}
-        </div>
+        <nav aria-label="Settings" className="w-44 shrink-0 border-r border-border py-2 overflow-y-auto scrollbar-thin">
+          {GROUPS.map((group) => (
+            <div key={group.label} className="mb-2">
+              <div className="px-4 pt-1.5 pb-1 text-[11px] font-medium text-faint">{group.label}</div>
+              {group.items.map(({ id, label, icon: Icon }) => {
+                const isActive = id === category;
+                const on = integrationOn(id, settings);
+                return (
+                  <button
+                    key={id}
+                    aria-current={isActive ? 'page' : undefined}
+                    className={cn(
+                      'relative flex items-center gap-2 w-[calc(100%-12px)] mx-1.5 mb-0.5 px-2.5 py-1.5 rounded-sm text-[13px] cursor-pointer',
+                      'bg-transparent border-none font-inherit text-left transition-colors duration-100',
+                      isActive ? 'text-foreground bg-raised' : 'text-muted-foreground hover:text-foreground hover:bg-hover',
+                    )}
+                    onClick={() => setCategory(id)}
+                  >
+                    {isActive && <span className="absolute left-0 top-1 bottom-1 w-0.5 rounded-full bg-primary" />}
+                    <Icon size={13} className="shrink-0" />
+                    <span className="flex-1">{label}</span>
+                    {on !== null && (
+                      <span
+                        aria-label={on ? 'On' : 'Off'}
+                        className={cn('w-1.5 h-1.5 rounded-full shrink-0', on ? 'bg-primary' : 'bg-border-hover')}
+                      />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
+        </nav>
 
         <div className="flex-1 min-w-0 overflow-y-auto scrollbar-thin">
           {category === 'interface' && <InterfaceCategory />}
           {category === 'notifications' && <NotificationsCategory />}
           {category === 'sessions' && <SessionsCategory />}
-          {category === 'integrations' && <IntegrationsCategory />}
           {category === 'claude' && <ClaudeCategory onOpenFile={onOpenFile} />}
-          {category === 'customize' && <CustomizeTab />}
+          {category === 'jira' && <JiraIntegration />}
+          {category === 'appearance' && <CustomizeTab />}
         </div>
       </div>
     </div>

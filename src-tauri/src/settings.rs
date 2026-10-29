@@ -30,6 +30,9 @@ pub struct AppSettings {
     pub compact_list: bool,
     /// Where a new session tab lands: "start" (left edge) or "afterCurrent".
     pub new_tab_position: String,
+    /// The Jira integration's own switch: off keeps the URL and keys but sends
+    /// nothing and links nothing.
+    pub jira_enabled: bool,
     /// Jira base URL; empty turns issue links off.
     pub jira_base_url: String,
     /// Project keys that count as issue keys. Empty means any `ABC-123`.
@@ -49,6 +52,7 @@ impl Default for AppSettings {
             usage_refresh_seconds: 300,
             compact_list: false,
             new_tab_position: "start".to_string(),
+            jira_enabled: false,
             jira_base_url: String::new(),
             jira_project_keys: Vec::new(),
             jira_token_var: String::new(),
@@ -63,10 +67,19 @@ fn settings_path(root: &Path) -> PathBuf {
 /// Reads saved settings, or the default if there's no file yet or it is
 /// unreadable/corrupt.
 pub fn load_settings(root: &Path) -> AppSettings {
-    fs::read_to_string(settings_path(root))
+    let Some(json) = fs::read_to_string(settings_path(root))
         .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or_default()
+        .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+    else {
+        return AppSettings::default();
+    };
+    // Before Jira had its own switch, a URL meant on — keep it on.
+    let had_switch = json.get("jiraEnabled").is_some();
+    let mut settings: AppSettings = serde_json::from_value(json).unwrap_or_default();
+    if !had_switch && !settings.jira_base_url.is_empty() {
+        settings.jira_enabled = true;
+    }
+    settings
 }
 
 pub fn save_settings(root: &Path, settings: &AppSettings) -> Result<(), String> {
@@ -135,6 +148,15 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         fs::write(settings_path(tmp.path()), "{}").unwrap();
         assert_eq!(load_settings(tmp.path()), AppSettings::default());
+    }
+
+    #[test]
+    fn jira_url_without_a_switch_means_on() {
+        let tmp = tempfile::tempdir().unwrap();
+        fs::write(settings_path(tmp.path()), r#"{"jiraBaseUrl":"https://jira.example.com"}"#).unwrap();
+        assert!(load_settings(tmp.path()).jira_enabled);
+        fs::write(settings_path(tmp.path()), r#"{"jiraBaseUrl":"https://jira.example.com","jiraEnabled":false}"#).unwrap();
+        assert!(!load_settings(tmp.path()).jira_enabled);
     }
 
     #[test]

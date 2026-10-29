@@ -5,8 +5,8 @@ import * as ipc from '@/lib/ipc';
 import { resetSettingsForTest, DEFAULT_SETTINGS } from '@/lib/settings-store';
 
 /** Fields added after these fixtures were written. */
-const { newTabPosition, jiraBaseUrl, jiraProjectKeys, jiraTokenVar } = DEFAULT_SETTINGS;
-const NEW_DEFAULTS = { newTabPosition, jiraBaseUrl, jiraProjectKeys, jiraTokenVar };
+const { newTabPosition, jiraEnabled, jiraBaseUrl, jiraProjectKeys, jiraTokenVar } = DEFAULT_SETTINGS;
+const NEW_DEFAULTS = { newTabPosition, jiraEnabled, jiraBaseUrl, jiraProjectKeys, jiraTokenVar };
 import CustomizeTab from './CustomizeTab';
 import ConfirmDialog from './ConfirmDialog';
 

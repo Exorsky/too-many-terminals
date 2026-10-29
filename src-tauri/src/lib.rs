@@ -81,6 +81,8 @@ pub fn run() {
             commands::read_file,
             commands::write_file,
             commands::jira_issue,
+            commands::jira_my_issues,
+            commands::jira_issue_detail,
             commands::jira_token_found,
         ])
         .build(tauri::generate_context!())

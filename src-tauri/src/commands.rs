@@ -415,22 +415,42 @@ fn claude_settings_path() -> Option<std::path::PathBuf> {
     dirs::home_dir().map(|h| h.join(".claude").join("settings.json"))
 }
 
-/// One Jira issue for the hover card. Reads the base URL and the token's
-/// variable name from saved settings, so the token itself never crosses IPC.
-#[tauri::command]
-pub async fn jira_issue(key: String) -> Result<crate::jira::JiraIssue, String> {
+/// Saved Jira settings and the token behind their variable — or why there's
+/// nothing to ask Jira with.
+fn jira_config() -> Result<(AppSettings, Option<String>), String> {
     let root = workspace::config_dir().ok_or("could not resolve config directory")?;
     let s = settings::load_settings(&root);
-    if s.jira_base_url.is_empty() {
-        return Err("Jira URL is not set".into());
-    }
+    crate::jira::check_enabled(s.jira_enabled, &s.jira_base_url)?;
     let token = claude_settings_path().and_then(|p| crate::jira::resolve_token(&s.jira_token_var, &p));
     // A variable that's named but doesn't resolve would send an anonymous
     // request — a pointless 401 that then pauses every lookup for 5 minutes.
     if !s.jira_token_var.is_empty() && token.is_none() {
         return Err(format!("{} not found", s.jira_token_var));
     }
+    Ok((s, token))
+}
+
+/// One Jira issue for the hover card. Reads the base URL and the token's
+/// variable name from saved settings, so the token itself never crosses IPC.
+#[tauri::command]
+pub async fn jira_issue(key: String) -> Result<crate::jira::JiraIssue, String> {
+    let (s, token) = jira_config()?;
     crate::jira::fetch_issue(&s.jira_base_url, token.as_deref(), &key).await
+}
+
+/// An issue's description and latest comment, for the My issues inspector.
+#[tauri::command]
+pub async fn jira_issue_detail(key: String) -> Result<crate::jira::JiraIssueDetail, String> {
+    let (s, token) = jira_config()?;
+    crate::jira::fetch_issue_detail(&s.jira_base_url, token.as_deref(), &key).await
+}
+
+/// Open issues assigned to whoever owns the token.
+#[tauri::command]
+pub async fn jira_my_issues() -> Result<Vec<crate::jira::JiraIssue>, String> {
+    let (s, token) = jira_config()?;
+    let token = token.ok_or("Set a token variable to see your issues")?;
+    crate::jira::fetch_my_issues(&s.jira_base_url, &token).await
 }
 
 /// Whether a token variable resolves to anything — a yes/no for Settings,

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { ExternalLink } from 'lucide-react';
 import * as ipc from '@/lib/ipc';
 import type { JiraIssue } from '@/lib/ipc';
-import { fetchIssue, findIssueKeys, hideIssueCard, holdIssueCard, issueUrl, useIssueCard } from '@/lib/jira';
+import { fetchIssue, findIssueKeys, hideIssueCard, holdIssueCard, issueUrl, jiraOn, useIssueCard } from '@/lib/jira';
 import { useSettings } from '@/lib/settings-store';
 import { cn } from '@/lib/utils';
 import type { Tab } from '@/types';
@@ -30,7 +30,8 @@ export default function IssueCard({ sessions, onNewSession }: {
   onNewSession: (key: string, summary: string) => void;
 }) {
   const card = useIssueCard();
-  const { jiraBaseUrl, jiraTokenVar } = useSettings();
+  const settings = useSettings();
+  const { jiraBaseUrl, jiraTokenVar } = settings;
   const [issue, setIssue] = useState<JiraIssue | null>(null);
   const [error, setError] = useState<string | null>(null);
   const key = card?.key ?? null;
@@ -47,7 +48,7 @@ export default function IssueCard({ sessions, onNewSession }: {
     return () => { alive = false; };
   }, [key, jiraTokenVar]);
 
-  if (!card || !key || !jiraBaseUrl) return null;
+  if (!card || !key || !jiraOn(settings)) return null;
   // Whole keys only: PROJ-1 must not claim the session named for PROJ-12.
   const related = sessions.filter((s) => findIssueKeys(s.name, [key.split('-')[0]]).some((m) => m.key === key));
   const created = formatIssueDate(issue?.created ?? null);

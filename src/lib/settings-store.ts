@@ -21,6 +21,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   usageRefreshSeconds: 300,
   compactList: false,
   newTabPosition: 'start',
+  jiraEnabled: false,
   jiraBaseUrl: '',
   jiraProjectKeys: [],
   jiraTokenVar: '',

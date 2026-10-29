@@ -3,8 +3,8 @@ import * as ipc from '@/lib/ipc';
 import { getSettings, loadSettings, patchSettings, resetSettingsForTest, DEFAULT_SETTINGS } from './settings-store';
 
 /** Fields added after these fixtures were written. */
-const { newTabPosition, jiraBaseUrl, jiraProjectKeys, jiraTokenVar } = DEFAULT_SETTINGS;
-const NEW_DEFAULTS = { newTabPosition, jiraBaseUrl, jiraProjectKeys, jiraTokenVar };
+const { newTabPosition, jiraEnabled, jiraBaseUrl, jiraProjectKeys, jiraTokenVar } = DEFAULT_SETTINGS;
+const NEW_DEFAULTS = { newTabPosition, jiraEnabled, jiraBaseUrl, jiraProjectKeys, jiraTokenVar };
 
 vi.mock('@/lib/ipc');
 

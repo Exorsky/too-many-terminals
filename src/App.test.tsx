@@ -1,4 +1,4 @@
-import { cleanup, createEvent, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, createEvent, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -54,6 +54,7 @@ vi.mock('@/lib/ipc', () => {
     writeFile: ok(undefined),
     loadSettings: ok({}),
     saveSettings: ok(undefined),
+    jiraMyIssues: ok([]),
     getSessionUsageStats: ok({ available: false, session: null, week: null, fetchedAtMs: null, fromCache: false }),
     getSessionStats: ok([]),
     // Fresh transcripts, so the restored sessions are under Today rather than
@@ -279,6 +280,25 @@ describe('navigation', () => {
     await waitFor(() => expect(document.querySelectorAll('[data-session-row]').length).toBe(0));
     fireEvent.keyDown(window, { key: 'b', metaKey: true });
     await ready();
+  });
+});
+
+describe('My issues', () => {
+  it('is in the navigation only while Jira is on, and switching Jira off leaves it', async () => {
+    const { patchSettings, resetSettingsForTest } = await import('@/lib/settings-store');
+    render(<App />);
+    await ready();
+    const main = () => screen.getAllByRole('navigation', { name: 'Main' })[0];
+    expect(within(main()).queryByRole('button', { name: /My issues/ })).toBeNull();
+
+    act(() => patchSettings({ jiraEnabled: true, jiraBaseUrl: 'https://jira.example.com', jiraTokenVar: 'JIRA_API_TOKEN' }));
+    fireEvent.click(within(main()).getByRole('button', { name: /My issues/ }));
+    expect(await screen.findByText('Nothing assigned to you')).toBeInTheDocument();
+
+    act(() => patchSettings({ jiraEnabled: false }));
+    await waitFor(() => expect(screen.queryByText('Nothing assigned to you')).toBeNull());
+    expect(within(main()).queryByRole('button', { name: /My issues/ })).toBeNull();
+    resetSettingsForTest();
   });
 });
 

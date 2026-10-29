@@ -154,11 +154,22 @@ describe('re-rendering must not rebuild the document', () => {
   });
 });
 
+describe('Markdown, with Jira switched off', () => {
+  it('links nothing even with a URL and projects set', async () => {
+    const { patchSettings } = await import('@/lib/settings-store');
+    vi.mocked(ipc.saveSettings).mockResolvedValue(undefined);
+    patchSettings({ jiraEnabled: false, jiraBaseUrl: 'https://jira.example.com', jiraProjectKeys: ['PROJ'] });
+    render(<Markdown source={'Fixed PROJ-4821.'} />);
+    expect(screen.queryByRole('link', { name: 'PROJ-4821' })).toBeNull();
+    patchSettings({ jiraBaseUrl: '', jiraProjectKeys: [] });
+  });
+});
+
 describe('Markdown, with Jira links on', () => {
   it('links issue keys in prose but not in code', async () => {
     const { patchSettings } = await import('@/lib/settings-store');
     vi.mocked(ipc.saveSettings).mockResolvedValue(undefined);
-    patchSettings({ jiraBaseUrl: 'https://jira.example.com', jiraProjectKeys: ['PROJ'] });
+    patchSettings({ jiraEnabled: true, jiraBaseUrl: 'https://jira.example.com', jiraProjectKeys: ['PROJ'] });
     render(<Markdown source={'Fixed PROJ-4821, see `PROJ-1`. SHA-256 stays text.'} />);
     expect(screen.getByRole('link', { name: 'PROJ-4821' })).toHaveAttribute(
       'href',

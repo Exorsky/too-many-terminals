@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Archive, CheckSquare, ChevronLeft, ChevronRight, Columns2, Folder, FolderInput, FolderOpen, FolderPlus, Inbox,
-  Library, MoreHorizontal, Pencil, Pin, PinOff, Plus, Search, Settings, Code, SquareTerminal, Upload, X,
+  Library, MoreHorizontal, Pencil, Pin, PinOff, Plus, Search, Settings, Code, SquareTerminal, TicketCheck, Upload, X,
 } from 'lucide-react';
 import { TAB_MIME } from '@/lib/dnd';
 import * as ipc from '@/lib/ipc';
@@ -85,6 +85,8 @@ export interface SessionsSidebarProps {
   todoCount: number;
   onShowSessions: () => void;
   onShowTodo: () => void;
+  /** My issues — only while the Jira integration is on. */
+  onShowJira?: () => void;
 }
 
 /** The one status mark in the list. Four states, three of which are quiet on
@@ -435,7 +437,7 @@ export default function SessionsSidebar({
   onNewSession, onOpenNewSession, onSelect, onClose, onRename, onSetProject,
   onArchive, onTogglePin, onOpenDirectory, onOpenInVscode, onCreateTask, onOpenInWorkspace, onOpenPalette,
   onAddProject, onRemoveProject, onImportSession, onToggleArchive, onToggleSettings,
-  view, todoCount, onShowSessions, onShowTodo,
+  view, todoCount, onShowSessions, onShowTodo, onShowJira,
 }: SessionsSidebarProps) {
   const settings = useSettings();
   const [query, setQuery] = useState('');
@@ -533,6 +535,9 @@ export default function SessionsSidebar({
           onClick={onShowSessions}
         />
         <NavRow icon={CheckSquare} label="To-Do" count={todoCount} active={view === 'todo' && !showSettings && !showArchive} onClick={onShowTodo} />
+        {onShowJira && (
+          <NavRow icon={TicketCheck} label="My issues" active={view === 'jira' && !showSettings && !showArchive} onClick={onShowJira} />
+        )}
         <NavRow icon={Library} label="Library" active={showArchive} onClick={onToggleArchive} />
         <NavRow icon={Settings} label="Settings" hint="⌘," active={showSettings} onClick={onToggleSettings} />
       </nav>
@@ -777,7 +782,7 @@ function NavRow({ icon: Icon, label, count, hint, active, onClick }: {
  *  never moves a target; below a hairline, the live sessions as status squares. */
 export function CollapsedRail({
   tabs, selectedId, lastUsed, view, showSettings, showArchive, todoCount,
-  onOpenPalette, onShowSessions, onShowTodo, onToggleArchive, onToggleSettings, onSelect,
+  onOpenPalette, onShowSessions, onShowTodo, onShowJira, onToggleArchive, onToggleSettings, onSelect,
 }: {
   tabs: Tab[];
   selectedId: string | null;
@@ -789,6 +794,7 @@ export function CollapsedRail({
   onOpenPalette: () => void;
   onShowSessions: () => void;
   onShowTodo: () => void;
+  onShowJira?: () => void;
   onToggleArchive: () => void;
   onToggleSettings: () => void;
   onSelect: (tabId: string) => void;
@@ -812,6 +818,11 @@ export function CollapsedRail({
       <button type="button" aria-label="To-Do" title={`To-Do${todoCount ? ` · ${todoCount}` : ''}`} className={square(view === 'todo' && !showSettings && !showArchive)} onClick={onShowTodo}>
         <CheckSquare size={15} />
       </button>
+      {onShowJira && (
+        <button type="button" aria-label="My issues" title="My issues" className={square(view === 'jira' && !showSettings && !showArchive)} onClick={onShowJira}>
+          <TicketCheck size={15} />
+        </button>
+      )}
       <button type="button" aria-label="Library" title="Library" className={square(showArchive)} onClick={onToggleArchive}>
         <Library size={15} />
       </button>

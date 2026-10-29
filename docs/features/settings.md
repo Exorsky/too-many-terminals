@@ -6,12 +6,21 @@ pane to `SettingsView`, mirroring how the History button swaps in
 `SessionHistoryPanel` — terminals stay mounted but hidden underneath. Opening one
 of History/Settings closes the other; selecting or spawning a tab closes both.
 
-`SettingsView` owns its own category state (`interface` | `notifications` |
-`sessions` | `integrations` | `claude` | `customize`) with a left rail — no router, no top tab strip. Each
-category is one focused screen instead of one long scrolling list; the rail
+`SettingsView` owns its own category state with a left rail — no router, no
+top tab strip. The rail has three groups:
+
+| Group | Pages |
+|---|---|
+| General | Interface, Notifications, Sessions, Appearance (themes, see [themes.md](themes.md)) |
+| Claude Code | Global files |
+| Integrations | one page per integration — Jira today |
+
+Each page is one focused screen instead of one long scrolling list; the rail
 uses the same active-row look (left accent bar) as the sidebar's own tab rows.
-Interface/Notifications/Sessions hold plain preferences; Customize hosts the
-theme system (see [themes.md](themes.md)).
+An integration's row carries a dot — accent-colored when it's on and configured
+(never green: that's a session status) — so the rail answers
+"what's connected" without opening anything. Adding the next integration is a
+row in `GROUPS` and its own page, not more fields on a shared one.
 
 ## Interface
 
@@ -50,12 +59,15 @@ Two dropdowns, both about background behavior while a session is idle:
   Anthropic's usage endpoint rate-limits and the backend enforces its own
   5-minute floor. See [usage-meter.md](usage-meter.md).
 
-## Integrations
+## Integrations › Jira
 
-Jira: base URL, project keys and the *name* of a token variable. See
-[jira-links.md](jira-links.md).
+A switch first (`jiraEnabled`), then the base URL, project keys and the *name*
+of a token variable. Off keeps the fields but links nothing, asks Jira nothing
+and hides My issues. Settings files from before the switch existed load with
+it on if a URL was set, so upgrading doesn't silently turn Jira off
+(`settings::load_settings`). See [jira-links.md](jira-links.md).
 
-## Claude Code
+## Claude Code › Global files
 
 Claude Code's global files in `~/.claude` — `settings.json`, `CLAUDE.md`,
 `keybindings.json` — each with **Open**, which puts it in the workspace's editor
@@ -74,7 +86,7 @@ in-memory mirror of `AppSettings` with `loadSettings` (once), `patchSettings`
 
 - `src/components/SettingsView.tsx` — the view + left-rail categories +
   Interface/Notifications/Sessions preferences
-- `src/components/CustomizeTab.tsx` — theme picker/editor (Customize category)
+- `src/components/CustomizeTab.tsx` — theme picker/editor (Appearance page)
 - `src/lib/settings-store.ts` (+ tests) — shared settings state
 - Wiring: `App.tsx` (`showSettings` state, mutual exclusion with `showHistory`;
   reads `showMarkdownToggle`/`autoSleepMinutes` via `useSettings`),

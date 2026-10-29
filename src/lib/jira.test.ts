@@ -78,6 +78,36 @@ describe('Jira lookups stay cheap', () => {
     expect(spy).toHaveBeenCalledTimes(2);
     spy.mockRestore();
   });
+
+  it('asks for your issues once, and hovering one of them asks nothing more', async () => {
+    const ipc = await import('./ipc');
+    const { fetchIssue, fetchMyIssues, clearIssueCache } = await import('./jira');
+    const { vi } = await import('vitest');
+    clearIssueCache();
+    const mine = vi.spyOn(ipc, 'jiraMyIssues').mockResolvedValue([{ key: 'PROJ-7', summary: 'Mine' } as never]);
+    const one = vi.spyOn(ipc, 'jiraIssue');
+
+    await fetchMyIssues('JIRA_API_TOKEN');
+    await fetchMyIssues('JIRA_API_TOKEN');
+    expect(mine).toHaveBeenCalledTimes(1);
+    expect((await fetchIssue('PROJ-7')).summary).toBe('Mine');
+    expect(one).not.toHaveBeenCalled();
+    // Refresh right away: inside the 30s floor, nothing leaves.
+    await fetchMyIssues('JIRA_API_TOKEN', true);
+    expect(mine).toHaveBeenCalledTimes(1);
+    // Another token is another person: asks again.
+    await fetchMyIssues('OTHER_TOKEN');
+    expect(mine).toHaveBeenCalledTimes(2);
+    mine.mockRestore();
+    one.mockRestore();
+  });
+});
+
+it('Jira is on only when switched on and given a URL', async () => {
+  const { jiraOn } = await import('./jira');
+  expect(jiraOn({ jiraEnabled: true, jiraBaseUrl: 'https://jira.example.com' })).toBe(true);
+  expect(jiraOn({ jiraEnabled: false, jiraBaseUrl: 'https://jira.example.com' })).toBe(false);
+  expect(jiraOn({ jiraEnabled: true, jiraBaseUrl: '' })).toBe(false);
 });
 
 it('sweeping across keys with a card open only shows the key the pointer stops on', async () => {

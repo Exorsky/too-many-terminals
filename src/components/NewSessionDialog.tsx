@@ -3,7 +3,7 @@ import { Dialog } from 'radix-ui';
 import { Inbox, Plus, X } from 'lucide-react';
 import { projectHue } from '@/types';
 import { cn, folderName } from '@/lib/utils';
-import { fetchIssue, issueUrl, parseIssueInput } from '@/lib/jira';
+import { fetchIssue, issueUrl, jiraOn, parseIssueInput } from '@/lib/jira';
 import { useSettings } from '@/lib/settings-store';
 import type { NewSessionKind } from './SessionsSidebar';
 
@@ -58,8 +58,9 @@ export default function NewSessionDialog({
   const [summary, setSummary] = useState<{ key: string; text: string } | null>(null);
   const [issueError, setIssueError] = useState<string | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
-  const { jiraBaseUrl, jiraProjectKeys, jiraTokenVar } = useSettings();
-  const issueKey = jiraBaseUrl ? parseIssueInput(issueInput, jiraProjectKeys) : null;
+  const settings = useSettings();
+  const { jiraBaseUrl, jiraProjectKeys, jiraTokenVar } = settings;
+  const issueKey = jiraOn(settings) ? parseIssueInput(issueInput, jiraProjectKeys) : null;
 
   // A pasted key or URL looks its title up, so the session can be named after
   // the ticket rather than "Claude".
@@ -198,7 +199,7 @@ export default function NewSessionDialog({
                 ))}
               </div>
 
-              {jiraBaseUrl && (
+              {jiraOn(settings) && (
                 <label className="flex flex-col gap-1.5">
                   <span className="text-[12px] font-semibold text-muted-foreground">
                     Jira issue <span className="font-normal text-faint">— optional, a key or a link</span>

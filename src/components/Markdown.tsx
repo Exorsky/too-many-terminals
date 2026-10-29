@@ -1,7 +1,7 @@
 import { Children, isValidElement, useMemo, useRef, type ReactElement, type ReactNode } from 'react';
 import ReactMarkdown, { type Components, type ExtraProps } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { remarkIssueLinks } from '@/lib/jira';
+import { jiraOn, remarkIssueLinks } from '@/lib/jira';
 import { useSettings } from '@/lib/settings-store';
 import * as ipc from '@/lib/ipc';
 import { isExternalHref } from '@/lib/paths';
@@ -207,7 +207,9 @@ export default function Markdown({ source, onOpenLink }: MarkdownProps) {
     td: ({ children, style }) => <td style={style} className="px-3 py-1.5 align-top">{children}</td>,
   }), []);
 
-  const { jiraBaseUrl, jiraProjectKeys } = useSettings();
+  const settings = useSettings();
+  const jiraBaseUrl = jiraOn(settings) ? settings.jiraBaseUrl : '';
+  const { jiraProjectKeys } = settings;
   const remarkPlugins = useMemo(
     () => [remarkGfm, remarkIssueLinks({ base: jiraBaseUrl, projects: jiraProjectKeys })],
     [jiraBaseUrl, jiraProjectKeys],

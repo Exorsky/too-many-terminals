@@ -5,7 +5,12 @@ session tab strip, the title-bar breadcrumb, terminal output and transcripts.
 Hovering one shows a card with the issue's title and status. The app only ever
 **reads** from Jira — one GET per issue, nothing else.
 
-Off until **Settings › Integrations › Jira URL** is set.
+Built for Jira Server / Data Center: a personal access token as a bearer
+token and `/rest/api/2`. Jira Cloud wants an email + API token (Basic auth) and
+has retired `/rest/api/2/search`, so it isn't supported yet.
+
+Off until **Settings › Integrations › Jira** is switched on and has a URL —
+`jiraOn` (`src/lib/jira.ts`) is the one check every surface uses.
 
 ## One detector
 
@@ -72,9 +77,37 @@ Requests don't follow redirects. Behind an SSO proxy, being off the VPN answers
 with a 302 to the login page; the card says "Jira redirected to sign-in — VPN?"
 rather than failing to parse a login page.
 
+## My issues
+
+With Jira on, **My issues** joins the navigation block (and the folded rail):
+your open issues — `assignee = currentUser() AND resolution = Unresolved`,
+latest update first, at most 50 — grouped In progress, then To do.
+
+A row is one quiet line: a priority glyph (signal bars; a red `!` for
+critical — only critical and high carry color, `priorityLevel` folds each
+scheme's names onto four levels), the key, a session's status dot when a
+session's name already carries the key, the title, and the last update. A
+status chip shows only when the status says something the group doesn't
+(Escalated, Feedback, Backlog — not "In Progress" under In progress). No
+buttons on rows: double-click or Enter does the one thing — **Open session**
+if there is one, **New session** otherwise.
+
+A click opens the inspector on the right: status, priority, reporter, created
+and updated, the description and latest comment, the session, and the action
+with **Open in Jira** and **Copy key**. Description and comment are one more
+request (`fetchIssueDetail`, cached like a card), asked 300ms after the
+selection settles so clicking through the list doesn't ask for every row.
+
+It costs one request when you open it, reused for five minutes (`fetchMyIssues`);
+**Refresh** asks again, but never more than once per 30 seconds, and a failed
+refresh keeps the list it had with the reason above it. The answer is keyed by
+the token variable, so pointing Settings at another token asks again. Each result also fills the per-issue cache, so
+hovering a key from the list asks nothing more. Nothing polls. Needs a token:
+Jira's `currentUser()` is whoever owns it.
+
 ## Starting a session from a ticket
 
-New session has a **Jira issue** field (shown only while a Jira URL is set). Paste
+New session has a **Jira issue** field (shown only while Jira is on). Paste
 a key or any Jira URL that carries one; with a token, its title is looked up.
 The session is named `KEY · title` unless you gave it a name, and Claude's
 prompt is pre-filled — not submitted — with the key, title and link, the same
@@ -86,5 +119,7 @@ opens the dialog with the issue filled in.
 - `src/lib/jira.ts` (+ `jira.test.ts`) — detector, URL, input parsing, cache,
   card store, remark plugin
 - `src/components/IssueChip.tsx`, `src/components/IssueCard.tsx`
+- `src/components/JiraView.tsx` (+ test) — My issues and its inspector
 - `src/components/Terminal.tsx` — the link provider
-- `src-tauri/src/jira.rs` — key validation, token lookup, the GET
+- `src-tauri/src/jira.rs` — key validation, token lookup, the GETs (one
+  issue, its description and latest comment, your issues) behind one helper that keeps the rate-limit rules

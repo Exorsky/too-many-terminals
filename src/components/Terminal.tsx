@@ -5,7 +5,7 @@ import { WebLinksAddon } from '@xterm/addon-web-links';
 import { WebglAddon } from '@xterm/addon-webgl';
 import '@xterm/xterm/css/xterm.css';
 import * as ipc from '@/lib/ipc';
-import { findIssueKeys, hideIssueCard, issueUrl, showIssueCard } from '@/lib/jira';
+import { findIssueKeys, hideIssueCard, issueUrl, jiraOn, showIssueCard } from '@/lib/jira';
 import { getSettings } from '@/lib/settings-store';
 import { getActiveXtermTheme } from '@/lib/themes';
 import { isInterruptKeystroke } from '@/lib/utils';
@@ -78,8 +78,8 @@ const Terminal = React.memo(function Terminal({ tabId, isVisible, focused = true
       // that are already open.
       term.registerLinkProvider({
         provideLinks(y, callback) {
-          const { jiraBaseUrl, jiraProjectKeys } = getSettings();
-          const line = jiraBaseUrl ? term.buffer.active.getLine(y - 1)?.translateToString(true) : undefined;
+          const { jiraProjectKeys } = getSettings();
+          const line = jiraOn(getSettings()) ? term.buffer.active.getLine(y - 1)?.translateToString(true) : undefined;
           if (!line) { callback(undefined); return; }
           const links = findIssueKeys(line, jiraProjectKeys).map(({ key, index }) => ({
             text: key,

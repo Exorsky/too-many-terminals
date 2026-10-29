@@ -1,13 +1,13 @@
 import * as ipc from '@/lib/ipc';
-import { firstIssueKey, hideIssueCard, issueUrl, showIssueCard, stripIssueKey } from '@/lib/jira';
+import { firstIssueKey, hideIssueCard, issueUrl, jiraOn, showIssueCard, stripIssueKey } from '@/lib/jira';
 import { useSettings } from '@/lib/settings-store';
 import { cn } from '@/lib/utils';
 
 /** The issue key in a session name and the name without it — or no key at
- *  all while Jira links are off (no base URL set). */
+ *  all while Jira is off. */
 export function useIssueName(name: string): { key: string | null; label: string } {
-  const { jiraBaseUrl, jiraProjectKeys } = useSettings();
-  const key = jiraBaseUrl ? firstIssueKey(name, jiraProjectKeys) : null;
+  const settings = useSettings();
+  const key = jiraOn(settings) ? firstIssueKey(name, settings.jiraProjectKeys) : null;
   return { key, label: key ? stripIssueKey(name, key) : name };
 }
 

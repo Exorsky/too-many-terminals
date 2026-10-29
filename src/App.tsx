@@ -8,6 +8,8 @@ import PaneSessionMenu from '@/components/PaneSessionMenu';
 import PaneTabs from '@/components/PaneTabs';
 import SessionTabs from '@/components/SessionTabs';
 import IssueCard from '@/components/IssueCard';
+import JiraView from '@/components/JiraView';
+import { jiraOn } from '@/lib/jira';
 import IssueChip, { useIssueName } from '@/components/IssueChip';
 import SidebarFooter from '@/components/SidebarFooter';
 import PaneDropZones from '@/components/PaneDropZones';
@@ -210,6 +212,9 @@ export default function App() {
   const activeTab = state.tabs.find((t) => t.id === currentTabId) ?? null;
   const overlaysUp = showSettings || showArchive || readerTarget !== null;
   const onSessions = view === 'sessions' && !overlaysUp;
+  const jiraActive = jiraOn(settings);
+  // Jira switched off while My issues is up: back to the sessions.
+  useEffect(() => { if (view === 'jira' && !jiraActive) setView('sessions'); }, [view, jiraActive]);
   /** The panes are on screen: Sessions, and not covered by the logbook tab. */
   const onGrid = onSessions && !onLogbook;
 
@@ -919,6 +924,7 @@ export default function App() {
   const nav = {
     sessions: () => { setView('sessions'); setShowSettings(false); setShowArchive(false); setReaderTarget(null); },
     todo: () => { setView('todo'); setShowSettings(false); setShowArchive(false); setReaderTarget(null); },
+    jira: () => { setView('jira'); setShowSettings(false); setShowArchive(false); setReaderTarget(null); },
     library: () => { setShowArchive((v) => !v); setShowSettings(false); setView('sessions'); },
     settings: () => { setShowSettings((v) => !v); setShowArchive(false); setView('sessions'); },
   };
@@ -951,7 +957,7 @@ export default function App() {
               drift as the two ends change width. */}
           <div data-tauri-drag-region className="absolute left-1/2 -translate-x-1/2 max-w-[50%] flex items-center gap-1.5 min-w-0 text-[12px] text-muted-foreground">
             <Breadcrumb
-              title={showSettings ? 'Settings' : showArchive ? 'Library' : view === 'todo' ? 'To-Do' : onLogbook ? 'Logbook' : null}
+              title={showSettings ? 'Settings' : showArchive ? 'Library' : view === 'todo' ? 'To-Do' : view === 'jira' ? 'My issues' : onLogbook ? 'Logbook' : null}
               session={onSessions ? activeTab : null}
               projects={projects}
             />
@@ -1003,6 +1009,7 @@ export default function App() {
                 todoCount={tasks.filter((t) => !t.done).length}
                 onShowSessions={nav.sessions}
                 onShowTodo={nav.todo}
+                onShowJira={jiraActive ? nav.jira : undefined}
               />
             </div>
             <Seam
@@ -1026,6 +1033,7 @@ export default function App() {
             onOpenPalette={() => setPaletteOpen(true)}
             onShowSessions={nav.sessions}
             onShowTodo={nav.todo}
+            onShowJira={jiraActive ? nav.jira : undefined}
             onToggleArchive={nav.library}
             onToggleSettings={nav.settings}
             onSelect={handleSelect}
@@ -1237,6 +1245,16 @@ export default function App() {
             )}
           </div>
           </div>
+
+          {view === 'jira' && jiraActive && !overlaysUp && (
+            <div className="absolute inset-0 flex bg-background">
+              <JiraView
+                sessions={sessions}
+                onOpenSession={handleSelect}
+                onNewSession={(key, summary) => { setNewIssue({ key, summary }); setNewOpen(true); }}
+              />
+            </div>
+          )}
 
           {view === 'todo' && !overlaysUp && (
             <div className="absolute inset-0 flex bg-background">

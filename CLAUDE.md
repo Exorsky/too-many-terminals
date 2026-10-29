@@ -18,7 +18,7 @@ Feature and architecture docs live in `docs/` — **keep them updated when featu
 - [docs/features/markdown-preview.md](docs/features/markdown-preview.md) — the shared Markdown renderer: file-opening links, anchors, mermaid diagrams
 - [docs/features/home-screen.md](docs/features/home-screen.md) — idle Home: a metrics dashboard built from your session history
 - [docs/features/attention-inbox.md](docs/features/attention-inbox.md) — the session ledger: live counts that filter the list (waiting / running / just finished / pinned)
-- [docs/features/jira-links.md](docs/features/jira-links.md) — Jira issue keys as links + hover cards in names, terminals and transcripts
+- [docs/features/jira-links.md](docs/features/jira-links.md) — Jira issue keys as links + hover cards in names, terminals and transcripts; My issues
 - [docs/features/command-palette.md](docs/features/command-palette.md) — Ctrl+Shift+P fuzzy jump to any open terminal
 - [docs/features/notifications.md](docs/features/notifications.md) — desktop notifications when an unfocused session needs you
 - [docs/features/session-history.md](docs/features/session-history.md) — past-session browsing/resume
@@ -29,7 +29,7 @@ Feature and architecture docs live in `docs/` — **keep them updated when featu
 - [docs/features/workspace-persistence.md](docs/features/workspace-persistence.md) — restoring folder/tabs across restarts
 - [docs/features/tab-status-and-naming.md](docs/features/tab-status-and-naming.md) — Claude Code hooks: live status + auto-naming
 - [docs/features/env-loading.md](docs/features/env-loading.md) — a folder's `.env` handed to the session at spawn
-- [docs/features/settings.md](docs/features/settings.md) — Settings view (left-rail categories: Interface/Notifications/Sessions/Customize)
+- [docs/features/settings.md](docs/features/settings.md) — Settings view (grouped left rail: General / Claude Code / Integrations, one page and switch per integration)
 - [docs/features/themes.md](docs/features/themes.md) — theme presets + custom theme editor
 - [docs/development.md](docs/development.md) — dev/test/build commands, release process
 

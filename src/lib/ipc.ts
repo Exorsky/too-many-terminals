@@ -297,6 +297,21 @@ export function jiraIssue(key: string): Promise<JiraIssue> {
   return invoke('jira_issue', { key });
 }
 
+export interface JiraIssueDetail {
+  description: string | null;
+  comment: { author: string | null; created: string | null; body: string } | null;
+}
+
+/** An issue's description and latest comment, read-only. */
+export function jiraIssueDetail(key: string): Promise<JiraIssueDetail> {
+  return invoke('jira_issue_detail', { key });
+}
+
+/** Open issues assigned to the token's owner, most recently updated first. */
+export function jiraMyIssues(): Promise<JiraIssue[]> {
+  return invoke('jira_my_issues');
+}
+
 /** Whether a token variable resolves (env or ~/.claude/settings.json). */
 export function jiraTokenFound(variable: string): Promise<boolean> {
   return invoke('jira_token_found', { var: variable });

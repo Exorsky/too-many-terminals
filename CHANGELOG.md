@@ -11,6 +11,24 @@ listed here; see `git log` for the full history.
 
 ## [Unreleased]
 
+### Added
+
+- **My issues.** With Jira on, a My issues item in the navigation lists the
+  open issues assigned to you, in progress first: one line each with a
+  priority glyph, a session dot when a session already carries the key, and
+  the status only when it's unusual. A click opens details on the right —
+  description, latest comment, reporter — with Open session or New session;
+  double-click or Enter does it straight away. One request when opened,
+  reused for five minutes; Refresh asks again.
+
+### Changed
+
+- **Settings are grouped.** The rail now reads General (Interface,
+  Notifications, Sessions, Appearance), Claude Code (Global files) and
+  Integrations, where each integration is its own page with its own switch and
+  an on/off dot in the rail. Jira can now be turned off without clearing its
+  URL; an existing Jira setup stays on after the upgrade.
+
 ## [0.27.0] - 2026-10-28
 
 ### Added

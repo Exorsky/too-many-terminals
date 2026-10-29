@@ -3,7 +3,7 @@ export type TabKind = 'claude' | 'shell' | 'file';
 /** The two product modes. Projects are deliberately not one of them — a
  *  project organizes sessions and tasks, it isn't a place you navigate to.
  *  See docs/architecture.md. */
-export type AppView = 'sessions' | 'todo';
+export type AppView = 'sessions' | 'todo' | 'jira';
 
 /** The tools that belong to the session you're in. Not sessions-as-tabs: one
  *  session owns a Claude process, a shell in the same directory, and a view of
@@ -269,6 +269,9 @@ export interface AppSettings {
   /** Where a newly opened session tab lands: the left edge (newest first) or
    *  right after the current tab, as most terminals do. */
   newTabPosition: NewTabPosition;
+  /** The Jira integration's switch. Off keeps the fields below but links and
+   *  asks nothing. */
+  jiraEnabled: boolean;
   /** Jira base URL, e.g. https://jira.example.com. Empty turns issue links off. */
   jiraBaseUrl: string;
   /** Project keys that count as issue keys (PROJ, HELP…). Empty means any

@@ -5,11 +5,17 @@
  */
 import { useSyncExternalStore } from 'react';
 import * as ipc from './ipc';
-import type { JiraIssue } from './ipc';
+import type { JiraIssue, JiraIssueDetail } from './ipc';
+import type { AppSettings } from '@/types';
 
 /** `ABC-123`. The project part is 2–10 uppercase letters/digits starting with a
  *  letter; the number never starts with 0. */
 const KEY_RE = /\b([A-Z][A-Z0-9]{1,9})-([1-9]\d{0,6})\b/g;
+
+/** Whether Jira links and lookups are on: switched on, with a URL to go to. */
+export function jiraOn(s: Pick<AppSettings, 'jiraEnabled' | 'jiraBaseUrl'>): boolean {
+  return s.jiraEnabled && s.jiraBaseUrl !== '';
+}
 
 export interface IssueMatch {
   key: string;
@@ -74,9 +80,47 @@ export function fetchIssue(key: string): Promise<JiraIssue> {
   return promise;
 }
 
+const details = new Map<string, { at: number; ttl: number; promise: Promise<JiraIssueDetail> }>();
+
+/** An issue's description and latest comment, cached like `fetchIssue`. */
+export function fetchIssueDetail(key: string): Promise<JiraIssueDetail> {
+  const hit = details.get(key);
+  if (hit && Date.now() - hit.at < hit.ttl) return hit.promise;
+  const promise = ipc.jiraIssueDetail(key);
+  const entry = { at: Date.now(), ttl: TTL_MS, promise };
+  details.set(key, entry);
+  promise.catch(() => { entry.ttl = FAILURE_TTL_MS; });
+  return promise;
+}
+
+const MINE_TTL_MS = 5 * 60 * 1000;
+/** Refresh can't ask more often than this, however fast it's clicked. */
+const MINE_FLOOR_MS = 30 * 1000;
+let mine: { at: number; tokenVar: string; promise: Promise<JiraIssue[]> } | null = null;
+
+/** Your open issues: one search, reused for five minutes — 30 seconds when
+ *  `fresh` (Refresh) — so opening the view again doesn't ask again. Keyed by
+ *  the token variable: another token is another "you". Each result also fills
+ *  the per-issue cache, so hovering a key from the list costs nothing. */
+export function fetchMyIssues(tokenVar: string, fresh = false): Promise<JiraIssue[]> {
+  const ttl = fresh ? MINE_FLOOR_MS : MINE_TTL_MS;
+  if (mine && mine.tokenVar === tokenVar && Date.now() - mine.at < ttl) return mine.promise;
+  const promise = ipc.jiraMyIssues();
+  const entry = { at: Date.now(), tokenVar, promise };
+  mine = entry;
+  promise.then(
+    (issues) => { for (const i of issues) cache.set(i.key, { at: entry.at, ttl: TTL_MS, promise: Promise.resolve(i) }); },
+    // A failure isn't kept: the next open (or Refresh) asks again.
+    () => { if (mine === entry) mine = null; },
+  );
+  return promise;
+}
+
 /** Test-only. */
 export function clearIssueCache(): void {
   cache.clear();
+  details.clear();
+  mine = null;
 }
 
 // --- the hover card -------------------------------------------------------

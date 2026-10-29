@@ -26,6 +26,22 @@ pub struct JiraIssue {
     pub updated: Option<String>,
 }
 
+/// What the inspector adds to an issue: its description and latest comment.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct JiraIssueDetail {
+    pub description: Option<String>,
+    pub comment: Option<JiraComment>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct JiraComment {
+    pub author: Option<String>,
+    pub created: Option<String>,
+    pub body: String,
+}
+
 /// `ABC-123`: an uppercase project key, a dash, digits. Checked before the key
 /// goes into a URL, so nothing else can ride along in the path.
 pub fn is_issue_key(key: &str) -> bool {
@@ -93,10 +109,74 @@ pub fn retry_after_secs(header: Option<&str>) -> u64 {
     header.and_then(|v| v.trim().parse::<u64>().ok()).unwrap_or(60).clamp(10, 3600)
 }
 
+/// Nothing reaches Jira while the integration is switched off or has no URL.
+pub fn check_enabled(enabled: bool, base_url: &str) -> Result<(), String> {
+    if !enabled {
+        return Err("Jira is turned off".into());
+    }
+    if base_url.is_empty() {
+        return Err("Jira URL is not set".into());
+    }
+    Ok(())
+}
+
+const FIELDS: &str = "summary,status,assignee,reporter,priority,created,updated";
+
 pub async fn fetch_issue(base_url: &str, token: Option<&str>, key: &str) -> Result<JiraIssue, String> {
     if !is_issue_key(key) {
         return Err(format!("not an issue key: {key}"));
     }
+    let json = get_json(base_url, token, &format!("issue/{key}"), &[("fields", FIELDS)])
+        .await
+        .map_err(|e| if e == "not found" { format!("{key} not found") } else { e })?;
+    parse_issue(&json).ok_or_else(|| "unexpected Jira response".into())
+}
+
+/// Open issues assigned to the token's owner, most recently updated first.
+/// One request; at most 50 — a list longer than that isn't a to-do list.
+pub async fn fetch_my_issues(base_url: &str, token: &str) -> Result<Vec<JiraIssue>, String> {
+    let jql = "assignee = currentUser() AND resolution = Unresolved ORDER BY updated DESC";
+    let json = get_json(base_url, Some(token), "search", &[("jql", jql), ("fields", FIELDS), ("maxResults", "50")]).await?;
+    Ok(parse_search(&json))
+}
+
+/// Description and latest comment of one issue — one GET, asked only when an
+/// issue is opened in the inspector.
+pub async fn fetch_issue_detail(base_url: &str, token: Option<&str>, key: &str) -> Result<JiraIssueDetail, String> {
+    if !is_issue_key(key) {
+        return Err(format!("not an issue key: {key}"));
+    }
+    let json = get_json(base_url, token, &format!("issue/{key}"), &[("fields", "description,comment")])
+        .await
+        .map_err(|e| if e == "not found" { format!("{key} not found") } else { e })?;
+    Ok(parse_detail(&json))
+}
+
+fn parse_detail(json: &Value) -> JiraIssueDetail {
+    let s = |v: Option<&Value>| v.and_then(Value::as_str).map(str::to_string);
+    let comment = json
+        .pointer("/fields/comment/comments")
+        .and_then(Value::as_array)
+        .and_then(|c| c.last())
+        .map(|c| JiraComment {
+            author: s(c.pointer("/author/displayName")),
+            created: s(c.get("created")),
+            body: s(c.get("body")).unwrap_or_default(),
+        });
+    JiraIssueDetail {
+        description: s(json.pointer("/fields/description")).filter(|d| !d.trim().is_empty()),
+        comment,
+    }
+}
+
+fn parse_search(json: &Value) -> Vec<JiraIssue> {
+    json.get("issues").and_then(Value::as_array).map(|a| a.iter().filter_map(parse_issue).collect()).unwrap_or_default()
+}
+
+/// One GET against `/rest/api/2/{path}`, with every rule the app keeps toward
+/// a rate-limited Jira: nothing while paused, https only, no redirects, and a
+/// 429 or a refused token pausing everything after it.
+async fn get_json(base_url: &str, token: Option<&str>, path: &str, query: &[(&str, &str)]) -> Result<Value, String> {
     if let Some(left) = paused_for() {
         return Err(format!("Jira paused — retrying in {}s", left.as_secs().max(1)));
     }
@@ -105,7 +185,7 @@ pub async fn fetch_issue(base_url: &str, token: Option<&str>, key: &str) -> Resu
     if !base.starts_with("https://") {
         return Err("Jira URL must start with https://".into());
     }
-    let url = format!("{base}/rest/api/2/issue/{key}?fields=summary,status,assignee,reporter,priority,created,updated");
+    let url = format!("{base}/rest/api/2/{path}");
     // No redirects: behind an SSO proxy, being off the VPN answers with a 302
     // to the login page, and following it would read as a confusing parse error.
     let client = reqwest::Client::builder()
@@ -113,7 +193,7 @@ pub async fn fetch_issue(base_url: &str, token: Option<&str>, key: &str) -> Resu
         .timeout(std::time::Duration::from_secs(8))
         .build()
         .map_err(|e| e.to_string())?;
-    let mut req = client.get(&url).header("accept", "application/json");
+    let mut req = client.get(&url).query(query).header("accept", "application/json");
     if let Some(t) = token {
         req = req.bearer_auth(t);
     }
@@ -134,14 +214,13 @@ pub async fn fetch_issue(base_url: &str, token: Option<&str>, key: &str) -> Resu
         return Err("Jira refused the token — paused for 5 min".into());
     }
     if status.as_u16() == 404 {
-        return Err(format!("{key} not found"));
+        return Err("not found".into());
     }
     if !status.is_success() {
         return Err(format!("Jira answered {status}"));
     }
     let text = resp.text().await.map_err(|e| e.to_string())?;
-    let json: Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
-    parse_issue(&json).ok_or_else(|| "unexpected Jira response".into())
+    serde_json::from_str(&text).map_err(|e| e.to_string())
 }
 
 #[cfg(test)]
@@ -156,6 +235,13 @@ mod tests {
         assert!(!is_issue_key("PROJ-"));
         assert!(!is_issue_key("PROJ-1/../x"));
         assert!(!is_issue_key("-1"));
+    }
+
+    #[test]
+    fn switched_off_or_unset_asks_nothing() {
+        assert!(check_enabled(false, "https://jira.example.com").is_err());
+        assert!(check_enabled(true, "").is_err());
+        assert!(check_enabled(true, "https://jira.example.com").is_ok());
     }
 
     #[test]
@@ -207,5 +293,33 @@ mod tests {
         assert_eq!(issue.reporter.as_deref(), Some("A.Roe"));
         assert_eq!(issue.created.as_deref(), Some("2026-10-20T09:00:00.000+0300"));
         assert_eq!(issue.priority, None);
+    }
+
+    #[test]
+    fn parses_detail_with_the_latest_comment() {
+        let json = serde_json::json!({ "fields": {
+            "description": "Cut over MX",
+            "comment": { "comments": [
+                { "author": { "displayName": "A" }, "created": "1", "body": "first" },
+                { "author": { "displayName": "B" }, "created": "2", "body": "latest" }
+            ]}
+        }});
+        let d = parse_detail(&json);
+        assert_eq!(d.description.as_deref(), Some("Cut over MX"));
+        assert_eq!(d.comment.unwrap().body, "latest");
+        let empty = parse_detail(&serde_json::json!({ "fields": { "description": "  ", "comment": { "comments": [] } } }));
+        assert_eq!(empty, JiraIssueDetail { description: None, comment: None });
+    }
+
+    #[test]
+    fn parses_search() {
+        let json = serde_json::json!({ "issues": [
+            { "key": "PROJ-1", "fields": { "summary": "A" } },
+            { "fields": {} },
+            { "key": "PROJ-2", "fields": { "summary": "B" } }
+        ]});
+        let keys: Vec<_> = parse_search(&json).into_iter().map(|i| i.key).collect();
+        assert_eq!(keys, ["PROJ-1", "PROJ-2"]);
+        assert!(parse_search(&serde_json::json!({})).is_empty());
     }
 }
