@@ -5,6 +5,7 @@ import { keymap } from '@codemirror/view';
 import { LanguageDescription, type LanguageSupport } from '@codemirror/language';
 import { languages } from '@codemirror/language-data';
 import { oneDark } from '@codemirror/theme-one-dark';
+import { getActiveTheme, isLight } from '@/lib/themes';
 
 export interface EditorHandle {
   /** Writes the file with the editor's current contents (Ctrl+S's own path). */
@@ -80,7 +81,9 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
           doc: initialText,
           extensions: [
             basicSetup,
-            oneDark,
+            // CodeMirror's own light look on a light theme; picked when the
+            // file opens, so switching themes applies to the next one opened.
+            ...(isLight(getActiveTheme().colors) ? [] : [oneDark]),
             ...(langExtension ? [langExtension] : []),
             Prec.highest(keymap.of([{
               key: 'Mod-s',

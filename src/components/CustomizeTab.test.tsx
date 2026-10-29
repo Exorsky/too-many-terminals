@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as ipc from '@/lib/ipc';
@@ -26,6 +26,33 @@ afterEach(() => {
 });
 
 describe('CustomizeTab', () => {
+  it('sorts presets into dark and light', async () => {
+    render(<CustomizeTab />);
+    const light = await screen.findByRole('region', { name: 'Light themes' });
+    expect(within(light).getByText('Catppuccin Latte')).toBeInTheDocument();
+    expect(within(light).queryByText('Default')).toBeNull();
+    expect(within(screen.getByRole('region', { name: 'Dark themes' })).getByText('Tokyo Night')).toBeInTheDocument();
+  });
+
+  it('imports a pasted scheme as a custom theme and saves it', async () => {
+    render(<CustomizeTab />);
+    await userEvent.click(await screen.findByRole('button', { name: /Import/ }));
+    const field = screen.getByLabelText('Color scheme');
+    fireEvent.change(field, { target: { value: 'nonsense' } });
+    await userEvent.click(screen.getByRole('button', { name: 'Import' }));
+    expect(screen.getByText(/Not a scheme this can read/)).toBeInTheDocument();
+
+    fireEvent.change(field, { target: { value: JSON.stringify({
+      name: 'Pasted', background: '#101010', foreground: '#eeeeee',
+      red: '#ff0000', green: '#00ff00', yellow: '#ffff00', blue: '#0000ff', purple: '#ff00ff', cyan: '#00ffff',
+    }) } });
+    await userEvent.click(screen.getByRole('button', { name: 'Import' }));
+    expect(screen.getByLabelText('Theme name')).toHaveValue('Pasted');
+    const calls = vi.mocked(ipc.saveSettings).mock.calls;
+    const saved = calls[calls.length - 1][0];
+    expect(saved.customThemes).toEqual([expect.objectContaining({ name: 'Pasted' })]);
+  });
+
   it('renders all built-in presets', async () => {
     render(<CustomizeTab />);
     expect(await screen.findByText('Default')).toBeInTheDocument();

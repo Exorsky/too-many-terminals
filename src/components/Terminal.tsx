@@ -7,7 +7,7 @@ import '@xterm/xterm/css/xterm.css';
 import * as ipc from '@/lib/ipc';
 import { findIssueKeys, hideIssueCard, issueUrl, jiraOn, showIssueCard } from '@/lib/jira';
 import { getSettings } from '@/lib/settings-store';
-import { getActiveXtermTheme } from '@/lib/themes';
+import { getActiveXtermTheme, terminalContrast } from '@/lib/themes';
 import { isInterruptKeystroke } from '@/lib/utils';
 import { seamDragging } from '@/lib/use-drag-value';
 import { terminalCache, flushPendingWrites, type CachedTerminal } from './terminalCache';
@@ -66,6 +66,7 @@ const Terminal = React.memo(function Terminal({ tabId, isVisible, focused = true
         fontFamily: "'Cascadia Code', 'Consolas', monospace",
         scrollback: 5000,
         theme: getActiveXtermTheme(),
+        minimumContrastRatio: terminalContrast(),
       });
 
       const fitAddon = new FitAddon();

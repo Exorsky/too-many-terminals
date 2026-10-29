@@ -16,7 +16,7 @@ const KINDS: { kind: NewSessionKind; label: string; hint: string }[] = [
 /** The layout a kind opens as, drawn small — the choice is about what lands on
  *  screen, so the card shows it rather than describing it. */
 function LayoutThumb({ kind }: { kind: NewSessionKind }) {
-  const claude = 'flex-1 bg-[color-mix(in_srgb,#6fd4c9_14%,transparent)]';
+  const claude = 'flex-1 bg-[color-mix(in_srgb,var(--cyan)_14%,transparent)]';
   const shell = 'flex-1 bg-raised';
   return (
     <span className="flex h-12 border border-border-hover" aria-hidden="true">

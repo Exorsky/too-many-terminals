@@ -12,7 +12,7 @@ function turnTime(iso: string | null): string {
 
 const NODE_STYLES: Record<TranscriptTurn['role'], string> = {
   user: 'text-primary border-primary/50 rounded-[5px]',
-  assistant: 'text-[#6fd4c9] border-[#6fd4c9]/50 rounded-full',
+  assistant: 'text-cyan border-cyan/50 rounded-full',
 };
 
 /** Renders parsed transcript turns as a reading column — the shared document
@@ -55,7 +55,7 @@ function TranscriptDocument({ turns, view, fill = false }: {
             )}
 
             {showRole && (
-              <div className={cn('flex items-center gap-2 mb-1.5 text-[11.5px] font-semibold uppercase tracking-[0.06em]', turn.role === 'user' ? 'text-primary' : 'text-[#6fd4c9]')}>
+              <div className={cn('flex items-center gap-2 mb-1.5 text-[11.5px] font-semibold uppercase tracking-[0.06em]', turn.role === 'user' ? 'text-primary' : 'text-cyan')}>
                 {roleLabel(turn.role)}
                 {turn.timestamp && <span className="text-muted-foreground font-medium normal-case tracking-normal">{turnTime(turn.timestamp)}</span>}
               </div>

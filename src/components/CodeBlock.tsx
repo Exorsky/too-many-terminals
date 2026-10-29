@@ -5,7 +5,7 @@ import CopyButton from './CopyButton';
  *  stays put while a wide line scrolls under it. */
 export default function CodeBlock({ lang, code }: { lang?: string; code: string }) {
   return (
-    <div className="group relative rounded-lg border border-border bg-[#0a0b0e] overflow-hidden">
+    <div className="group relative rounded-lg border border-border bg-background overflow-hidden">
       {lang && (
         <div className="px-3 py-1.5 border-b border-border text-[11.5px] tracking-[0.04em] text-muted-foreground">
           {lang}

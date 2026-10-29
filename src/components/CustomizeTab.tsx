@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Check, Copy, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Check, Copy, Import, Pencil, Plus, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { confirmAction } from '@/lib/confirm';
 import { loadSettings, patchSettings } from '@/lib/settings-store';
@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import {
   applyTheme,
   DEFAULT_THEME,
+  isLight,
   PRESETS,
   resolveTheme,
   sanitizeCustomThemes,
@@ -16,6 +17,7 @@ import {
   type Theme,
   type ThemeColors,
 } from '@/lib/themes';
+import { parseScheme } from '@/lib/theme-import';
 
 /** Swatch colors shown on each theme card. */
 function swatches(c: ThemeColors): string[] {
@@ -28,6 +30,9 @@ export default function CustomizeTab() {
   const [customThemes, setCustomThemes] = useState<Theme[]>([]);
   /** Id of the custom theme open in the editor, or null when closed. */
   const [editingId, setEditingId] = useState<string | null>(null);
+  /** The import panel: null when closed, else the pasted text. */
+  const [importText, setImportText] = useState<string | null>(null);
+  const [importError, setImportError] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -69,6 +74,22 @@ export default function CustomizeTab() {
     setEditingId(copy.id);
     applyTheme(copy);
     persist(copy.id, customs);
+  };
+
+  /** A pasted scheme becomes a custom theme, selected and open in the editor
+   *  — derived surfaces are a guess worth checking. */
+  const importScheme = () => {
+    const parsed = parseScheme(importText ?? '');
+    if (!parsed) { setImportError(true); return; }
+    const theme: Theme = { id: crypto.randomUUID(), name: parsed.name ?? 'Imported theme', builtIn: false, colors: parsed.colors };
+    const customs = [...customThemes, theme];
+    setCustomThemes(customs);
+    setSelectedId(theme.id);
+    setEditingId(theme.id);
+    applyTheme(theme);
+    persist(theme.id, customs);
+    setImportText(null);
+    setImportError(false);
   };
 
   const editTheme = (theme: Theme) => {
@@ -126,89 +147,130 @@ export default function CustomizeTab() {
             Applies to the app and terminal colors.
           </div>
         </div>
-        <Button variant="outline" size="xs" onClick={() => duplicateTheme(resolveTheme(selectedId, customThemes))}>
-          <Plus />
-          New theme
-        </Button>
+        <div className="flex gap-1.5">
+          <Button variant="outline" size="xs" onClick={() => { setImportText(importText === null ? '' : null); setImportError(false); }}>
+            <Import />
+            Import…
+          </Button>
+          <Button variant="outline" size="xs" onClick={() => duplicateTheme(resolveTheme(selectedId, customThemes))}>
+            <Plus />
+            New theme
+          </Button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-2">
-        {allThemes.map((theme) => {
-          const isSelected = theme.id === selectedId;
-          return (
-            <div
-              key={theme.id}
-              role="button"
-              tabIndex={0}
-              aria-pressed={isSelected}
-              onClick={() => selectTheme(theme)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') selectTheme(theme);
-              }}
-              className={cn(
-                'group flex flex-col gap-2 rounded-md border p-3 text-left cursor-pointer transition-colors',
-                isSelected ? 'border-primary bg-accent' : 'border-border hover:border-border-hover hover:bg-muted',
-              )}
-            >
-              <div className="flex items-center gap-1.5">
-                <span className="text-[13px] text-foreground truncate flex-1">{theme.name}</span>
-                {isSelected && <Check size={12} className="text-primary shrink-0" />}
-              </div>
-              <div className="flex items-center gap-1">
-                {swatches(theme.colors).map((color, i) => (
-                  <span
-                    key={i}
-                    className="size-3.5 rounded-full border border-border shrink-0"
-                    style={{ backgroundColor: color }}
-                  />
-                ))}
-              </div>
-              <div className="flex items-center gap-1 min-h-6">
-                {theme.builtIn ? (
-                  <span className="text-[11px] uppercase tracking-[0.06em] text-muted-foreground">Built-in</span>
-                ) : (
-                  <>
-                    <Button
-                      variant="ghost"
-                      size="icon-xs"
-                      aria-label={`Edit ${theme.name}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        editTheme(theme);
-                      }}
-                    >
-                      <Pencil />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon-xs"
-                      aria-label={`Delete ${theme.name}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        deleteTheme(theme);
-                      }}
-                    >
-                      <Trash2 />
-                    </Button>
-                  </>
-                )}
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
-                  aria-label={`Duplicate ${theme.name}`}
-                  className={cn(!theme.builtIn && 'ml-auto')}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    duplicateTheme(theme);
-                  }}
-                >
-                  <Copy />
-                </Button>
-              </div>
+      {importText !== null && (
+        <div className="flex flex-col gap-2 rounded-md border border-border p-3">
+          <div className="text-[12px] text-muted-foreground leading-relaxed">
+            Paste a color scheme from Windows Terminal (JSON), Ghostty, kitty or Alacritty — most theme repos and
+            iTerm2-Color-Schemes ship one of these. Surfaces the scheme doesn&apos;t define are derived; adjust them in the editor.
+          </div>
+          <textarea
+            aria-label="Color scheme"
+            value={importText}
+            spellCheck={false}
+            rows={6}
+            placeholder={'background = #1e1e2e\nforeground = #cdd6f4\npalette = 1=#f38ba8\n…'}
+            onChange={(e) => { setImportText(e.target.value); setImportError(false); }}
+            className="w-full px-2.5 py-2 rounded-sm border border-border bg-card text-foreground font-mono text-[12px] outline-none focus:border-border-hover placeholder:text-faint resize-y"
+          />
+          <div className="flex items-center gap-2">
+            {importError && (
+              <span className="text-[12px] text-attention">Not a scheme this can read — it needs a background, a foreground and ansi colors 1–6.</span>
+            )}
+            <div className="flex-1" />
+            <Button variant="outline" size="xs" onClick={() => { setImportText(null); setImportError(false); }}>Cancel</Button>
+            <Button size="xs" disabled={!importText?.trim()} onClick={importScheme}>Import</Button>
+          </div>
+        </div>
+      )}
+
+      {(['dark', 'light'] as const).map((tone) => {
+        const themes = allThemes.filter((t) => isLight(t.colors) === (tone === 'light'));
+        if (!themes.length) return null;
+        return (
+          <section key={tone} aria-label={tone === 'dark' ? 'Dark themes' : 'Light themes'} className="flex flex-col gap-2">
+            <div className="text-[11px] font-medium text-muted-foreground">{tone === 'dark' ? 'Dark' : 'Light'}</div>
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-2">
+              {themes.map((theme) => {
+                const isSelected = theme.id === selectedId;
+                return (
+                  <div
+                    key={theme.id}
+                    role="button"
+                    tabIndex={0}
+                    aria-pressed={isSelected}
+                    onClick={() => selectTheme(theme)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') selectTheme(theme);
+                    }}
+                    className={cn(
+                      'group flex flex-col gap-2 rounded-md border p-3 text-left cursor-pointer transition-colors',
+                      isSelected ? 'border-primary bg-accent' : 'border-border hover:border-border-hover hover:bg-muted',
+                    )}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[13px] text-foreground truncate flex-1">{theme.name}</span>
+                      {isSelected && <Check size={12} className="text-primary shrink-0" />}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {swatches(theme.colors).map((color, i) => (
+                        <span
+                          key={i}
+                          className="size-3.5 rounded-full border border-border shrink-0"
+                          style={{ backgroundColor: color }}
+                        />
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-1 min-h-6">
+                      {theme.builtIn ? (
+                        <span className="text-[11px] uppercase tracking-[0.06em] text-muted-foreground">Built-in</span>
+                      ) : (
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="icon-xs"
+                            aria-label={`Edit ${theme.name}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              editTheme(theme);
+                            }}
+                          >
+                            <Pencil />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon-xs"
+                            aria-label={`Delete ${theme.name}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteTheme(theme);
+                            }}
+                          >
+                            <Trash2 />
+                          </Button>
+                        </>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        aria-label={`Duplicate ${theme.name}`}
+                        className={cn(!theme.builtIn && 'ml-auto')}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          duplicateTheme(theme);
+                        }}
+                      >
+                        <Copy />
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-          );
-        })}
-      </div>
+          </section>
+        );
+      })}
 
       {editing && (
         <div className="flex flex-col gap-3 rounded-md border border-border p-4">

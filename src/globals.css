@@ -32,6 +32,9 @@
   --color-usage: var(--usage);
   /* Issue links (Jira keys). A link color, never a status. */
   --color-link: var(--link);
+  --color-prose: var(--prose);
+  --color-cyan: var(--cyan);
+  --color-magenta: var(--magenta);
   /* The text ladder below `foreground`. Four tiers, no ad-hoc opacities:
      dim = row titles and body, muted-foreground = metadata, faint = the
      punctuation between metadata (never a word you have to read). */
@@ -92,13 +95,17 @@
   --selected: rgba(255, 255, 255, 0.075);
   --selected-hover: rgba(255, 255, 255, 0.095);
   --raised: rgba(255, 255, 255, 0.055);
+  --prose: #d7d7dc;
+  --cyan: #6fd4c9;
+  --magenta: #c792ea;
 
   /* Project tint (set from React based on active project) */
   --project-hue: 0;
 }
 
-/* Every theme is dark. Without this the webview draws its own chrome — any
-   scrollbar not styled below, form controls — in the light appearance. */
+/* The Default theme is dark; `applyTheme` switches this for light themes.
+   Without it the webview draws its own chrome — any scrollbar not styled
+   below, form controls — in the wrong appearance. */
 :root {
   color-scheme: dark;
 }

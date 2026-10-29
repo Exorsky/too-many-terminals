@@ -43,7 +43,7 @@ export default function SessionReader({ projectDir, entry, onClose, onResume }: 
     <div className="relative flex flex-col h-full overflow-hidden bg-background">
       <FindBar scrollRef={scrollRef} />
       <div className="flex items-center gap-3 h-11 px-4 border-b border-border shrink-0 bg-gradient-to-b from-card to-background">
-        <FileText size={14} className="text-[#6fd4c9] shrink-0" />
+        <FileText size={14} className="text-cyan shrink-0" />
         <div className="min-w-0">
           <div className="text-[13px] font-semibold text-foreground truncate">{entry.preview || 'Session'}</div>
           <div className="flex items-center gap-1.5 text-[11.5px] text-muted-foreground">
@@ -71,7 +71,7 @@ export default function SessionReader({ projectDir, entry, onClose, onResume }: 
               className={cn(
                 'inline-flex items-center gap-1.5 text-[13px] px-2.5 py-1 rounded-[5px] cursor-pointer font-inherit transition-colors',
                 view === v
-                  ? (v === 'rendered' ? 'bg-secondary text-[#6fd4c9]' : 'bg-secondary text-foreground')
+                  ? (v === 'rendered' ? 'bg-secondary text-cyan' : 'bg-secondary text-foreground')
                   : 'text-muted-foreground hover:text-foreground',
               )}
             >

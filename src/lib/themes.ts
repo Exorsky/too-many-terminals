@@ -1,7 +1,7 @@
 /**
  * Theme system: built-in presets + user-defined custom themes.
  *
- * A theme is 13 editable core colors; every other UI token (muted/accent/
+ * A theme is 14 editable core colors; every other UI token (muted/accent/
  * secondary surfaces, on-color foregrounds, xterm brights) is derived so
  * custom themes stay coherent. `applyTheme` restyles the shell via CSS
  * variables on <html> and mutates every cached xterm instance — no React
@@ -19,8 +19,12 @@ export interface ThemeColors {
   card: string;
   /** Borders, inputs, scrollbar thumb. */
   border: string;
-  /** Accent: primary, ring, terminal cursor, ansi blue. */
+  /** Accent: primary, ring, terminal cursor. */
   primary: string;
+  /** ansi blue. Its own color since 0.28: a scheme's blue is rarely its
+   *  accent (Gruvbox's accent is orange). Older custom themes fill it from
+   *  their accent, which is what ansi blue used to be. */
+  blue: string;
   /** Secondary text, ansi brightBlack. */
   mutedForeground: string;
   /** Usage meter bar below the warning threshold. App chrome only — it has
@@ -53,6 +57,7 @@ export const THEME_COLOR_KEYS: (keyof ThemeColors)[] = [
   'card',
   'border',
   'primary',
+  'blue',
   'mutedForeground',
   'usage',
   'destructive',
@@ -70,6 +75,7 @@ export const THEME_COLOR_LABELS: Record<keyof ThemeColors, string> = {
   card: 'Card',
   border: 'Border',
   primary: 'Accent',
+  blue: 'Blue',
   mutedForeground: 'Muted text',
   usage: 'Usage bar',
   destructive: 'Red',
@@ -100,8 +106,30 @@ export function mix(a: string, b: string, t: number): string {
   return out;
 }
 
-/** Full set of CSS custom properties derived from the 13 core colors. */
+/** Relative luminance (WCAG) of a #rrggbb color, 0 (black) to 1 (white). */
+export function luminance(hex: string): number {
+  const [r, g, b] = [1, 3, 5].map((i) => {
+    const v = parseInt(hex.slice(i, i + 2), 16) / 255;
+    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/** A light theme: dark text on a light background. Decides which way the
+ *  row overlays and the terminal's black/white go — derived, not a flag, so a
+ *  custom theme can't claim one thing and paint another. */
+export function isLight(c: ThemeColors): boolean {
+  return luminance(c.background) > 0.4;
+}
+
+/** Full set of CSS custom properties derived from the core colors. */
 export function cssVars(c: ThemeColors): Record<string, string> {
+  // Row states are overlays, not theme colors: they have to read as "this
+  // surface is raised" on top of whatever background the theme set, and a
+  // tinted overlay would fight the project hues sitting in the same rows.
+  // White lifts a dark surface; on a light one it would vanish, so ink it is.
+  const overlay = isLight(c) ? (a: number) => `rgba(0, 0, 0, ${a})` : (a: number) => `rgba(255, 255, 255, ${a})`;
+  const k = isLight(c) ? 1.2 : 1;
   return {
     '--background': c.background,
     '--foreground': c.foreground,
@@ -134,39 +162,47 @@ export function cssVars(c: ThemeColors): Record<string, string> {
     // these keep the same relative steps whatever it picks.
     '--dim': mix(c.background, c.foreground, 0.72),
     '--faint': mix(c.background, c.mutedForeground, 0.55),
-    // Row states. White overlays, not theme colors: they have to read as "this
-    // surface is raised" on top of whatever background the theme set, and a
-    // tinted overlay would fight the project hues sitting in the same rows.
-    '--hover': 'rgba(255, 255, 255, 0.04)',
-    '--selected': 'rgba(255, 255, 255, 0.075)',
-    '--selected-hover': 'rgba(255, 255, 255, 0.095)',
-    '--raised': 'rgba(255, 255, 255, 0.055)',
+    '--hover': overlay(+(0.04 * k).toFixed(3)),
+    '--selected': overlay(+(0.075 * k).toFixed(3)),
+    '--selected-hover': overlay(+(0.095 * k).toFixed(3)),
+    '--raised': overlay(+(0.055 * k).toFixed(3)),
+    // Rendered Markdown: body text a step below foreground, and the two
+    // accents transcripts use (assistant turns, inline code).
+    '--prose': mix(c.background, c.foreground, 0.92),
+    // Links: the shell's fixed light blue reads on every dark theme; on a
+    // light one it's too pale, so the theme's own blue takes over.
+    '--link': isLight(c) ? c.blue : '#7fb2ff',
+    '--cyan': c.cyan,
+    '--magenta': c.magenta,
   };
 }
 
 /** xterm ITheme derived from the core colors. */
 export function toXtermTheme(c: ThemeColors): ITheme {
+  // On a light theme ansi black is the ink and white the paper — the other
+  // way round, `ls` and friends print black text you can't see.
+  const light = isLight(c);
   return {
     background: c.background,
     foreground: c.foreground,
     cursor: c.primary,
     selectionBackground: c.selection,
-    black: c.background,
+    black: light ? c.foreground : c.background,
     red: c.destructive,
     green: c.success,
     yellow: c.warning,
-    blue: c.primary,
+    blue: c.blue,
     magenta: c.magenta,
     cyan: c.cyan,
-    white: c.foreground,
+    white: light ? mix(c.background, c.foreground, 0.15) : c.foreground,
     brightBlack: c.mutedForeground,
     brightRed: c.destructive,
     brightGreen: c.success,
     brightYellow: c.warning,
-    brightBlue: c.primary,
+    brightBlue: c.blue,
     brightMagenta: c.magenta,
     brightCyan: c.cyan,
-    brightWhite: '#ffffff',
+    brightWhite: light ? c.background : '#ffffff',
   };
 }
 
@@ -180,6 +216,7 @@ export const DEFAULT_THEME: Theme = {
     card: '#101014',
     border: '#1e1e24',
     primary: '#8b7df7',
+    blue: '#8b7df7',
     mutedForeground: '#7c7c87',
     usage: '#8b7df7',
     destructive: '#e5534b',
@@ -203,6 +240,7 @@ const CLASSIC_THEME: Theme = {
     card: '#121319',
     border: '#23252d',
     primary: '#7c9eff',
+    blue: '#7c9eff',
     mutedForeground: '#666b78',
     usage: '#7c9eff',
     destructive: '#ff6b6b',
@@ -227,6 +265,7 @@ export const PRESETS: Theme[] = [
       card: '#16140e',
       border: '#2b2820',
       primary: '#e8b45a',
+      blue: '#e8b45a',
       mutedForeground: '#7a7362',
       usage: '#e8b45a',
       destructive: '#ff6b6b',
@@ -247,6 +286,7 @@ export const PRESETS: Theme[] = [
       card: '#14121d',
       border: '#262334',
       primary: '#b48eff',
+      blue: '#b48eff',
       mutedForeground: '#6f6a84',
       usage: '#b48eff',
       destructive: '#ff6b8a',
@@ -267,6 +307,7 @@ export const PRESETS: Theme[] = [
       card: '#101614',
       border: '#1f2b27',
       primary: '#5fd4a0',
+      blue: '#5fd4a0',
       mutedForeground: '#62766e',
       usage: '#5fd4a0',
       destructive: '#ff7a70',
@@ -275,6 +316,325 @@ export const PRESETS: Theme[] = [
       magenta: '#8fb8a8',
       cyan: '#6fd4c9',
       selection: '#22392f',
+    },
+  },
+  // Well-known palettes, each from its own repo's terminal extras where one
+  // exists (Windows Terminal / Alacritty files, so already ansi-mapped). App
+  // surfaces come from the theme's own panel and border roles: a step lighter
+  // than the background on dark themes, a step darker on light ones.
+  {
+    id: 'catppuccin-mocha',
+    name: 'Catppuccin Mocha',
+    builtIn: true,
+    colors: {
+      background: '#1e1e2e',
+      foreground: '#cdd6f4',
+      card: '#313244',
+      border: '#45475a',
+      primary: '#cba6f7',
+      blue: '#89b4fa',
+      mutedForeground: '#9399b2',
+      usage: '#cba6f7',
+      destructive: '#f38ba8',
+      success: '#a6e3a1',
+      warning: '#f9e2af',
+      magenta: '#f5c2e7',
+      cyan: '#94e2d5',
+      selection: '#585b70',
+    },
+  },
+  {
+    id: 'tokyo-night',
+    name: 'Tokyo Night',
+    builtIn: true,
+    colors: {
+      background: '#1a1b26',
+      foreground: '#c0caf5',
+      card: '#292e42',
+      border: '#3b4261',
+      primary: '#7aa2f7',
+      blue: '#7aa2f7',
+      mutedForeground: '#565f89',
+      usage: '#7aa2f7',
+      destructive: '#f7768e',
+      success: '#9ece6a',
+      warning: '#e0af68',
+      magenta: '#bb9af7',
+      cyan: '#7dcfff',
+      selection: '#283457',
+    },
+  },
+  {
+    id: 'gruvbox-dark',
+    name: 'Gruvbox Dark',
+    builtIn: true,
+    colors: {
+      background: '#282828',
+      foreground: '#ebdbb2',
+      card: '#3c3836',
+      border: '#504945',
+      primary: '#fe8019',
+      blue: '#83a598',
+      mutedForeground: '#928374',
+      usage: '#fe8019',
+      destructive: '#fb4934',
+      success: '#b8bb26',
+      warning: '#fabd2f',
+      magenta: '#d3869b',
+      cyan: '#8ec07c',
+      selection: '#665c54',
+    },
+  },
+  {
+    id: 'nord',
+    name: 'Nord',
+    builtIn: true,
+    colors: {
+      background: '#2e3440',
+      foreground: '#d8dee9',
+      card: '#3b4252',
+      border: '#434c5e',
+      primary: '#88c0d0',
+      blue: '#81a1c1',
+      mutedForeground: '#616e88',
+      usage: '#88c0d0',
+      destructive: '#bf616a',
+      success: '#a3be8c',
+      warning: '#ebcb8b',
+      magenta: '#b48ead',
+      cyan: '#88c0d0',
+      selection: '#4c566a',
+    },
+  },
+  {
+    id: 'rose-pine',
+    name: 'Rosé Pine',
+    builtIn: true,
+    colors: {
+      background: '#191724',
+      foreground: '#e0def4',
+      card: '#1f1d2e',
+      border: '#524f67',
+      primary: '#ebbcba',
+      blue: '#9ccfd8',
+      mutedForeground: '#6e6a86',
+      usage: '#ebbcba',
+      destructive: '#eb6f92',
+      success: '#31748f',
+      warning: '#f6c177',
+      magenta: '#c4a7e7',
+      cyan: '#ebbcba',
+      selection: '#403d52',
+    },
+  },
+  {
+    id: 'dracula',
+    name: 'Dracula',
+    builtIn: true,
+    colors: {
+      background: '#282a36',
+      foreground: '#f8f8f2',
+      card: '#343746',
+      border: '#424450',
+      primary: '#bd93f9',
+      blue: '#bd93f9',
+      mutedForeground: '#6272a4',
+      usage: '#bd93f9',
+      destructive: '#ff5555',
+      success: '#50fa7b',
+      warning: '#f1fa8c',
+      magenta: '#ff79c6',
+      cyan: '#8be9fd',
+      selection: '#44475a',
+    },
+  },
+  {
+    id: 'solarized-dark',
+    name: 'Solarized Dark',
+    builtIn: true,
+    colors: {
+      background: '#002b36',
+      foreground: '#839496',
+      card: '#073642',
+      border: '#586e75',
+      primary: '#268bd2',
+      blue: '#268bd2',
+      mutedForeground: '#586e75',
+      usage: '#268bd2',
+      destructive: '#dc322f',
+      success: '#859900',
+      warning: '#b58900',
+      magenta: '#d33682',
+      cyan: '#2aa198',
+      selection: '#073642',
+    },
+  },
+  {
+    id: 'github-dark',
+    name: 'GitHub Dark',
+    builtIn: true,
+    colors: {
+      background: '#0d1117',
+      foreground: '#c9d1d9',
+      card: '#161b22',
+      border: '#30363d',
+      primary: '#58a6ff',
+      blue: '#58a6ff',
+      mutedForeground: '#8b949e',
+      usage: '#58a6ff',
+      destructive: '#ff7b72',
+      success: '#3fb950',
+      warning: '#d29922',
+      magenta: '#bc8cff',
+      cyan: '#39c5cf',
+      selection: '#1c2f45',
+    },
+  },
+  {
+    id: 'one-dark',
+    name: 'One Dark',
+    builtIn: true,
+    colors: {
+      background: '#282c34',
+      foreground: '#abb2bf',
+      card: '#31363f',
+      border: '#3a3f4b',
+      primary: '#61afef',
+      blue: '#61afef',
+      mutedForeground: '#5c6370',
+      usage: '#61afef',
+      destructive: '#e06c75',
+      success: '#98c379',
+      warning: '#e5c07b',
+      magenta: '#c678dd',
+      cyan: '#56b6c2',
+      selection: '#3e4451',
+    },
+  },
+  {
+    id: 'kanagawa-wave',
+    name: 'Kanagawa Wave',
+    builtIn: true,
+    colors: {
+      background: '#1f1f28',
+      foreground: '#dcd7ba',
+      card: '#2a2a37',
+      border: '#54546d',
+      primary: '#7e9cd8',
+      blue: '#7e9cd8',
+      mutedForeground: '#727169',
+      usage: '#7e9cd8',
+      destructive: '#c34043',
+      success: '#76946a',
+      warning: '#c0a36e',
+      magenta: '#957fb8',
+      cyan: '#6a9589',
+      selection: '#2d4f67',
+    },
+  },
+  {
+    id: 'everforest-dark',
+    name: 'Everforest Dark',
+    builtIn: true,
+    colors: {
+      background: '#2d353b',
+      foreground: '#d3c6aa',
+      card: '#343f44',
+      border: '#4f585e',
+      primary: '#a7c080',
+      blue: '#7fbbb3',
+      mutedForeground: '#859289',
+      usage: '#a7c080',
+      destructive: '#e67e80',
+      success: '#a7c080',
+      warning: '#dbbc7f',
+      magenta: '#d699b6',
+      cyan: '#83c092',
+      selection: '#543a48',
+    },
+  },
+  {
+    id: 'catppuccin-latte',
+    name: 'Catppuccin Latte',
+    builtIn: true,
+    colors: {
+      background: '#eff1f5',
+      foreground: '#4c4f69',
+      card: '#e6e9ef',
+      border: '#ccd0da',
+      primary: '#8839ef',
+      blue: '#1e66f5',
+      mutedForeground: '#7c7f93',
+      usage: '#8839ef',
+      destructive: '#d20f39',
+      success: '#40a02b',
+      warning: '#df8e1d',
+      magenta: '#ea76cb',
+      cyan: '#179299',
+      selection: '#acb0be',
+    },
+  },
+  {
+    id: 'rose-pine-dawn',
+    name: 'Rosé Pine Dawn',
+    builtIn: true,
+    colors: {
+      background: '#faf4ed',
+      foreground: '#575279',
+      card: '#f2e9e1',
+      border: '#cecacd',
+      primary: '#d7827e',
+      blue: '#56949f',
+      mutedForeground: '#9893a5',
+      usage: '#d7827e',
+      destructive: '#b4637a',
+      success: '#286983',
+      warning: '#ea9d34',
+      magenta: '#907aa9',
+      cyan: '#d7827e',
+      selection: '#dfdad9',
+    },
+  },
+  {
+    id: 'solarized-light',
+    name: 'Solarized Light',
+    builtIn: true,
+    colors: {
+      background: '#fdf6e3',
+      foreground: '#657b83',
+      card: '#eee8d5',
+      border: '#93a1a1',
+      primary: '#268bd2',
+      blue: '#268bd2',
+      mutedForeground: '#93a1a1',
+      usage: '#268bd2',
+      destructive: '#dc322f',
+      success: '#859900',
+      warning: '#b58900',
+      magenta: '#d33682',
+      cyan: '#2aa198',
+      selection: '#eee8d5',
+    },
+  },
+  {
+    id: 'github-light',
+    name: 'GitHub Light',
+    builtIn: true,
+    colors: {
+      background: '#ffffff',
+      foreground: '#24292f',
+      card: '#f6f8fa',
+      border: '#d0d7de',
+      primary: '#0969da',
+      blue: '#0969da',
+      mutedForeground: '#6e7781',
+      usage: '#0969da',
+      destructive: '#cf222e',
+      success: '#116329',
+      warning: '#9a6700',
+      magenta: '#8250df',
+      cyan: '#1b7c83',
+      selection: '#cee1f8',
     },
   },
 ];
@@ -290,6 +650,14 @@ export function getActiveXtermTheme(): ITheme {
   return toXtermTheme(activeTheme.colors);
 }
 
+/** xterm's contrast floor. On a light theme, text a program colors for a
+ *  dark terminal — white, or Claude Code's own near-white truecolor — would
+ *  vanish; 4.5 (WCAG AA) nudges it dark enough to read. Dark themes keep the
+ *  colors exactly as sent. */
+export function terminalContrast(c: ThemeColors = activeTheme.colors): number {
+  return isLight(c) ? 4.5 : 1;
+}
+
 /** Restyle the app shell (CSS vars) and every cached terminal. */
 export function applyTheme(theme: Theme): void {
   activeTheme = theme;
@@ -297,9 +665,14 @@ export function applyTheme(theme: Theme): void {
   for (const [name, value] of Object.entries(cssVars(theme.colors))) {
     style.setProperty(name, value);
   }
+  // The webview's own chrome — native <select> popups, checkboxes, unstyled
+  // scrollbars — follows this, not our variables.
+  style.colorScheme = isLight(theme.colors) ? 'light' : 'dark';
   const xtermTheme = toXtermTheme(theme.colors);
+  const contrast = terminalContrast(theme.colors);
   for (const cached of terminalCache.values()) {
     cached.term.options.theme = xtermTheme;
+    cached.term.options.minimumContrastRatio = contrast;
   }
 }
 
@@ -319,6 +692,8 @@ export function sanitizeCustomThemes(raw: unknown[]): Theme[] {
       const value = src[key];
       if (isHexColor(value)) clean[key] = value.toLowerCase();
     }
+    // Saved before blue was its own color: ansi blue was the accent.
+    if (!isHexColor(src.blue)) clean.blue = clean.primary;
     themes.push({ id, name, builtIn: false, colors: clean });
   }
   return themes;

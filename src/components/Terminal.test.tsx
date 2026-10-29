@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('@/lib/ipc', () => ({
   writeToPty: vi.fn(), resizePty: vi.fn(),
 }));
-vi.mock('@/lib/themes', () => ({ getActiveXtermTheme: () => ({}) }));
+vi.mock('@/lib/themes', () => ({ getActiveXtermTheme: () => ({}), terminalContrast: () => 1 }));
 vi.mock('@xterm/xterm/css/xterm.css', () => ({}));
 
 /** A stand-in for xterm that reproduces the one behaviour that matters here:

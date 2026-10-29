@@ -3,6 +3,7 @@ import {
   cssVars,
   DEFAULT_THEME,
   isHexColor,
+  isLight,
   mix,
   PRESETS,
   resolveTheme,
@@ -154,25 +155,41 @@ describe('cssVars (derived UI tiers)', () => {
     expect(vars['--faint']).toBe('#494950');
   });
 
-  it('gives every preset a full set of row-state overlays', () => {
+  it('gives every preset a full set of row-state overlays: white lifts a dark theme, ink a light one', () => {
     for (const preset of PRESETS) {
       const vars = cssVars(preset.colors);
-      expect(vars['--hover']).toBe('rgba(255, 255, 255, 0.04)');
-      expect(vars['--raised']).toBe('rgba(255, 255, 255, 0.055)');
-      expect(vars['--selected']).toBe('rgba(255, 255, 255, 0.075)');
-      expect(vars['--selected-hover']).toBe('rgba(255, 255, 255, 0.095)');
+      const base = isLight(preset.colors) ? 'rgba(0, 0, 0, ' : 'rgba(255, 255, 255, ';
+      for (const name of ['--hover', '--raised', '--selected', '--selected-hover']) {
+        expect(vars[name], `${preset.name} ${name}`).toMatch(base);
+      }
+    }
+    expect(cssVars(DEFAULT_THEME.colors)['--hover']).toBe('rgba(255, 255, 255, 0.04)');
+  });
+
+  it('keeps the text tiers ordered loud-to-quiet for every preset', () => {
+    // dim stands further from the background than muted-foreground, which
+    // stands further than faint — on dark and light themes alike. A theme that
+    // inverted them would quietly flip the whole hierarchy.
+    const gray = (hex: string) => [1, 3, 5].reduce((sum, i) => sum + parseInt(hex.slice(i, i + 2), 16), 0);
+    for (const preset of PRESETS) {
+      const vars = cssVars(preset.colors);
+      const away = (hex: string) => Math.abs(gray(hex) - gray(preset.colors.background));
+      expect(away(vars['--dim']), preset.name).toBeGreaterThan(away(vars['--muted-foreground']));
+      expect(away(vars['--muted-foreground']), preset.name).toBeGreaterThan(away(vars['--faint']));
     }
   });
 
-  it('keeps the text tiers ordered light-to-dark for every preset', () => {
-    // dim reads louder than muted-foreground, which reads louder than faint.
-    // A theme that inverted them would quietly flip the whole hierarchy.
-    const luminance = (hex: string) =>
-      [1, 3, 5].reduce((sum, i) => sum + parseInt(hex.slice(i, i + 2), 16), 0);
-    for (const preset of PRESETS) {
-      const vars = cssVars(preset.colors);
-      expect(luminance(vars['--dim'])).toBeGreaterThan(luminance(vars['--muted-foreground']));
-      expect(luminance(vars['--muted-foreground'])).toBeGreaterThan(luminance(vars['--faint']));
-    }
+  it('a light theme swaps the terminal\'s black and white, so black text stays visible', () => {
+    const latte = PRESETS.find((p) => p.id === 'catppuccin-latte')!;
+    expect(isLight(latte.colors)).toBe(true);
+    const x = toXtermTheme(latte.colors);
+    expect(x.black).toBe(latte.colors.foreground);
+    expect(x.brightWhite).toBe(latte.colors.background);
+    expect(toXtermTheme(DEFAULT_THEME.colors).black).toBe(DEFAULT_THEME.colors.background);
+  });
+
+  it('a custom theme saved before blue existed keeps its accent as ansi blue', () => {
+    const [t] = sanitizeCustomThemes([{ id: 'x', name: 'Old', colors: { primary: '#ff0000' } }]);
+    expect(t.colors.blue).toBe('#ff0000');
   });
 });

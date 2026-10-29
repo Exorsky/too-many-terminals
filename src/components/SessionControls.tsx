@@ -103,7 +103,7 @@ export default function SessionControls({
           className={cn(
             BUTTON,
             mode === 'markdown'
-              ? 'bg-secondary text-[#6fd4c9]'
+              ? 'bg-secondary text-cyan'
               : 'bg-transparent text-muted-foreground hover:text-foreground hover:bg-selected',
             splitActive && 'opacity-35 cursor-not-allowed hover:bg-transparent hover:text-muted-foreground',
           )}

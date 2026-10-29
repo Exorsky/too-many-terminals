@@ -72,7 +72,7 @@ export default function SessionCalendar({ months, now, selected = null, onSelect
                   : undefined;
                 const className = cn(
                   'relative aspect-square min-w-0 grid place-items-center rounded-sm p-0 font-inherit',
-                  'border border-transparent bg-white/[0.025] text-[11px] font-mono tabular-nums text-foreground/20',
+                  'border border-transparent bg-hover text-[11px] font-mono tabular-nums text-foreground/20',
                   // The date has to survive the fill: brighter at level 3, and
                   // flipped to ink at 4, where the fill is lighter than the type.
                   level > 0 && 'dash-mark',

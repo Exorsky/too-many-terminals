@@ -147,7 +147,7 @@ export default function Markdown({ source, onOpenLink }: MarkdownProps) {
     },
 
     code: ({ children }) => (
-      <code className="font-mono text-[0.85em] px-1 py-px rounded-[3px] bg-raised border border-border text-[#c792ea]">
+      <code className="font-mono text-[0.85em] px-1 py-px rounded-[3px] bg-raised border border-border text-magenta">
         {children}
       </code>
     ),
@@ -216,7 +216,7 @@ export default function Markdown({ source, onOpenLink }: MarkdownProps) {
   );
 
   return (
-    <div ref={rootRef} className="flex flex-col gap-3 font-sans text-[14.5px] leading-[1.62] text-[#d7dae1]">
+    <div ref={rootRef} className="flex flex-col gap-3 font-sans text-[14.5px] leading-[1.62] text-prose">
       <ReactMarkdown remarkPlugins={remarkPlugins} components={components}>
         {source}
       </ReactMarkdown>

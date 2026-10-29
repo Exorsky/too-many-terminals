@@ -1,4 +1,5 @@
 import { memo, useEffect, useId, useState } from 'react';
+import { getActiveTheme, isLight } from '@/lib/themes';
 import CodeBlock from './CodeBlock';
 
 /** `mermaid` is ~1 MB — loaded the first time a diagram actually shows up,
@@ -7,13 +8,6 @@ import CodeBlock from './CodeBlock';
 let loading: Promise<typeof import('mermaid').default> | null = null;
 function mermaid() {
   loading ??= import('mermaid').then((m) => {
-    m.default.initialize({
-      startOnLoad: false,
-      theme: 'dark',
-      securityLevel: 'strict', // mermaid sanitizes the SVG it hands back
-      suppressErrorRendering: true, // a bad diagram must not paint itself into <body>
-      fontFamily: 'inherit',
-    });
     return m.default;
   });
   return loading;
@@ -37,7 +31,18 @@ function Mermaid({ chart }: { chart: string }) {
   useEffect(() => {
     let cancelled = false;
     mermaid()
-      .then((m) => m.render(id, chart))
+      .then((m) => {
+        // Configured per render, not once: the theme can switch between
+        // diagrams, and a dark diagram on a light theme is a black box.
+        m.initialize({
+          startOnLoad: false,
+          theme: isLight(getActiveTheme().colors) ? 'default' : 'dark',
+          securityLevel: 'strict', // mermaid sanitizes the SVG it hands back
+          suppressErrorRendering: true, // a bad diagram must not paint itself into <body>
+          fontFamily: 'inherit',
+        });
+        return m.render(id, chart);
+      })
       .then((r) => {
         if (!cancelled) {
           setSvg(r.svg);
@@ -64,7 +69,7 @@ function Mermaid({ chart }: { chart: string }) {
       <div
         data-testid="mermaid-pending"
         aria-busy={!tried}
-        className="rounded-lg border border-border bg-[#0a0b0e] px-3 py-4 text-[12px] text-muted-foreground"
+        className="rounded-lg border border-border bg-background px-3 py-4 text-[12px] text-muted-foreground"
       >
         Rendering diagram…
       </div>
@@ -72,7 +77,7 @@ function Mermaid({ chart }: { chart: string }) {
   }
   return (
     <div
-      className="rounded-lg border border-border bg-[#0a0b0e] p-3 overflow-x-auto scrollbar-thin [&_svg]:max-w-full [&_svg]:h-auto"
+      className="rounded-lg border border-border bg-background p-3 overflow-x-auto scrollbar-thin [&_svg]:max-w-full [&_svg]:h-auto"
       // mermaid's own output, sanitized by it under securityLevel: 'strict'.
       dangerouslySetInnerHTML={{ __html: svg }}
     />
