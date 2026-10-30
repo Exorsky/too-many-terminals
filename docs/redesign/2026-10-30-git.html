@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Too Many Terminals — Git, three directions</title>
+<style>
+  :root {
+    --bg: #0a0a0c; --card: #101014; --fg: #e9e9ee; --dim: #ababaf; --muted: #7c7c87; --faint: #494950;
+    --border: #1e1e24; --border-h: #303036; --primary: #8b7df7;
+    --success: #45b96a; --warning: #d9a441; --attention: #df7c46; --destructive: #e5534b;
+    --hover: rgba(255,255,255,.04); --selected: rgba(255,255,255,.075); --raised: rgba(255,255,255,.055);
+    --link: #7fb2ff; --cyan: #6fd4c9;
+    /* git marks: added/modified/deleted. Not the session status colors — those
+       are reserved — so: cyan for new, link-blue for modified, dim red-grey for gone. */
+    --g-add: #6fd4c9; --g-mod: #7fb2ff; --g-del: #b07a78;
+    --sans: -apple-system, "SF Pro Text", "Inter", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace;
+    --r: 6px;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #050506; color: var(--fg); font: 13px/1.45 var(--sans); -webkit-font-smoothing: antialiased; }
+  .doc { max-width: 1360px; margin: 0 auto; padding: 48px 40px 120px; }
+  h1 { font-size: 28px; font-weight: 650; letter-spacing: -.01em; margin: 0 0 6px; }
+  h2 { font-size: 20px; font-weight: 600; margin: 72px 0 6px; }
+  .lede { color: var(--dim); max-width: 880px; font-size: 14px; }
+  .sub { color: var(--muted); font-size: 13px; margin: 0 0 20px; max-width: 920px; }
+  .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .notes { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 18px; max-width: 1280px; color: var(--dim); font-size: 13px; }
+  .notes h4 { margin: 0 0 6px; font-size: 12px; font-weight: 600; color: var(--muted); }
+  .notes ul { margin: 0; padding-left: 18px; } .notes li { margin: 3px 0; }
+  .callout { margin-top: 18px; max-width: 1280px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--r); color: var(--dim); font-size: 12.5px; background: var(--card); }
+  .callout b { color: var(--fg); font-weight: 600; }
+
+  .win { width: 1280px; height: 720px; border: 1px solid #26262c; border-radius: 12px; overflow: hidden; background: var(--bg);
+         box-shadow: 0 30px 80px rgba(0,0,0,.55); display: flex; flex-direction: column; }
+  .titlebar { position: relative; height: 40px; display: flex; align-items: center; padding: 0 14px; border-bottom: 1px solid var(--border); background: var(--card); flex-shrink: 0; }
+  .lights { display: flex; gap: 8px; } .lights i { width: 12px; height: 12px; border-radius: 50%; background: #ff5f57; display: block; }
+  .lights i:nth-child(2) { background: #febc2e; } .lights i:nth-child(3) { background: #28c840; }
+  .crumb { position: absolute; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .crumb b { color: var(--fg); font-weight: 500; }
+  .tb-right { margin-left: auto; font-size: 11px; color: var(--muted); display: flex; gap: 12px; }
+  .body { flex: 1; display: flex; min-height: 0; }
+  .side { width: 268px; flex-shrink: 0; background: var(--card); border-right: 1px solid var(--border); padding: 8px 6px; display: flex; flex-direction: column; gap: 1px; }
+  .nav a { display: flex; align-items: center; gap: 10px; height: 28px; padding: 0 8px; border-radius: var(--r); color: var(--dim); text-decoration: none; }
+  .nav { padding-bottom: 8px; margin-bottom: 4px; border-bottom: 1px solid var(--border); }
+  .grp { display: flex; align-items: center; gap: 6px; height: 26px; padding: 0 8px; margin-top: 6px; font-size: 12px; font-weight: 600; color: var(--muted); }
+  .grp .n { margin-left: auto; font: 11px var(--mono); font-weight: 400; }
+  .row { display: flex; flex-direction: column; justify-content: center; gap: 1px; min-height: 44px; padding: 5px 8px 5px 10px; border-radius: var(--r); }
+  .row.sel { background: var(--selected); }
+  .row .l1 { display: flex; align-items: center; gap: 8px; color: var(--dim); }
+  .row.sel .l1 { color: var(--fg); }
+  .row .l1 .name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .l1 .t { font: 11px var(--mono); color: var(--muted); }
+  .row .l2 { display: flex; align-items: center; gap: 6px; padding-left: 16px; font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .d-idle { background: var(--success); } .d-work { background: var(--warning); } .d-att { background: var(--attention); box-shadow: 0 0 0 3px rgba(223,124,70,.18); }
+  .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .tabs { height: 36px; display: flex; align-items: flex-end; gap: 2px; padding: 0 8px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .tab { height: 30px; display: flex; align-items: center; gap: 8px; padding: 0 12px; border-radius: var(--r) var(--r) 0 0; color: var(--muted); font-size: 12.5px; }
+  .tab.on { background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-bottom-color: var(--bg); margin-bottom: -1px; }
+  .term { flex: 1; padding: 14px 18px; font: 12.5px/1.6 var(--mono); color: #c9c9d1; overflow: hidden; }
+  .term .p { color: var(--primary); } .term .m { color: var(--muted); } .term .ok { color: var(--success); }
+  .content { flex: 1; display: flex; min-height: 0; }
+
+  /* git atoms */
+  .br { display: inline-flex; align-items: center; gap: 4px; font: 11px var(--mono); color: var(--dim); white-space: nowrap; }
+  .br svg { width: 11px; height: 11px; stroke: currentColor; fill: none; stroke-width: 2; flex-shrink: 0; }
+  .dirty { color: var(--fg); }
+  .ab { font: 11px var(--mono); color: var(--muted); }
+  .stat { font: 11px var(--mono); white-space: nowrap; }
+  .stat .a { color: var(--g-add); } .stat .d { color: var(--g-del); }
+  .gm { display: inline-block; width: 14px; text-align: center; font: 600 10.5px var(--mono); }
+  .gm.M { color: var(--g-mod); } .gm.A, .gm.U { color: var(--g-add); } .gm.D { color: var(--g-del); }
+  .chip { display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 7px; border: 1px solid var(--border); border-radius: 4px; font-size: 11px; color: var(--dim); background: var(--raised); white-space: nowrap; }
+  .btn { height: 26px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--r); color: var(--dim); font-size: 12px; white-space: nowrap; }
+  .btn.pri { border-color: rgba(139,125,247,.5); background: rgba(139,125,247,.14); color: var(--fg); }
+
+  /* A — file tree decorations */
+  .tree { width: 250px; flex-shrink: 0; border-left: 1px solid var(--border); background: var(--card); padding: 8px 6px; font-size: 12.5px; }
+  .tree .h { display: flex; align-items: center; gap: 6px; padding: 2px 8px 8px; font-size: 11px; font-weight: 600; color: var(--muted); }
+  .tree .f { display: flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; border-radius: var(--r); color: var(--dim); }
+  .tree .f.mod { color: var(--g-mod); } .tree .f.add { color: var(--g-add); } .tree .f.del { color: var(--g-del); text-decoration: line-through; }
+  .tree .f .gm { margin-left: auto; }
+  .tree .f.dir { color: var(--dim); } .tree .f.dir::after { content: '•'; margin-left: auto; color: var(--g-mod); font-size: 10px; }
+
+  /* B — changes panel */
+  .chg { width: 400px; flex-shrink: 0; border-left: 1px solid var(--border); background: var(--card); display: flex; flex-direction: column; }
+  .chg .hd { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px; border-bottom: 1px solid var(--border); }
+  .chg .seg { display: flex; border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; font-size: 11.5px; }
+  .chg .seg span { padding: 3px 9px; color: var(--muted); } .chg .seg span.on { background: var(--selected); color: var(--fg); }
+  .chg .sec { padding: 10px 12px 4px; font-size: 11px; font-weight: 600; color: var(--muted); display: flex; gap: 6px; }
+  .chg .file { display: flex; align-items: center; gap: 8px; height: 28px; margin: 0 6px; padding: 0 8px; border-radius: var(--r); color: var(--dim); font-size: 12.5px; }
+  .chg .file.sel { background: var(--selected); color: var(--fg); }
+  .chg .file .path { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chg .file .path i { font-style: normal; color: var(--muted); }
+  .diff { margin: 8px 12px; border: 1px solid var(--border); border-radius: var(--r); background: var(--bg); font: 11.5px/1.55 var(--mono); overflow: hidden; }
+  .diff .dh { padding: 4px 10px; color: var(--muted); border-bottom: 1px solid var(--border); background: var(--raised); }
+  .diff .ln { padding: 0 10px; white-space: pre; color: #b9b9c2; }
+  .diff .ln.a { background: rgba(111,212,201,.09); color: #c9efe9; } .diff .ln.d { background: rgba(176,122,120,.12); color: #e4c4c2; }
+  .chg .ft { margin-top: auto; display: flex; gap: 6px; padding: 10px 12px; border-top: 1px solid var(--border); }
+
+  /* C — project page */
+  .proj { flex: 1; padding: 22px 28px; overflow: hidden; }
+  .proj h3 { margin: 0 0 4px; font-size: 18px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
+  .proj .meta { color: var(--muted); font-size: 12px; margin-bottom: 18px; display: flex; gap: 14px; align-items: center; }
+  .cols { display: grid; grid-template-columns: 1.25fr 1fr; gap: 18px; }
+  .card { border: 1px solid var(--border); border-radius: 8px; background: var(--card); }
+  .card .ch { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: 12px; font-weight: 600; color: var(--muted); }
+  .card .ch .n { font: 11px var(--mono); font-weight: 400; }
+  .wt { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 4px 14px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+  .wt:last-child { border-bottom: none; }
+  .wt .who { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+  .wt .who b { color: var(--dim); font-weight: 500; }
+  .cm { display: flex; align-items: center; gap: 10px; padding: 7px 14px; font-size: 12.5px; color: var(--dim); }
+  .cm .h { font: 11px var(--mono); color: var(--muted); width: 56px; }
+  .cm .msg { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cm .by { font-size: 11px; color: var(--muted); }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute"><defs>
+  <symbol id="branch" viewBox="0 0 24 24"><circle cx="6" cy="5" r="2.2"/><circle cx="6" cy="19" r="2.2"/><circle cx="18" cy="8" r="2.2"/><path d="M6 7.2v9.6M18 10.2c0 4-6 3-12 6.6"/></symbol>
+</defs></svg>
+<div class="doc">
+  <h1>Git — three directions</h1>
+  <p class="lede">A session runs in a folder; if that folder is a git repo, the app can say which branch it's on, whether
+    it's dirty, and what Claude changed — without you typing <span class="mono">git status</span> in a split. The three
+    directions are layers, not rivals: A is the ambient minimum, B adds a place to look at changes, C is a project-level
+    view. Each can ship on its own.</p>
+  <p class="sub">Read-only throughout: the app shows git, it doesn't commit, push or switch branches for you — that stays
+    Claude's (or your shell's) job. Colors for git marks are deliberately <em>not</em> the session status colors
+    (green/yellow/orange/red stay reserved): cyan for added, link-blue for modified, a muted red-grey for deleted.
+    All data is made up.</p>
+
+  <!-- ============================== A ============================== -->
+  <h2>A · Ambient: branch everywhere you already look</h2>
+  <p class="sub">The branch and a dirty mark ride on things that already exist: the session row's second line, the title
+    bar breadcrumb, and the file explorer, which gains M/A/D marks like any editor. Ahead/behind only when non-zero.
+    Nothing new to open.</p>
+  <div class="win">
+    <div class="titlebar"><div class="lights"><i></i><i></i><i></i></div>
+      <div class="crumb">billing-api <span class="faint">›</span> <span class="br"><svg><use href="#branch"/></svg>fix/invoice-rounding<span class="dirty">●</span></span> <span class="faint">›</span> <b>Fix invoice rounding</b> <span class="stat"><span class="a">+48</span> <span class="d">−12</span></span></div>
+      <div class="tb-right"><span>Session ▬ 42% 2h13m</span></div></div>
+    <div class="body">
+      <div class="side">
+        <div class="nav"><a>Sessions</a><a>To-Do</a><a>My issues</a></div>
+        <div class="grp">Now <span class="n">3</span></div>
+        <div class="row sel"><div class="l1"><span class="dot d-att"></span><span class="name">Fix invoice rounding</span><span class="t">2m</span></div>
+          <div class="l2">billing-api · <span class="br"><svg><use href="#branch"/></svg>fix/invoice-rounding<span class="dirty">●</span></span> <span class="ab">↑2</span></div></div>
+        <div class="row"><div class="l1"><span class="dot d-work"></span><span class="name">Migrate alerts to v2 API</span><span class="t">now</span></div>
+          <div class="l2">alerting · <span class="br"><svg><use href="#branch"/></svg>feat/alerts-v2<span class="dirty">●</span></span> <span class="ab">↑5 ↓1</span></div></div>
+        <div class="row"><div class="l1"><span class="dot d-idle"></span><span class="name">Review dependency bumps</span><span class="t">18m</span></div>
+          <div class="l2">billing-api · <span class="br"><svg><use href="#branch"/></svg>main</span></div></div>
+        <div class="grp">Today <span class="n">2</span></div>
+        <div class="row"><div class="l1"><span class="dot d-idle"></span><span class="name">Docs for the export job</span><span class="t">3h</span></div>
+          <div class="l2">exporter · <span class="br"><svg><use href="#branch"/></svg>docs/export</span> <span class="ab">↑1</span></div></div>
+        <div class="row"><div class="l1"><span class="dot d-idle"></span><span class="name">Scratch shell</span><span class="t">4h</span></div>
+          <div class="l2">~/tmp · not a repo</div></div>
+      </div>
+      <div class="main">
+        <div class="tabs"><div class="tab on">Fix invoice rounding</div><div class="tab">Migrate alerts to v2 API</div></div>
+        <div class="content">
+          <div class="term">
+            <div><span class="p">●</span> I've changed the rounding to banker's rounding in <span class="ok">invoice/total.ts</span> and added tests.</div>
+            <div class="m">  ⎿ Updated src/invoice/total.ts with 14 additions and 6 removals</div>
+            <div class="m">  ⎿ Wrote 34 lines to src/invoice/total.test.ts</div>
+            <br><div><span class="p">●</span> All 212 tests pass. Want me to commit this?</div>
+          </div>
+          <div class="tree">
+            <div class="h">billing-api <span class="br" style="margin-left:auto"><svg><use href="#branch"/></svg>fix/invoice-rounding</span></div>
+            <div class="f dir">▾ src</div>
+            <div class="f dir" style="padding-left:20px">▾ invoice</div>
+            <div class="f mod" style="padding-left:34px">total.ts<span class="gm M">M</span></div>
+            <div class="f add" style="padding-left:34px">total.test.ts<span class="gm U">U</span></div>
+            <div class="f" style="padding-left:34px">tax.ts</div>
+            <div class="f del" style="padding-left:34px">round.ts<span class="gm D">D</span></div>
+            <div class="f" style="padding-left:20px">▸ api</div>
+            <div class="f">package.json</div>
+            <div class="f mod">CHANGELOG.md<span class="gm M">M</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="notes">
+    <div><h4>Good at</h4><ul><li>Zero new UI to learn; answers "which branch is this session on?" at a glance.</li><li>Catches the classic mistake — two sessions on the same repo, one on the wrong branch.</li><li>Cheapest to build: one <span class="mono">git status --porcelain=v2 --branch</span> per folder.</li></ul></div>
+    <div><h4>Weaker at</h4><ul><li>Says <em>that</em> something changed, not <em>what</em>.</li><li>One more token on an already-dense second line (compact list hides it).</li></ul></div>
+  </div>
+
+  <!-- ============================== B ============================== -->
+  <h2>B · Changes panel: what did Claude touch?</h2>
+  <p class="sub">A right-edge panel beside the session (where the file explorer docks today), switchable Files / Changes.
+    Changes lists modified files with a diff stat; selecting one shows the diff inline, a click opens it in the editor
+    split. The tab carries the session's total <span class="mono">+/−</span>. "Since session start" scopes it to this
+    session's work, not whatever was already dirty.</p>
+  <div class="win">
+    <div class="titlebar"><div class="lights"><i></i><i></i><i></i></div>
+      <div class="crumb">billing-api <span class="faint">›</span> <b>Fix invoice rounding</b></div>
+      <div class="tb-right"><span>Session ▬ 42% 2h13m</span></div></div>
+    <div class="body">
+      <div class="side">
+        <div class="nav"><a>Sessions</a><a>To-Do</a><a>My issues</a></div>
+        <div class="grp">Now <span class="n">3</span></div>
+        <div class="row sel"><div class="l1"><span class="dot d-att"></span><span class="name">Fix invoice rounding</span><span class="stat"><span class="a">+48</span> <span class="d">−12</span></span></div>
+          <div class="l2">billing-api · waiting for you</div></div>
+        <div class="row"><div class="l1"><span class="dot d-work"></span><span class="name">Migrate alerts to v2 API</span><span class="stat"><span class="a">+310</span> <span class="d">−95</span></span></div>
+          <div class="l2">alerting · editing handlers.ts</div></div>
+        <div class="row"><div class="l1"><span class="dot d-idle"></span><span class="name">Review dependency bumps</span><span class="t">18m</span></div>
+          <div class="l2">billing-api · clean</div></div>
+      </div>
+      <div class="main">
+        <div class="tabs"><div class="tab on">Fix invoice rounding <span class="stat"><span class="a">+48</span> <span class="d">−12</span></span></div><div class="tab">Migrate alerts to v2 API</div></div>
+        <div class="content">
+          <div class="term">
+            <div><span class="p">●</span> I've changed the rounding to banker's rounding and added tests.</div>
+            <div class="m">  ⎿ Updated src/invoice/total.ts with 14 additions and 6 removals</div>
+            <br><div><span class="p">●</span> All 212 tests pass. Want me to commit this?</div>
+          </div>
+          <div class="chg">
+            <div class="hd"><div class="seg"><span>Files</span><span class="on">Changes 4</span></div>
+              <span class="br" style="margin-left:auto"><svg><use href="#branch"/></svg>fix/invoice-rounding <span class="ab">↑2</span></span></div>
+            <div class="sec">Since session start <span style="margin-left:auto;font-weight:400" class="stat"><span class="a">+48</span> <span class="d">−12</span></span></div>
+            <div class="file sel"><span class="gm M">M</span><span class="path"><i>src/invoice/</i>total.ts</span><span class="stat"><span class="a">+14</span> <span class="d">−6</span></span></div>
+            <div class="file"><span class="gm U">U</span><span class="path"><i>src/invoice/</i>total.test.ts</span><span class="stat"><span class="a">+34</span></span></div>
+            <div class="file"><span class="gm D">D</span><span class="path"><i>src/invoice/</i>round.ts</span><span class="stat"><span class="d">−6</span></span></div>
+            <div class="sec">Already changed before</div>
+            <div class="file"><span class="gm M">M</span><span class="path">CHANGELOG.md</span><span class="stat"><span class="a">+2</span></span></div>
+            <div class="diff">
+              <div class="dh">src/invoice/total.ts · @@ -41,9 +41,17 @@</div>
+              <div class="ln">  export function total(lines: Line[]) {</div>
+              <div class="ln d">-   return round(sum(lines), 2);</div>
+              <div class="ln a">+   const raw = sum(lines);</div>
+              <div class="ln a">+   // Banker's rounding: .5 goes to the even cent,</div>
+              <div class="ln a">+   // so a month of invoices doesn't drift upward.</div>
+              <div class="ln a">+   return roundHalfEven(raw, 2);</div>
+              <div class="ln">  }</div>
+            </div>
+            <div class="ft"><span class="btn pri">Open diff in split</span><span class="btn">Open file</span><span class="btn" style="margin-left:auto">Copy path</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="notes">
+    <div><h4>Good at</h4><ul><li>Review without leaving the app: "what did it actually change?" is one click, while it's still running.</li><li>The <span class="mono">+/−</span> on rows and tabs shows which sessions did a lot — and which did nothing.</li><li>Reuses the right-edge dock and the editor split you already have.</li></ul></div>
+    <div><h4>Weaker at</h4><ul><li>"Since session start" needs a snapshot at spawn (the HEAD + a stash-like tree hash) — real work.</li><li>Diff rendering is a new component; keep it read-only to stay small.</li></ul></div>
+  </div>
+
+  <!-- ============================== C ============================== -->
+  <h2>C · Project page: branches and worktrees ↔ sessions</h2>
+  <p class="sub">The project page (going into a project in the sidebar) gains a git section. Its point is the mapping: which
+    session works on which branch or worktree, what's dirty, what's ahead of the remote — and the last commits, so
+    "what did we ship today" has an answer. Parallel Claude sessions in separate worktrees are where this pays off.</p>
+  <div class="win">
+    <div class="titlebar"><div class="lights"><i></i><i></i><i></i></div>
+      <div class="crumb"><b>billing-api</b></div>
+      <div class="tb-right"><span>Session ▬ 42% 2h13m</span></div></div>
+    <div class="body">
+      <div class="side">
+        <div class="nav"><a>Sessions</a><a>To-Do</a><a>My issues</a></div>
+        <div class="grp" style="color:var(--fg)">‹ billing-api</div>
+        <div class="row sel"><div class="l1"><span class="dot d-att"></span><span class="name">Fix invoice rounding</span><span class="t">2m</span></div><div class="l2">fix/invoice-rounding</div></div>
+        <div class="row"><div class="l1"><span class="dot d-work"></span><span class="name">Retry on 502 from PSP</span><span class="t">now</span></div><div class="l2">worktree · fix/psp-retry</div></div>
+        <div class="row"><div class="l1"><span class="dot d-idle"></span><span class="name">Review dependency bumps</span><span class="t">18m</span></div><div class="l2">main</div></div>
+      </div>
+      <div class="main">
+        <div class="proj">
+          <h3>billing-api <span class="chip"><svg width="11" height="11" style="stroke:currentColor;fill:none;stroke-width:2"><use href="#branch"/></svg> main</span></h3>
+          <div class="meta"><span class="mono">~/code/billing-api</span><span>origin · github.com/acme/billing-api</span><span>3 sessions · 2 worktrees</span></div>
+          <div class="cols">
+            <div class="card">
+              <div class="ch">Branches in use <span class="n">3</span></div>
+              <div class="wt">
+                <span class="br" style="font-size:12px;color:var(--fg)"><svg><use href="#branch"/></svg>fix/invoice-rounding<span class="dirty">●</span></span>
+                <span class="ab">↑2</span><span class="stat"><span class="a">+48</span> <span class="d">−12</span></span>
+                <div class="who"><span class="dot d-att"></span><b>Fix invoice rounding</b> · waiting for you · main checkout</div>
+              </div>
+              <div class="wt">
+                <span class="br" style="font-size:12px;color:var(--fg)"><svg><use href="#branch"/></svg>fix/psp-retry<span class="dirty">●</span></span>
+                <span class="ab">↑3 ↓1</span><span class="stat"><span class="a">+122</span> <span class="d">−40</span></span>
+                <div class="who"><span class="dot d-work"></span><b>Retry on 502 from PSP</b> · running · worktree <span class="mono">../billing-api-psp</span></div>
+              </div>
+              <div class="wt">
+                <span class="br" style="font-size:12px;color:var(--fg)"><svg><use href="#branch"/></svg>main</span>
+                <span class="ab">up to date</span><span class="stat muted">clean</span>
+                <div class="who"><span class="dot d-idle"></span><b>Review dependency bumps</b> · idle · worktree <span class="mono">../billing-api-deps</span></div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="ch">Recent commits <span class="n">main</span></div>
+              <div class="cm"><span class="h">a41c9e2</span><span class="msg">fix(api): validate currency before totals</span><span class="by">2h</span></div>
+              <div class="cm"><span class="h">9be01f7</span><span class="msg">chore(deps): bump decimal to 10.4</span><span class="by">5h</span></div>
+              <div class="cm"><span class="h">77d2c10</span><span class="msg">feat(invoice): PDF footer with VAT number</span><span class="by">yesterday</span></div>
+              <div class="cm"><span class="h">1f0a3bb</span><span class="msg">test: cover zero-line invoices</span><span class="by">yesterday</span></div>
+              <div class="cm"><span class="h">c5e8d94</span><span class="msg">docs: export job runbook</span><span class="by">2d</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="notes">
+    <div><h4>Good at</h4><ul><li>The one view that answers "who's on what" across parallel sessions and worktrees.</li><li>Spots conflicts early: two sessions on one branch, or a branch far behind <span class="mono">main</span>.</li></ul></div>
+    <div><h4>Weaker at</h4><ul><li>Lives one level away from the terminal — for the project, not the moment.</li><li>Worktree detection and the commit list are extra git calls per project.</li></ul></div>
+  </div>
+
+  <div class="callout">
+    <b>How it would work underneath.</b> One <span class="mono">git status --porcelain=v2 --branch -z</span> (+ <span class="mono">git diff --numstat</span> for +/−) per
+    <em>folder</em>, not per session, run by the Rust backend. Refreshed when a Claude session goes idle (the Stop hook we
+    already receive), when you focus the window, and on a slow timer — never per keystroke. Folders that aren't repos
+    cost one failed call, cached. No git binary → the feature quietly isn't there. Read-only: no commits, pushes or
+    checkouts from the app.
+  </div>
+</div>
+</body>
+</html>

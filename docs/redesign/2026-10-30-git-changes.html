@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Too Many Terminals — Changes panel, with this session's real data</title>
+<style>
+  :root {
+    --bg: #0a0a0c; --card: #101014; --fg: #e9e9ee; --dim: #ababaf; --muted: #7c7c87; --faint: #494950;
+    --border: #1e1e24; --border-h: #303036; --primary: #8b7df7;
+    --success: #45b96a; --warning: #d9a441; --attention: #df7c46; --destructive: #e5534b;
+    --hover: rgba(255,255,255,.04); --selected: rgba(255,255,255,.075); --raised: rgba(255,255,255,.055);
+    --link: #7fb2ff; --cyan: #6fd4c9;
+    /* git marks: added/modified/deleted. Not the session status colors — those
+       are reserved — so: cyan for new, link-blue for modified, dim red-grey for gone. */
+    --g-add: #6fd4c9; --g-mod: #7fb2ff; --g-del: #b07a78;
+    --sans: -apple-system, "SF Pro Text", "Inter", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace;
+    --r: 6px;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #050506; color: var(--fg); font: 13px/1.45 var(--sans); -webkit-font-smoothing: antialiased; }
+  .doc { max-width: 1360px; margin: 0 auto; padding: 48px 40px 120px; }
+  h1 { font-size: 28px; font-weight: 650; letter-spacing: -.01em; margin: 0 0 6px; }
+  h2 { font-size: 20px; font-weight: 600; margin: 72px 0 6px; }
+  .lede { color: var(--dim); max-width: 880px; font-size: 14px; }
+  .sub { color: var(--muted); font-size: 13px; margin: 0 0 20px; max-width: 920px; }
+  .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .notes { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 18px; max-width: 1280px; color: var(--dim); font-size: 13px; }
+  .notes h4 { margin: 0 0 6px; font-size: 12px; font-weight: 600; color: var(--muted); }
+  .notes ul { margin: 0; padding-left: 18px; } .notes li { margin: 3px 0; }
+  .callout { margin-top: 18px; max-width: 1280px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--r); color: var(--dim); font-size: 12.5px; background: var(--card); }
+  .callout b { color: var(--fg); font-weight: 600; }
+
+  .win { width: 1280px; height: 720px; border: 1px solid #26262c; border-radius: 12px; overflow: hidden; background: var(--bg);
+         box-shadow: 0 30px 80px rgba(0,0,0,.55); display: flex; flex-direction: column; }
+  .titlebar { position: relative; height: 40px; display: flex; align-items: center; padding: 0 14px; border-bottom: 1px solid var(--border); background: var(--card); flex-shrink: 0; }
+  .lights { display: flex; gap: 8px; } .lights i { width: 12px; height: 12px; border-radius: 50%; background: #ff5f57; display: block; }
+  .lights i:nth-child(2) { background: #febc2e; } .lights i:nth-child(3) { background: #28c840; }
+  .crumb { position: absolute; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .crumb b { color: var(--fg); font-weight: 500; }
+  .tb-right { margin-left: auto; font-size: 11px; color: var(--muted); display: flex; gap: 12px; }
+  .body { flex: 1; display: flex; min-height: 0; }
+  .side { width: 268px; flex-shrink: 0; background: var(--card); border-right: 1px solid var(--border); padding: 8px 6px; display: flex; flex-direction: column; gap: 1px; }
+  .nav a { display: flex; align-items: center; gap: 10px; height: 28px; padding: 0 8px; border-radius: var(--r); color: var(--dim); text-decoration: none; }
+  .nav { padding-bottom: 8px; margin-bottom: 4px; border-bottom: 1px solid var(--border); }
+  .grp { display: flex; align-items: center; gap: 6px; height: 26px; padding: 0 8px; margin-top: 6px; font-size: 12px; font-weight: 600; color: var(--muted); }
+  .grp .n { margin-left: auto; font: 11px var(--mono); font-weight: 400; }
+  .row { display: flex; flex-direction: column; justify-content: center; gap: 1px; min-height: 44px; padding: 5px 8px 5px 10px; border-radius: var(--r); }
+  .row.sel { background: var(--selected); }
+  .row .l1 { display: flex; align-items: center; gap: 8px; color: var(--dim); }
+  .row.sel .l1 { color: var(--fg); }
+  .row .l1 .name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .l1 .t { font: 11px var(--mono); color: var(--muted); }
+  .row .l2 { display: flex; align-items: center; gap: 6px; padding-left: 16px; font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .d-idle { background: var(--success); } .d-work { background: var(--warning); } .d-att { background: var(--attention); box-shadow: 0 0 0 3px rgba(223,124,70,.18); }
+  .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .tabs { height: 36px; display: flex; align-items: flex-end; gap: 2px; padding: 0 8px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .tab { height: 30px; display: flex; align-items: center; gap: 8px; padding: 0 12px; border-radius: var(--r) var(--r) 0 0; color: var(--muted); font-size: 12.5px; }
+  .tab.on { background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-bottom-color: var(--bg); margin-bottom: -1px; }
+  .term { flex: 1; padding: 14px 18px; font: 12.5px/1.6 var(--mono); color: #c9c9d1; overflow: hidden; }
+  .term .p { color: var(--primary); } .term .m { color: var(--muted); } .term .ok { color: var(--success); }
+  .content { flex: 1; display: flex; min-height: 0; }
+
+  /* git atoms */
+  .br { display: inline-flex; align-items: center; gap: 4px; font: 11px var(--mono); color: var(--dim); white-space: nowrap; }
+  .br svg { width: 11px; height: 11px; stroke: currentColor; fill: none; stroke-width: 2; flex-shrink: 0; }
+  .dirty { color: var(--fg); }
+  .ab { font: 11px var(--mono); color: var(--muted); }
+  .stat { font: 11px var(--mono); white-space: nowrap; }
+  .stat .a { color: var(--g-add); } .stat .d { color: var(--g-del); }
+  .gm { display: inline-block; width: 14px; text-align: center; font: 600 10.5px var(--mono); }
+  .gm.M { color: var(--g-mod); } .gm.A, .gm.U { color: var(--g-add); } .gm.D { color: var(--g-del); }
+  .chip { display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 7px; border: 1px solid var(--border); border-radius: 4px; font-size: 11px; color: var(--dim); background: var(--raised); white-space: nowrap; }
+  .btn { height: 26px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--r); color: var(--dim); font-size: 12px; white-space: nowrap; }
+  .btn.pri { border-color: rgba(139,125,247,.5); background: rgba(139,125,247,.14); color: var(--fg); }
+
+  /* A — file tree decorations */
+  .tree { width: 250px; flex-shrink: 0; border-left: 1px solid var(--border); background: var(--card); padding: 8px 6px; font-size: 12.5px; }
+  .tree .h { display: flex; align-items: center; gap: 6px; padding: 2px 8px 8px; font-size: 11px; font-weight: 600; color: var(--muted); }
+  .tree .f { display: flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; border-radius: var(--r); color: var(--dim); }
+  .tree .f.mod { color: var(--g-mod); } .tree .f.add { color: var(--g-add); } .tree .f.del { color: var(--g-del); text-decoration: line-through; }
+  .tree .f .gm { margin-left: auto; }
+  .tree .f.dir { color: var(--dim); } .tree .f.dir::after { content: '•'; margin-left: auto; color: var(--g-mod); font-size: 10px; }
+
+  /* B — changes panel */
+  .chg { width: 400px; flex-shrink: 0; border-left: 1px solid var(--border); background: var(--card); display: flex; flex-direction: column; }
+  .chg .hd { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px; border-bottom: 1px solid var(--border); }
+  .chg .seg { display: flex; border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; font-size: 11.5px; }
+  .chg .seg span { padding: 3px 9px; color: var(--muted); } .chg .seg span.on { background: var(--selected); color: var(--fg); }
+  .chg .sec { padding: 10px 12px 4px; font-size: 11px; font-weight: 600; color: var(--muted); display: flex; gap: 6px; }
+  .chg .file { display: flex; align-items: center; gap: 8px; height: 28px; margin: 0 6px; padding: 0 8px; border-radius: var(--r); color: var(--dim); font-size: 12.5px; }
+  .chg .file.sel { background: var(--selected); color: var(--fg); }
+  .chg .file .path { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chg .file .path i { font-style: normal; color: var(--muted); }
+  .diff { margin: 8px 12px; border: 1px solid var(--border); border-radius: var(--r); background: var(--bg); font: 11.5px/1.55 var(--mono); overflow: hidden; }
+  .diff .dh { padding: 4px 10px; color: var(--muted); border-bottom: 1px solid var(--border); background: var(--raised); }
+  .diff .ln { padding: 0 10px; white-space: pre; color: #b9b9c2; }
+  .diff .ln.a { background: rgba(111,212,201,.09); color: #c9efe9; } .diff .ln.d { background: rgba(176,122,120,.12); color: #e4c4c2; }
+  .chg .ft { margin-top: auto; display: flex; gap: 6px; padding: 10px 12px; border-top: 1px solid var(--border); }
+
+  /* C — project page */
+  .proj { flex: 1; padding: 22px 28px; overflow: hidden; }
+  .proj h3 { margin: 0 0 4px; font-size: 18px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
+  .proj .meta { color: var(--muted); font-size: 12px; margin-bottom: 18px; display: flex; gap: 14px; align-items: center; }
+  .cols { display: grid; grid-template-columns: 1.25fr 1fr; gap: 18px; }
+  .card { border: 1px solid var(--border); border-radius: 8px; background: var(--card); }
+  .card .ch { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: 12px; font-weight: 600; color: var(--muted); }
+  .card .ch .n { font: 11px var(--mono); font-weight: 400; }
+  .wt { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 4px 14px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+  .wt:last-child { border-bottom: none; }
+  .wt .who { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+  .wt .who b { color: var(--dim); font-weight: 500; }
+  .cm { display: flex; align-items: center; gap: 10px; padding: 7px 14px; font-size: 12.5px; color: var(--dim); }
+  .cm .h { font: 11px var(--mono); color: var(--muted); width: 56px; }
+  .cm .msg { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cm .by { font-size: 11px; color: var(--muted); }
+</style>
+
+<style>
+  .chg { width: 430px; }
+  .chg .scope { display: flex; gap: 4px; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+  .chg .scope span { padding: 3px 9px; border-radius: 12px; font-size: 11.5px; color: var(--muted); border: 1px solid var(--border); }
+  .chg .scope span.on { background: var(--selected); color: var(--fg); border-color: var(--border-h); }
+  .chg .sum { display: flex; align-items: center; gap: 10px; padding: 8px 12px; font-size: 12px; color: var(--dim); border-bottom: 1px solid var(--border); }
+  .chg .commit { display: flex; align-items: center; gap: 8px; height: 26px; margin: 0 6px; padding: 0 8px; border-radius: var(--r); font-size: 12px; color: var(--dim); }
+  .chg .commit .h { font: 11px var(--mono); color: var(--muted); width: 52px; flex-shrink: 0; }
+  .chg .commit .s { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chg .commit .tm { font: 10.5px var(--mono); color: var(--faint); }
+  .chg .commit.open { color: var(--fg); }
+  .chg .file { height: 24px; font-size: 12px; }
+  .chg .file.in { margin-left: 26px; }
+  .bar { display: inline-flex; gap: 1px; } .bar i { width: 5px; height: 7px; border-radius: 1px; background: var(--border-h); display: block; }
+  .bar i.a { background: var(--g-add); } .bar i.d { background: var(--g-del); }
+  .scroll { flex: 1; overflow: hidden; }
+  .dpane { flex: 1; min-width: 0; display: flex; flex-direction: column; border-left: 1px solid var(--border); }
+  .dpane .dh2 { display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 12px; border-bottom: 1px solid var(--border); font-size: 12px; color: var(--dim); }
+  .dpane .code { flex: 1; font: 12px/1.6 var(--mono); overflow: hidden; }
+  .dpane .hunk { padding: 3px 12px; color: var(--muted); background: var(--raised); border-block: 1px solid var(--border); font-size: 11px; }
+  .dpane .l { display: grid; grid-template-columns: 44px 44px 1fr; white-space: pre; color: #b9b9c2; }
+  .dpane .l .n { color: var(--faint); text-align: right; padding-right: 10px; font-size: 11px; }
+  .dpane .l.a { background: rgba(111,212,201,.09); color: #c9efe9; } .dpane .l.d { background: rgba(176,122,120,.12); color: #e4c4c2; }
+  .states { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; max-width: 1280px; }
+  .state { border: 1px solid var(--border); border-radius: 8px; background: var(--card); padding: 14px; }
+  .state h4 { margin: 0 0 10px; font-size: 12px; font-weight: 600; color: var(--muted); }
+  .state .empty { text-align: center; padding: 18px 0 8px; color: var(--dim); font-size: 12.5px; }
+  .state .empty small { display: block; color: var(--muted); font-size: 11.5px; margin-top: 4px; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute"><defs>
+  <symbol id="branch" viewBox="0 0 24 24"><circle cx="6" cy="5" r="2.2"/><circle cx="6" cy="19" r="2.2"/><circle cx="18" cy="8" r="2.2"/><path d="M6 7.2v9.6M18 10.2c0 4-6 3-12 6.6"/></symbol>
+</defs></svg>
+<div class="doc">
+  <h1>B · Changes panel — this session, for real</h1>
+  <p class="lede">Variant B filled in with the actual git state of the session that built 0.28: repo
+    <span class="mono">too-many-terminals</span>, branch <span class="mono">feat/integrations-settings</span>, seven commits since the
+    session started on <span class="mono">764970f</span> (v0.27.0), and one file still uncommitted — the previous mockup.
+    Numbers, paths, commit messages and the diff are real; the session names are illustrative.</p>
+  <p class="sub">How "this session" is known: when a session spawns, the app records <span class="mono">HEAD</span> in its folder.
+    "This session" is then <span class="mono">start..HEAD</span> plus the working tree. If another session commits to the same
+    folder, the panel says so instead of pinning that work on this one (see edge states).</p>
+
+  <h2>1 · Scope "This session", grouped by commit</h2>
+  <p class="sub">The tab and the sidebar row carry the session's total. Uncommitted comes first — it's the part that still
+    needs you — then the session's commits, newest first, each expandable to its files. Release commits stay one line.</p>
+  <div class="win" style="height:720px">
+    <div class="titlebar"><div class="lights"><i></i><i></i><i></i></div>
+      <div class="crumb">too-many-terminals <span class="faint">›</span> <span class="br"><svg><use href="#branch"/></svg>feat/integrations-settings<span class="dirty">●</span></span> <span class="faint">›</span> <b>UI rethink — 0.28</b></div>
+      <div class="tb-right"><span>Session ▬ 42% 2h13m</span></div></div>
+    <div class="body">
+      <div class="side" style="width:250px">
+        <div class="nav"><a>Sessions</a><a>To-Do</a><a>My issues</a></div>
+        <div class="grp">Now <span class="n">2</span></div>
+        <div class="row sel"><div class="l1"><span class="dot d-att"></span><span class="name">UI rethink — 0.28</span><span class="stat"><span class="a">+2599</span> <span class="d">−259</span></span></div>
+          <div class="l2">too-many-terminals · waiting for you</div></div>
+        <div class="row"><div class="l1"><span class="dot d-idle"></span><span class="name">Release notes check</span><span class="t">1h</span></div>
+          <div class="l2">too-many-terminals · clean</div></div>
+      </div>
+      <div class="main">
+        <div class="tabs"><div class="tab on">UI rethink — 0.28 <span class="stat"><span class="a">+2599</span> <span class="d">−259</span></span></div><div class="tab">Release notes check</div></div>
+        <div class="content">
+          <div class="term">
+            <div><span class="p">●</span> I've drawn three directions for git in the app and opened the mockup.</div>
+            <div class="m">  ⎿ Wrote 316 lines to docs/redesign/2026-10-30-git.html</div>
+            <br><div><span class="p">●</span> Which one should I build?</div>
+            <br><div class="m">&gt; </div>
+          </div>
+          <div class="chg">
+            <div class="hd"><div class="seg"><span>Files</span><span class="on">Changes</span></div>
+              <span class="br" style="margin-left:auto"><svg><use href="#branch"/></svg>feat/integrations-settings <span class="ab">= origin/main</span></span></div>
+            <div class="scope"><span class="on">This session</span><span>Uncommitted</span><span>vs main</span><span style="margin-left:auto;border:none;padding-right:0">By commit ▾</span></div>
+            <div class="sum">since <span class="mono">764970f</span> · 2 days ago · 7 commits · 54 files <span style="margin-left:auto"><span class="stat"><span class="a">+2599</span> <span class="d">−259</span></span></span></div>
+            <div class="scroll">
+              <div class="sec">Uncommitted <span style="margin-left:auto;font-weight:400"><span class="stat"><span class="a">+316</span></span></span></div>
+              <div class="file"><span class="gm U">U</span><span class="path"><i>docs/redesign/</i>2026-10-30-git.html</span><span class="stat"><span class="a">+316</span></span> <span class="bar"><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i></span></div>
+              <div class="sec">Committed this session <span style="margin-left:auto;font-weight:400">7</span></div>
+              <div class="commit"><span class="h">156732f</span><span class="s">chore(release): v0.28.1</span><span class="tm">29.10 14:45</span></div>
+              <div class="commit open"><span class="h">bc2ab85</span><span class="s">▾ fix(usage): show the reset countdown in the title-bar meter</span><span class="stat"><span class="a">+24</span> <span class="d">−8</span></span></div>
+              <div class="file in sel"><span class="gm M">M</span><span class="path"><i>src/components/</i>SidebarFooter.tsx</span><span class="stat"><span class="a">+8</span> <span class="d">−6</span></span> <span class="bar"><i class="a"></i><i class="a"></i><i class="a"></i><i class="d"></i><i class="d"></i></span></div>
+              <div class="file in"><span class="gm M">M</span><span class="path"><i>src/components/</i>SidebarFooter.test.tsx</span><span class="stat"><span class="a">+8</span></span> <span class="bar"><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i></span></div>
+              <div class="file in"><span class="gm M">M</span><span class="path">CHANGELOG.md</span><span class="stat"><span class="a">+5</span></span> <span class="bar"><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i></span></div>
+              <div class="file in"><span class="gm M">M</span><span class="path"><i>docs/features/</i>usage-meter.md</span><span class="stat"><span class="a">+3</span> <span class="d">−2</span></span> <span class="bar"><i class="a"></i><i class="a"></i><i class="a"></i><i class="d"></i><i class="d"></i></span></div>
+              <div class="commit"><span class="h">783b15a</span><span class="s">chore(release): v0.28.0</span><span class="tm">14:43</span></div>
+              <div class="commit"><span class="h">3d4b760</span><span class="s">▸ feat(jira): reply marker in My issues; inspector asks nothing</span><span class="stat"><span class="a">+126</span> <span class="d">−10</span></span></div>
+              <div class="commit"><span class="h">3de411c</span><span class="s">▸ feat(ui): fifteen new themes, light themes, scheme import</span><span class="stat"><span class="a">+884</span> <span class="d">−144</span></span></div>
+              <div class="commit"><span class="h">f358889</span><span class="s">▸ docs(design): My issues layout directions</span><span class="stat"><span class="a">+272</span></span></div>
+              <div class="commit"><span class="h">cbee2c8</span><span class="s">▸ feat(ui): grouped settings with per-integration switches</span><span class="stat"><span class="a">+979</span> <span class="d">−103</span></span></div>
+            </div>
+            <div class="ft"><span class="btn pri">Open diff in split</span><span class="btn">Open file</span><span class="btn" style="margin-left:auto">Copy path</span></div>
+          </div>
+        </div>
+      </div></div>
+  </div>
+  <div class="notes">
+    <div><h4>What you read in two seconds</h4><ul><li>One file is still uncommitted — the git mockup.</li><li>The heavy commits are settings/My issues and themes; releases are noise.</li><li>The branch equals <span class="mono">origin/main</span>: nothing left to push.</li></ul></div>
+    <div><h4>Choices made here</h4><ul><li>Uncommitted first.</li><li>A five-cell bar per file, so big changes stand out without reading numbers.</li><li>Times local (RIX); the date only when not today.</li></ul></div>
+  </div>
+
+  <h2>2 · Same scope, "By file"</h2>
+  <p class="sub">Every file touched this session, biggest change first — the order you'd review in. A = created by the
+    session, M = modified, U = untracked. The long tail folds into one row.</p>
+  <div class="win" style="height:640px">
+    <div class="titlebar"><div class="lights"><i></i><i></i><i></i></div>
+      <div class="crumb">too-many-terminals <span class="faint">›</span> <b>UI rethink — 0.28</b></div>
+      <div class="tb-right"><span>Session ▬ 42% 2h13m</span></div></div>
+    <div class="body">
+      <div class="main">
+        <div class="content">
+          <div class="term">
+            <div><span class="p">●</span> Which one should I build?</div>
+            <br><div class="m">&gt; </div>
+          </div>
+          <div class="chg">
+            <div class="hd"><div class="seg"><span>Files</span><span class="on">Changes</span></div>
+              <span class="br" style="margin-left:auto"><svg><use href="#branch"/></svg>feat/integrations-settings</span></div>
+            <div class="scope"><span class="on">This session</span><span>Uncommitted</span><span>vs main</span><span style="margin-left:auto;border:none;padding-right:0">By file ▾</span></div>
+            <div class="sum">54 files <span style="margin-left:auto"><span class="stat"><span class="a">+2599</span> <span class="d">−259</span></span></span></div>
+            <div class="scroll">
+              <div class="file"><span class="gm U">U</span><span class="path"><i>docs/redesign/</i>2026-10-30-git.html</span><span class="stat"><span class="a">+316</span></span> <span class="bar"><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i></span></div>
+              <div class="file"><span class="gm M">M</span><span class="path"><i>src/lib/</i>themes.ts</span><span class="stat"><span class="a">+390</span> <span class="d">−15</span></span> <span class="bar"><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i><i class="d"></i></span></div>
+              <div class="file"><span class="gm A">A</span><span class="path"><i>src/components/</i>JiraView.tsx</span><span class="stat"><span class="a">+367</span></span> <span class="bar"><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i></span></div>
+              <div class="file"><span class="gm A">A</span><span class="path"><i>docs/redesign/</i>2026-10-29-my-issues.html</span><span class="stat"><span class="a">+272</span></span> <span class="bar"><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i></span></div>
+              <div class="file"><span class="gm M">M</span><span class="path"><i>src-tauri/src/</i>jira.rs</span><span class="stat"><span class="a">+172</span> <span class="d">−5</span></span> <span class="bar"><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i><i class="d"></i></span></div>
+              <div class="file"><span class="gm A">A</span><span class="path"><i>src/lib/</i>theme-import.ts</span><span class="stat"><span class="a">+148</span></span> <span class="bar"><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i></span></div>
+              <div class="file"><span class="gm M">M</span><span class="path"><i>src/components/</i>CustomizeTab.tsx</span><span class="stat"><span class="a">+143</span> <span class="d">−81</span></span> <span class="bar"><i class="a"></i><i class="a"></i><i class="a"></i><i class="d"></i><i class="d"></i></span></div>
+              <div class="file"><span class="gm A">A</span><span class="path"><i>src/components/</i>JiraView.test.tsx</span><span class="stat"><span class="a">+110</span></span> <span class="bar"><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i></span></div>
+              <div class="file"><span class="gm M">M</span><span class="path"><i>src/components/</i>SettingsView.tsx</span><span class="stat"><span class="a">+69</span> <span class="d">−38</span></span> <span class="bar"><i class="a"></i><i class="a"></i><i class="a"></i><i class="d"></i><i class="d"></i></span></div>
+              <div class="file"><span class="gm A">A</span><span class="path"><i>src/lib/</i>theme-import.test.ts</span><span class="stat"><span class="a">+56</span></span> <span class="bar"><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i></span></div>
+              <div class="file"><span class="gm M">M</span><span class="path"><i>src/lib/</i>jira.ts</span><span class="stat"><span class="a">+50</span> <span class="d">−1</span></span> <span class="bar"><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i><i class="d"></i></span></div>
+              <div class="file"><span class="gm M">M</span><span class="path"><i>docs/features/</i>jira-links.md</span><span class="stat"><span class="a">+47</span> <span class="d">−3</span></span> <span class="bar"><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i><i class="d"></i></span></div>
+              <div class="file"><span class="gm M">M</span><span class="path"><i>docs/features/</i>themes.md</span><span class="stat"><span class="a">+46</span> <span class="d">−7</span></span> <span class="bar"><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i><i class="d"></i></span></div>
+              <div class="file"><span class="gm M">M</span><span class="path">CHANGELOG.md</span><span class="stat"><span class="a">+39</span></span> <span class="bar"><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i></span></div>
+              <div class="file"><span class="gm M">M</span><span class="path"><i>src/lib/</i>jira.test.ts</span><span class="stat"><span class="a">+34</span></span> <span class="bar"><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i></span></div>
+              <div class="file" style="color:var(--muted)"><span class="gm"></span><span class="path">+ 39 smaller files</span><span class="stat"><span class="a">+340</span> <span class="d">−109</span></span></div>
+            </div>
+          </div>
+        </div>
+      </div></div>
+  </div>
+
+  <h2>3 · "Open diff in split"</h2>
+  <p class="sub">The selected file opens as a read-only diff pane beside the terminal — the same split as a shell or a
+    transcript — so you can read it while Claude keeps going. Real hunks from <span class="mono">bc2ab85</span>. ↑↓ jump
+    between hunks, Enter opens the file in the editor at that line.</p>
+  <div class="win" style="height:520px">
+    <div class="titlebar"><div class="lights"><i></i><i></i><i></i></div>
+      <div class="crumb">too-many-terminals <span class="faint">›</span> <b>UI rethink — 0.28</b></div>
+      <div class="tb-right"><span>Session ▬ 42% 2h13m</span></div></div>
+    <div class="body">
+      <div class="main">
+        <div class="tabs"><div class="tab on">UI rethink — 0.28 <span class="stat"><span class="a">+2599</span> <span class="d">−259</span></span></div></div>
+        <div class="content">
+          <div class="term" style="flex:0 0 40%">
+            <div><span class="p">●</span> Restored the countdown in the title-bar meter.</div>
+            <div class="m">  ⎿ Updated src/components/SidebarFooter.tsx with 8 additions and 6 removals</div>
+            <br><div><span class="p">●</span> 414 tests pass. Bumped to 0.28.1 and pushed the tag.</div>
+          </div>
+          <div class="dpane">
+            <div class="dh2"><span class="gm M">M</span><span class="mono" style="color:var(--fg)">src/components/SidebarFooter.tsx</span><span class="stat"><span class="a">+8</span> <span class="d">−6</span></span><span class="ab">bc2ab85 · 2 hunks</span><span style="margin-left:auto" class="btn">Open file</span><span class="btn">✕</span></div>
+            <div class="code">
+              <div class="hunk">@@ -55,5 +55,6 @@ function UsageRow(…)</div>
+              <div class="l "><span class="n">55</span><span class="n">55</span><span>    windowSeconds: number;</span></div>
+              <div class="l "><span class="n">56</span><span class="n">56</span><span>    now: number;</span></div>
+              <div class="l d"><span class="n">57</span><span class="n"></span><span>-   /** Title-bar form: no countdown column — it moves into the tooltip. */</span></div>
+              <div class="l a"><span class="n"></span><span class="n">57</span><span>+   /** Title-bar form: one line, tighter, the countdown right after the</span></div>
+              <div class="l a"><span class="n"></span><span class="n">58</span><span>+    *  percentage instead of in a fixed column. */</span></div>
+              <div class="l "><span class="n">58</span><span class="n">59</span><span>    inline?: boolean;</span></div>
+              <div class="hunk">@@ -84,9 +85,10 @@ function UsageRow(…)</div>
+              <div class="l "><span class="n">85</span><span class="n">86</span><span>      &lt;span className=…&gt;{w.percent}%&lt;/span&gt;</span></div>
+              <div class="l d"><span class="n">86</span><span class="n"></span><span>-     {!inline &amp;&amp; (</span></div>
+              <div class="l d"><span class="n">87</span><span class="n"></span><span>-       &lt;span className="w-11 shrink-0 text-right …" title="Resets in"&gt;</span></div>
+              <div class="l d"><span class="n">88</span><span class="n"></span><span>-         {formatDuration(secondsLeft)}</span></div>
+              <div class="l d"><span class="n">89</span><span class="n"></span><span>-       &lt;/span&gt;</span></div>
+              <div class="l d"><span class="n">90</span><span class="n"></span><span>-     )}</span></div>
+              <div class="l a"><span class="n"></span><span class="n">87</span><span>+     &lt;span</span></div>
+              <div class="l a"><span class="n"></span><span class="n">88</span><span>+       className={cn('shrink-0 font-mono …', inline ? '' : 'w-11 text-right')}</span></div>
+              <div class="l a"><span class="n"></span><span class="n">89</span><span>+       title="Resets in"</span></div>
+              <div class="l a"><span class="n"></span><span class="n">90</span><span>+     &gt;</span></div>
+              <div class="l a"><span class="n"></span><span class="n">91</span><span>+       {formatDuration(secondsLeft)}</span></div>
+              <div class="l a"><span class="n"></span><span class="n">92</span><span>+     &lt;/span&gt;</span></div>
+            </div>
+          </div>
+        </div>
+      </div></div>
+  </div>
+
+  <h2>4 · Edge states</h2>
+  <div class="states">
+    <div class="state"><h4>Nothing changed yet</h4><div class="empty">No changes since this session started<small>on <span class="mono">feat/integrations-settings</span> at <span class="mono">156732f</span></small></div></div>
+    <div class="state"><h4>Not a repo</h4><div class="empty">~/tmp isn't a git repository<small>The Changes tab hides; Files stays.</small></div></div>
+    <div class="state"><h4>Another session works in the same folder</h4>
+      <div class="file"><span class="gm M">M</span><span class="path"><i>src/lib/</i>jira.ts</span><span class="stat"><span class="a">+12</span> <span class="d">−3</span></span></div>
+      <div style="font-size:11.5px;color:var(--muted);padding:6px 8px 0">Shared with <b style="color:var(--dim);font-weight:500">Release notes check</b> — both sessions work in this folder, so this change can't be pinned on one of them.</div></div>
+  </div>
+
+  <div class="callout">
+    <b>What it costs to build.</b> Backend: record <span class="mono">HEAD</span> at spawn; on refresh run
+    <span class="mono">git log --numstat start..HEAD</span> and <span class="mono">git diff --numstat</span> (+ untracked) — when the session goes
+    idle (Stop hook), on window focus and when the panel opens; one in flight per folder. Diff pane:
+    <span class="mono">git diff</span> / <span class="mono">git show</span> for one file, rendered read-only (a unified diff is lines with a prefix — no
+    new dependency). Frontend: a Changes tab in the right dock, <span class="mono">+/−</span> on tab and row, the diff as a new
+    pane content kind. Read-only throughout.
+  </div>
+</div>
+</body>
+</html>
