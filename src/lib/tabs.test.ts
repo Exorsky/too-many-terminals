@@ -343,6 +343,16 @@ describe('files on the workspace', () => {
     expect(onScreen(state)).toEqual(['session:a:shell', 'file:/proj/src/App.tsx', 'file:/proj/README.md']);
   });
 
+  it('a diff joins the same reading pane, and a commit\'s diff is its own tab', () => {
+    let state = stateWith('a');
+    state = tabsReducer(state, { type: 'addToWorkspace', content: file });
+    state = tabsReducer(state, { type: 'focusPane', paneId: currentLayout(state).panes[0].id });
+    state = tabsReducer(state, { type: 'addToWorkspace', content: { kind: 'diff', dir: '/proj', path: 'src/a.ts', commit: null } });
+    state = tabsReducer(state, { type: 'addToWorkspace', content: { kind: 'diff', dir: '/proj', path: 'src/a.ts', commit: 'bbb' } });
+    expect(panesOf(currentLayout(state).grid)).toHaveLength(2);
+    expect(onScreen(state)).toEqual(['session:a:shell', 'file:/proj/src/App.tsx', 'diff:work:src/a.ts', 'diff:bbb:src/a.ts']);
+  });
+
   it('brings back what is already open instead of duplicating it', () => {
     let state = stateWith('a');
     state = tabsReducer(state, { type: 'addToWorkspace', content: file });

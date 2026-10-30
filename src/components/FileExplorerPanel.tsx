@@ -4,6 +4,9 @@ import { FILE_MIME } from '@/lib/dnd';
 import { cn, folderName } from '@/lib/utils';
 import { searchFiles, type FileMatch } from '@/lib/file-search';
 import FileTree, { RevealMenu } from './FileTree';
+import ChangesPanel from './ChangesPanel';
+import { useGitStatus } from '@/lib/git';
+import type { Tab } from '@/types';
 
 interface FileExplorerPanelProps {
   projects: string[];
@@ -13,6 +16,9 @@ interface FileExplorerPanelProps {
   pinned?: boolean;
   /** Given only when the panel can change modes — the pin appears with it. */
   onTogglePin?: () => void;
+  /** The session on screen: its folder's git changes are the Changes tab. */
+  session?: Tab | null;
+  onOpenDiff?: (dir: string, path: string, commit: string | null) => void;
 }
 
 /** The strip along the window's right edge that brings the file explorer back.
@@ -56,8 +62,12 @@ export function FilesEdge({ onPeek }: { onPeek: () => void }) {
 /** The right-hand file explorer: one lazily-loaded tree per open project
  *  folder, plus a bounded filename search across all of them. */
 export default function FileExplorerPanel({
-  projects, activePath, onOpenFile, pinned, onTogglePin,
+  projects, activePath, onOpenFile, pinned, onTogglePin, session, onOpenDiff,
 }: FileExplorerPanelProps) {
+  // Changes only exists for a session in a repo; Files is always there.
+  const git = useGitStatus(session?.cwd ?? null);
+  const [tab, setTab] = useState<'files' | 'changes'>('files');
+  const showChanges = tab === 'changes' && !!session && !!git && !!onOpenDiff;
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<FileMatch[] | null>(null);
 
@@ -75,7 +85,27 @@ export default function FileExplorerPanel({
     <div className="flex flex-col w-full h-full bg-card">
       <div className="flex items-center gap-1.5 h-8 px-2.5 border-b border-border shrink-0">
         <FolderTree size={12} className="text-muted-foreground shrink-0" />
-        <span className="text-[12px] font-semibold text-foreground/90">Files</span>
+        {session && git && onOpenDiff ? (
+          <div role="tablist" aria-label="Explorer" className="flex gap-0.5">
+            {(['files', 'changes'] as const).map((t) => (
+              <button
+                key={t}
+                type="button"
+                role="tab"
+                aria-selected={tab === t}
+                className={cn(
+                  'h-5 px-1.5 rounded-sm border-none cursor-pointer font-inherit text-[12px]',
+                  tab === t ? 'bg-selected text-foreground font-semibold' : 'bg-transparent text-muted-foreground hover:text-foreground',
+                )}
+                onClick={() => setTab(t)}
+              >
+                {t === 'files' ? 'Files' : <>Changes{git.files.length > 0 && <span className="ml-1 font-mono text-[10.5px] text-muted-foreground">{git.files.length}</span>}</>}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <span className="text-[12px] font-semibold text-foreground/90">Files</span>
+        )}
         {onTogglePin && (
           <button
             type="button"
@@ -92,6 +122,9 @@ export default function FileExplorerPanel({
           </button>
         )}
       </div>
+      {showChanges ? (
+        <div className="flex-1 min-h-0"><ChangesPanel session={session!} onOpenDiff={onOpenDiff!} /></div>
+      ) : (<>
       <div className="flex items-center gap-1.5 mx-2 mt-1.5 mb-1 px-2 py-1 rounded-md border border-border bg-background shrink-0">
         <Search size={12} className="text-muted-foreground shrink-0" />
         <input
@@ -144,6 +177,7 @@ export default function FileExplorerPanel({
           ))
         )}
       </div>
+      </>)}
     </div>
   );
 }

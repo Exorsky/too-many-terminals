@@ -57,6 +57,9 @@ export interface Tab {
   dirty?: boolean;
   /** User-pinned to the sidebar's Pinned section, independent of folder or status. */
   pinned?: boolean;
+  /** HEAD of the session's repo when it started: what the Changes panel's
+   *  "This session" is measured from. Absent outside a repo. */
+  gitStart?: string | null;
   /** Epoch ms of the last status transition — powers the elapsed-time label
    *  on working/requires_response rows. */
   statusChangedAt?: number;
@@ -205,6 +208,7 @@ export interface SavedTab {
   archived?: boolean;
   /** User-pinned to the top of its group. */
   pinned?: boolean;
+  gitStart?: string | null;
 }
 
 export interface WorkspaceState {

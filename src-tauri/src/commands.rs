@@ -421,6 +421,30 @@ pub fn git_status(dir: String) -> Option<crate::git::GitStatus> {
     crate::git::status(std::path::Path::new(&dir))
 }
 
+/// HEAD's full commit id — a session's starting point.
+#[tauri::command(async)]
+pub fn git_head(dir: String) -> Option<String> {
+    crate::git::head_oid(std::path::Path::new(&dir))
+}
+
+/// Uncommitted changes, and the commits since `since`.
+#[tauri::command(async)]
+pub fn git_changes(dir: String, since: Option<String>) -> Option<crate::git::GitChanges> {
+    crate::git::changes(std::path::Path::new(&dir), since.as_deref())
+}
+
+/// Recent commits across branches, for the branch graph.
+#[tauri::command(async)]
+pub fn git_graph(dir: String) -> Option<Vec<crate::git::GitCommit>> {
+    crate::git::graph(std::path::Path::new(&dir), 120)
+}
+
+/// One file's diff, in a commit or in the working tree.
+#[tauri::command(async)]
+pub fn git_file_diff(dir: String, path: String, commit: Option<String>) -> Option<String> {
+    crate::git::file_diff(std::path::Path::new(&dir), &path, commit.as_deref())
+}
+
 /// Saved Jira settings and the token behind their variable — or why there's
 /// nothing to ask Jira with.
 fn jira_config() -> Result<(AppSettings, Option<String>), String> {

@@ -296,6 +296,43 @@ export function gitStatus(dir: string): Promise<GitStatus | null> {
   return invoke('git_status', { dir });
 }
 
+export interface FileStat { path: string; code: string; added: number; deleted: number }
+
+export interface GitCommit {
+  oid: string;
+  short: string;
+  parents: string[];
+  /** Branch/tag names pointing here, HEAD first. */
+  refs: string[];
+  subject: string;
+  /** Unix seconds. */
+  time: number;
+  files: FileStat[];
+}
+
+export interface GitChanges {
+  uncommitted: FileStat[];
+  commits: GitCommit[];
+  /** The start is no longer an ancestor of HEAD: commits can't be attributed. */
+  diverged: boolean;
+}
+
+export function gitHead(dir: string): Promise<string | null> {
+  return invoke('git_head', { dir });
+}
+
+export function gitChanges(dir: string, since: string | null): Promise<GitChanges | null> {
+  return invoke('git_changes', { dir, since });
+}
+
+export function gitGraph(dir: string): Promise<GitCommit[] | null> {
+  return invoke('git_graph', { dir });
+}
+
+export function gitFileDiff(dir: string, path: string, commit: string | null): Promise<string | null> {
+  return invoke('git_file_diff', { dir, path, commit });
+}
+
 export interface JiraIssue {
   key: string;
   summary: string;

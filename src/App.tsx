@@ -9,6 +9,7 @@ import PaneTabs from '@/components/PaneTabs';
 import SessionTabs from '@/components/SessionTabs';
 import IssueCard from '@/components/IssueCard';
 import JiraView from '@/components/JiraView';
+import DiffView from '@/components/DiffView';
 import GitBranch from '@/components/GitBranch';
 import { refreshGit, useGitStatus } from '@/lib/git';
 import { jiraOn } from '@/lib/jira';
@@ -388,6 +389,9 @@ export default function App() {
       };
       if (opts.prompt) pendingPromptRef.current.set(tab.id, opts.prompt);
       dispatch({ type: 'add', tab, at: newTabPositionRef.current });
+      // Where the repo stood when this session began — "This session" in the
+      // Changes panel is everything after it. Outside a repo: nothing.
+      void Promise.resolve().then(() => ipc.gitHead(atCwd)).then((oid) => { if (oid) dispatch({ type: 'gitStart', tabId: tab.id, oid }); }).catch(() => {});
       setView('sessions');
       setShowSettings(false);
       setShowArchive(false);
@@ -1182,6 +1186,14 @@ export default function App() {
                                 onOpenFile={(dir, path) =>
                                   dispatch({ type: 'showIn', content: { kind: 'file', dir, path }, paneId })}
                               />
+                            ) : content.kind === 'diff' ? (
+                              <DiffView
+                                dir={content.dir}
+                                path={content.path}
+                                commit={content.commit}
+                                onOpenFile={(dir, path) =>
+                                  dispatch({ type: 'showIn', content: { kind: 'file', dir, path }, paneId })}
+                              />
                             ) : (
                               (() => {
                                 const session = state.tabs.find((t) => t.id === content.sessionId);
@@ -1373,6 +1385,8 @@ export default function App() {
                 onOpenFile={(dir, path) => addToWorkspace({ kind: 'file', dir, path })}
                 pinned
                 onTogglePin={() => setFilesMode('peek')}
+                session={onSessions ? activeTab : null}
+                onOpenDiff={(dir, path, commit) => addToWorkspace({ kind: 'diff', dir, path, commit })}
               />
             </div>
           </>
@@ -1391,6 +1405,8 @@ export default function App() {
             onOpenFile={(dir, path) => addToWorkspace({ kind: 'file', dir, path })}
             pinned={false}
             onTogglePin={() => setFilesMode('pinned')}
+            session={onSessions ? activeTab : null}
+            onOpenDiff={(dir, path, commit) => addToWorkspace({ kind: 'diff', dir, path, commit })}
           />
         </div>
       )}

@@ -155,6 +155,7 @@ export type TabsAction =
   | { type: 'wake'; tabId: string }
   | { type: 'sleep'; tabId: string }
   | { type: 'pin'; tabId: string; pinned: boolean }
+  | { type: 'gitStart'; tabId: string; oid: string }
   /** File a session under a project, or `null` to send it back to the Inbox.
    *  Organizational only — `cwd` is untouched, so nothing respawns and no
    *  transcript is orphaned. */
@@ -285,6 +286,10 @@ export function tabsReducer(state: TabsState, action: TabsAction): TabsState {
 
     case 'pin':
       return patch(action.tabId, (t) => ({ ...t, pinned: action.pinned }));
+
+    case 'gitStart':
+      // Set once: a session's starting point never moves.
+      return patch(action.tabId, (t) => (t.gitStart ? t : { ...t, gitStart: action.oid }));
 
     case 'setProject':
       return patch(action.tabId, (t) => ({ ...t, projectDir: action.projectDir }));

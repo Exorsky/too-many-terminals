@@ -23,7 +23,9 @@ export type PaneContent =
   /** `n` numbers a session's extra shells (1, 2, …) so several can sit side by
    *  side; absent means the session's own terminal for that tool. */
   | { kind: 'session'; sessionId: string; tool: SessionTool; n?: number }
-  | { kind: 'file'; dir: string; path: string };
+  | { kind: 'file'; dir: string; path: string }
+  /** One file's diff — in `commit`, or the working tree when null. */
+  | { kind: 'diff'; dir: string; path: string; commit: string | null };
 
 export interface Pane {
   id: string;
@@ -43,6 +45,7 @@ export interface Pane {
 export function contentKey(content: PaneContent | null | undefined): string | null {
   if (!content) return null;
   if (content.kind === 'file') return `file:${content.path}`;
+  if (content.kind === 'diff') return `diff:${content.commit ?? 'work'}:${content.path}`;
   const base = `session:${content.sessionId}:${content.tool}`;
   return content.n ? `${base}:${content.n}` : base;
 }
@@ -410,9 +413,11 @@ export function resizeSeam(layout: Layout, axis: 'col' | 'row', frac: number): L
 export function addToWorkspace(layout: Layout, content: PaneContent): Layout {
   const existing = paneOfContent(layout, content);
   if (existing) return activateInPane(layout, existing.id, contentKey(content)!);
-  if (content.kind === 'file') {
-    const filePane = layout.panes.find((p) => p.contents.some((c) => c.kind === 'file'));
-    if (filePane) return addToPane(layout, filePane.id, content);
+  // Files and diffs gather in one reading pane beside the session rather
+  // than each splitting off another.
+  if (content.kind === 'file' || content.kind === 'diff') {
+    const readPane = layout.panes.find((p) => p.contents.some((c) => c.kind === 'file' || c.kind === 'diff'));
+    if (readPane) return addToPane(layout, readPane.id, content);
   }
   if (isEmptyLayout(layout)) return addToPane(layout, layout.focusedPaneId, content);
   return splitPane(layout, layout.focusedPaneId, 'right', content);

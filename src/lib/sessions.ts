@@ -170,6 +170,7 @@ export function restoreTab(saved: SavedTab): Tab {
     status: 'new',
     dormant: true,
     pinned: saved.pinned,
+    gitStart: saved.gitStart ?? null,
   };
 }
 
@@ -186,6 +187,7 @@ export function toSavedTab(tab: Tab): SavedTab {
     projectDir: tab.projectDir,
     archived: tab.archived,
     pinned: tab.pinned,
+    gitStart: tab.gitStart ?? null,
   };
 }
 

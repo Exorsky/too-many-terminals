@@ -24,6 +24,40 @@ reserved, see [design.md](../design.md#status-vocabulary)): modified is the
 link blue, new is cyan, a conflict magenta. Deleted files don't appear — the
 tree lists what's on disk.
 
+## Changes
+
+The right-edge explorer (pinned or peeked) gets a **Files | Changes** switch
+when the session on screen is in a repo; the Changes tab counts the changed
+files. `ChangesPanel` has three scopes:
+
+- **This session** — what changed since the session started: uncommitted
+  files first (that's what still needs you), then the session's commits,
+  newest first, each expandable to its files. A session records `HEAD` when
+  it's created (`gitStart` on the tab, persisted in `workspace.json`), and
+  "this session" is `gitStart..HEAD` plus the working tree. If the branch
+  moved away (a reset, a checkout) so `gitStart` is no longer an ancestor of
+  HEAD, the panel says so instead of guessing. Sessions from before the field
+  existed have no start, so the scope is disabled for them.
+- **Uncommitted** — the working tree against HEAD, untracked files counted by
+  their lines.
+- **Graph** — recent history across local and remote branches and tags, drawn
+  as lanes like `git log --graph`: a dot per commit, a lane per line of
+  history, forks and merges as joining lines, branch and tag names beside the
+  commit they point at, HEAD as a hollow dot, and the session's starting
+  commit marked. `layoutGraph` (`src/lib/git-graph.ts`) does the lanes; the
+  mainline is kept leftmost. Lane colors cycle through the theme's accents,
+  never the status colors.
+
+Each file shows its `+/−` and a five-cell bar, so the big changes stand out
+without reading numbers. Release and merge commits are one quiet line.
+
+Selecting a file opens its **diff** as a pane beside the session (`DiffView`,
+a `diff` pane content: `{ dir, path, commit }`). Files and diffs gather in one
+reading pane rather than each splitting off another. The diff is read-only,
+numbered on both sides, capped at 400 KB; a working-tree diff follows the
+folder's git status, so it updates when a run ends. **Open file** opens the
+file in the editor.
+
 ## Asking git as little as possible
 
 - **One status per folder, not per session** (`src/lib/git.ts`): three
@@ -40,6 +74,10 @@ tree lists what's on disk.
   status that refreshed the index would take `index.lock` and could make
   Claude's own `git commit` in the same folder fail. On Windows without a
   console window.
+- The Changes panel asks for its list (`git diff HEAD --numstat`, `git log
+  --numstat start..HEAD`, or `git log --topo-order` for the graph, 120
+  commits) when it opens and whenever the folder's status refreshes — so it
+  rides the same throttle.
 - Not a repo, or no git installed: `None`, and nothing renders.
 - At most 2000 changed files are listed.
 
@@ -49,5 +87,8 @@ tree lists what's on disk.
 - `src-tauri/src/commands.rs` — `git_status`
 - `src/lib/git.ts` (+ tests) — per-folder cache, refresh rules, tree marks
 - `src/components/GitBranch.tsx` (+ tests) — the label and mark colors
+- `src/components/ChangesPanel.tsx` (+ tests) — scopes, commit list, graph
+- `src/components/DiffView.tsx` — the diff pane (`parseDiff` tested with the panel)
+- `src/lib/git-graph.ts` (+ tests) — graph lanes
 - Wiring: `SessionsSidebar.tsx` (row), `App.tsx` (breadcrumb, refresh when a
   run ends), `FileTree.tsx` (marks)

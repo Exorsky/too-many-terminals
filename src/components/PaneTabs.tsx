@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { File, SquareTerminal, Sparkles, FolderTree, X } from 'lucide-react';
+import { File, SquareTerminal, Sparkles, FolderTree, X, GitCompare } from 'lucide-react';
 import { VIEW_MIME } from '@/lib/dnd';
 import { contentKey, type PaneContent } from '@/lib/panes';
 import { sessionState, STATE_DOT } from '@/lib/sessions';
@@ -30,6 +30,13 @@ export interface PaneTabsProps {
  *  the session; the tool is a suffix only when it isn't Claude, because
  *  "Alpha" reads better than "Alpha · Claude" and the icon already says it. */
 function describe(content: PaneContent, tabs: Tab[], ownSessionId: string | null) {
+  if (content.kind === 'diff') {
+    return {
+      label: `${content.path.split('/').pop() || content.path} · diff`,
+      title: `${content.path} — ${content.commit ? content.commit.slice(0, 7) : 'uncommitted'}`,
+      icon: <GitCompare size={12} className="shrink-0 text-muted-foreground" />,
+    };
+  }
   if (content.kind === 'file') {
     return {
       label: content.path.split(/[/\\]/).pop() || content.path,

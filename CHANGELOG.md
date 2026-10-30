@@ -18,6 +18,10 @@ listed here; see `git log` for the full history.
   how far it is ahead of or behind its upstream; the file explorer marks
   changed files and the folders they're in. Read-only, and one `git status`
   per folder however many sessions share it.
+- **Changes panel.** The file explorer gets a Changes tab: what this session
+  changed (uncommitted files, then its own commits), the working tree, or a
+  branch graph that shows how branches fork and merge. Any file opens as a
+  diff beside the session.
 
 ## [0.28.1] - 2026-10-29
 
