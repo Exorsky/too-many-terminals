@@ -415,6 +415,12 @@ fn claude_settings_path() -> Option<std::path::PathBuf> {
     dirs::home_dir().map(|h| h.join(".claude").join("settings.json"))
 }
 
+/// Git status of the repo `dir` is in; `None` outside a repo or without git.
+#[tauri::command(async)]
+pub fn git_status(dir: String) -> Option<crate::git::GitStatus> {
+    crate::git::status(std::path::Path::new(&dir))
+}
+
 /// Saved Jira settings and the token behind their variable — or why there's
 /// nothing to ask Jira with.
 fn jira_config() -> Result<(AppSettings, Option<String>), String> {

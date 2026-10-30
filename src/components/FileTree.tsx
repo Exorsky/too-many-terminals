@@ -1,10 +1,15 @@
-import { useEffect, useState, type DragEvent, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, type DragEvent, type ReactNode } from 'react';
 import { ChevronRight, File, Folder, FolderOpen } from 'lucide-react';
 import { FILE_MIME } from '@/lib/dnd';
 import { cn } from '@/lib/utils';
 import * as ipc from '@/lib/ipc';
 import type { DirEntry } from '@/lib/ipc';
 import { usePollWhileFocused } from '@/lib/use-poll';
+import { gitMarks, gitPathKey, refreshGit, useGitStatus, type GitMarks } from '@/lib/git';
+import { gitCodeClass } from './GitBranch';
+
+/** The tree's git marks, set once at the root so every node can look itself up. */
+const MarksContext = createContext<GitMarks | null>(null);
 import {
   ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger,
 } from '@/components/ui/context-menu';
@@ -60,6 +65,12 @@ interface NodeProps {
 
 function Node({ entry, depth, rootDir, defaultOpen, activePath, onOpen }: NodeProps) {
   const [open, setOpen] = useState(!!defaultOpen);
+  const marks = useContext(MarksContext);
+  const key = gitPathKey(entry.path);
+  // A file's own letter; a folder gets a dot when something below it changed
+  // (or the letter, when the whole folder is new and untracked).
+  const code = marks?.files.get(key) ?? null;
+  const changedBelow = entry.isDir && !code && !!marks?.dirs.has(key);
   const [children, setChildren] = useState<DirEntry[] | null>(null);
 
   // Loads its own children once, the first time it's expanded — a directory
@@ -109,7 +120,9 @@ function Node({ entry, depth, rootDir, defaultOpen, activePath, onOpen }: NodePr
           <span className="w-[10px] shrink-0" />
         )}
         {entry.isDir ? <Folder size={12} className="shrink-0" /> : <File size={12} className="shrink-0" />}
-        <span className="truncate">{entry.name}</span>
+        <span className={cn('truncate', code && gitCodeClass(code))}>{entry.name}</span>
+        {code && <span className={cn('ml-auto shrink-0 font-mono text-[10.5px] font-semibold', gitCodeClass(code))}>{code}</span>}
+        {changedBelow && <span aria-label="changes inside" className="ml-auto shrink-0 w-1.5 h-1.5 rounded-full bg-link" />}
       </button>
       </RevealMenu>
       {open && children?.map((child) => (
@@ -131,5 +144,14 @@ export interface FileTreeProps {
  *  walks the whole tree (node_modules included) up front. Starts fully
  *  collapsed, including the project root itself. */
 export default function FileTree({ root, activePath, onOpen }: FileTreeProps) {
-  return <Node entry={root} depth={0} rootDir={root.path} activePath={activePath} onOpen={onOpen} />;
+  const git = useGitStatus(root.path);
+  // Rides the tree's own poll: while the explorer is open and the window
+  // focused, the marks follow edits — refreshGit throttles to one status per
+  // 15s per folder, however many trees ask.
+  usePollWhileFocused(() => { void refreshGit(root.path); }, true);
+  return (
+    <MarksContext.Provider value={git ? gitMarks(git) : null}>
+      <Node entry={root} depth={0} rootDir={root.path} activePath={activePath} onOpen={onOpen} />
+    </MarksContext.Provider>
+  );
 }

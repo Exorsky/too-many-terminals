@@ -9,6 +9,8 @@ import PaneTabs from '@/components/PaneTabs';
 import SessionTabs from '@/components/SessionTabs';
 import IssueCard from '@/components/IssueCard';
 import JiraView from '@/components/JiraView';
+import GitBranch from '@/components/GitBranch';
+import { refreshGit, useGitStatus } from '@/lib/git';
 import { jiraOn } from '@/lib/jira';
 import IssueChip, { useIssueName } from '@/components/IssueChip';
 import SidebarFooter from '@/components/SidebarFooter';
@@ -299,6 +301,12 @@ export default function App() {
       prevStatusRef.current.set(tabId, status);
       dispatch({ type: 'status', tabId, status, detail });
       maybeNotify(tabId, prev, status);
+      // A run just ended: whatever it changed is on disk now, so the branch
+      // and the dirty marks for that folder are worth asking for again.
+      if (prev === 'working' && status !== 'working') {
+        const cwd = tabsRef.current.find((t) => t.id === tabId)?.cwd;
+        if (cwd) void refreshGit(cwd, true);
+      }
       // Claude is up and listening: hand over anything queued for it.
       const pending = pendingPromptRef.current.get(tabId);
       if (pending !== undefined) {
@@ -1420,6 +1428,7 @@ function Breadcrumb({ title, session, projects }: {
   projects: string[];
 }) {
   const { key, label } = useIssueName(session?.name ?? '');
+  const git = useGitStatus(title ? null : session?.cwd ?? null);
   if (title) return <span className="text-foreground font-medium">{title}</span>;
   if (!session) return null;
   const dir = session.projectDir;
@@ -1432,6 +1441,12 @@ function Breadcrumb({ title, session, projects }: {
           : { boxShadow: 'inset 0 0 0 1px var(--muted-foreground)' }}
       />
       <span className="shrink-0">{dir ? folderName(dir) : 'Inbox'}</span>
+      {git && (
+        <>
+          <ChevronRight size={12} className="shrink-0 text-faint" />
+          <GitBranch status={git} className="max-w-[220px]" />
+        </>
+      )}
       <ChevronRight size={12} className="shrink-0 text-faint" />
       {key && <IssueChip text={key} size="xs" />}
       <span className="truncate text-foreground font-medium">{label}</span>

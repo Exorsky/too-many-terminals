@@ -13,6 +13,8 @@ import {
 import { ACTION_ROW, cn, folderName } from '@/lib/utils';
 import { projectHue, type AppView, type SessionHistoryEntry, type SessionTool, type Tab } from '@/types';
 import IssueChip, { useIssueName } from './IssueChip';
+import GitBranch from './GitBranch';
+import { useGitStatus } from '@/lib/git';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
   DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger,
@@ -177,6 +179,10 @@ function SessionRow({
   // One second line at most: what Claude is doing beats where it lives.
   const detail = (tab.status === 'working' ? tab.statusDetail : undefined)
     ?? (showProject && tab.projectDir ? folderName(tab.projectDir) : undefined);
+  // The branch rides on that line: which branch a session is on is the thing
+  // you can't see from its name, and the mistake it catches — two sessions
+  // in one repo, one on the wrong branch — is an expensive one.
+  const git = useGitStatus(compact ? null : tab.cwd);
 
   const rowClass = cn(
     'group relative flex flex-col justify-center w-full shrink-0 h-[30px] pr-1.5 rounded-sm',
@@ -186,7 +192,7 @@ function SessionRow({
     // own timestamp and status text rather than level with them.
     selected ? 'bg-selected text-foreground' : 'text-dim hover:text-foreground hover:bg-hover',
     tab.exited && 'opacity-55',
-    detail && !compact && 'h-[42px]',
+    (detail || git) && !compact && 'h-[42px]',
   );
 
   if (editing) {
@@ -310,9 +316,11 @@ function SessionRow({
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-      {detail && !compact && (
-        <div data-session-meta className="flex items-center gap-1 w-full pl-4 text-[11px] leading-tight text-muted-foreground truncate">
-          {detail}
+      {(detail || git) && !compact && (
+        <div data-session-meta className="flex items-center gap-1 w-full min-w-0 pl-4 text-[11px] leading-tight text-muted-foreground">
+          {detail && <span className="truncate">{detail}</span>}
+          {detail && git && <span className="shrink-0 text-faint">·</span>}
+          {git && <GitBranch status={git} className="shrink min-w-0" />}
         </div>
       )}
     </div>

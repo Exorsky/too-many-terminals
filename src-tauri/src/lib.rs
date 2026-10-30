@@ -4,6 +4,7 @@ mod dotenv;
 mod editor;
 mod env_sources;
 mod files;
+mod git;
 mod hook_server;
 mod hooks;
 mod jira;
@@ -80,6 +81,7 @@ pub fn run() {
             commands::list_dir,
             commands::read_file,
             commands::write_file,
+            commands::git_status,
             commands::jira_issue,
             commands::jira_my_issues,
             commands::jira_issue_detail,

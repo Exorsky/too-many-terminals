@@ -278,6 +278,24 @@ export function saveSettings(settings: AppSettings): Promise<void> {
   return invoke('save_settings', { settings });
 }
 
+export interface GitStatus {
+  /** The repo's top-level folder. */
+  root: string;
+  /** null when HEAD is detached. */
+  branch: string | null;
+  head: string | null;
+  upstream: string | null;
+  ahead: number;
+  behind: number;
+  /** Changed files, paths relative to `root`. Code: M A D R U(ntracked) C(onflict). */
+  files: { path: string; code: string }[];
+}
+
+/** Git status of the repo `dir` is in; null outside a repo or without git. */
+export function gitStatus(dir: string): Promise<GitStatus | null> {
+  return invoke('git_status', { dir });
+}
+
 export interface JiraIssue {
   key: string;
   summary: string;

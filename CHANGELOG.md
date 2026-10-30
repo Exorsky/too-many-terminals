@@ -11,6 +11,14 @@ listed here; see `git log` for the full history.
 
 ## [Unreleased]
 
+### Added
+
+- **Git at a glance.** When a session's folder is a git repo, its sidebar row
+  and the title bar show the branch, a dot when something is uncommitted, and
+  how far it is ahead of or behind its upstream; the file explorer marks
+  changed files and the folders they're in. Read-only, and one `git status`
+  per folder however many sessions share it.
+
 ## [0.28.1] - 2026-10-29
 
 ### Fixed
