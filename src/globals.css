@@ -83,7 +83,7 @@
   --success-foreground: #0a0a0c;
   --warning: #d9a441;
   --warning-foreground: #0a0a0c;
-  --attention: #df7c46;
+  --attention: #df6c46;
   --usage: #8b7df7;
   --link: #7fb2ff;
   /* Derived by `cssVars()` per theme; these are the Default theme's values, so

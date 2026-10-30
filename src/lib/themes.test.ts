@@ -5,6 +5,7 @@ import {
   isHexColor,
   isLight,
   mix,
+  statusColors,
   PRESETS,
   resolveTheme,
   sanitizeCustomThemes,
@@ -191,5 +192,41 @@ describe('cssVars (derived UI tiers)', () => {
   it('a custom theme saved before blue existed keeps its accent as ansi blue', () => {
     const [t] = sanitizeCustomThemes([{ id: 'x', name: 'Old', colors: { primary: '#ff0000' } }]);
     expect(t.colors.blue).toBe('#ff0000');
+  });
+});
+
+describe('status colors', () => {
+  const hue = (hex: string) => {
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+    const max = Math.max(r, g, b); const min = Math.min(r, g, b); const d = max - min;
+    if (!d) return 0;
+    const h = max === r ? (g - b) / d + (g < b ? 6 : 0) : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    return h * 60;
+  };
+
+  it('done, working and needs-you are told apart by hue in every preset', () => {
+    for (const p of PRESETS) {
+      const s = statusColors(p.colors);
+      const att = hue(s.attention) > 300 ? hue(s.attention) - 360 : hue(s.attention);
+      expect(hue(s.success), p.name).toBeGreaterThanOrEqual(119.5);
+      expect(hue(s.success), p.name).toBeLessThanOrEqual(160.5);
+      expect(hue(s.warning), p.name).toBeGreaterThanOrEqual(37.5);
+      expect(hue(s.warning), p.name).toBeLessThanOrEqual(50.5);
+      expect(hue(s.warning) - att, p.name).toBeGreaterThanOrEqual(23.5);
+    }
+  });
+
+  it('a color already in its corridor is left exactly as the theme set it', () => {
+    const s = statusColors(DEFAULT_THEME.colors);
+    expect(s.success).toBe(DEFAULT_THEME.colors.success);
+    expect(s.warning).toBe(DEFAULT_THEME.colors.warning);
+    // globals.css carries the derived needs-you color for the first paint.
+    expect(cssVars(DEFAULT_THEME.colors)['--attention']).toBe('#df6c46');
+  });
+
+  it('the terminal keeps the theme\'s own palette', () => {
+    const gruvbox = PRESETS.find((p) => p.id === 'gruvbox-dark')!;
+    expect(toXtermTheme(gruvbox.colors).green).toBe('#b8bb26');
+    expect(cssVars(gruvbox.colors)['--success']).not.toBe('#b8bb26');
   });
 });

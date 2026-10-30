@@ -25,6 +25,14 @@ success/green, warning/yellow, magenta, cyan, selection). Everything else is
   `--attention` = warning/destructive midpoint.
 - xterm: bright colors reuse the normal ones, `brightBlack` = mutedForeground,
   `brightWhite` = `#ffffff`, cursor = primary.
+- Session status colors (`statusColors`): done, working and needs-you take
+  the theme's green, yellow and yellow/red midpoint, then each is pushed into
+  its own hue corridor with a saturation floor — done 120–160°, working
+  38–50°, needs-you at least 24° redder than working — keeping its lightness.
+  Several palettes put their green and yellow a few degrees apart (Gruvbox's
+  green is yellow-green): fine for syntax, unreadable as status at 7px. Only
+  the app chrome uses these; the terminal keeps the theme's palette. Theme
+  cards preview the three on the theme's background.
 - `--prose` (Markdown body text), `--cyan` and `--magenta` (transcript
   accents, inline code) — so rendered Markdown follows the theme too.
 

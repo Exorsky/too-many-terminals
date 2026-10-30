@@ -122,6 +122,50 @@ export function isLight(c: ThemeColors): boolean {
   return luminance(c.background) > 0.4;
 }
 
+function toHsl(hex: string): [number, number, number] {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  if (max === min) return [0, 0, l];
+  const d = max - min;
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  const h = max === r ? (g - b) / d + (g < b ? 6 : 0) : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return [h * 60, s, l];
+}
+
+function fromHsl(h: number, s: number, l: number): string {
+  const k = (n: number) => (n + h / 30) % 12;
+  const a = s * Math.min(l, 1 - l);
+  const f = (n: number) => l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1));
+  return `#${[0, 8, 4].map((n) => Math.round(f(n) * 255).toString(16).padStart(2, '0')).join('')}`;
+}
+
+/** Nudge a color into a hue corridor with a saturation floor, keeping its
+ *  lightness — so it stays the theme's color, just unmistakable. A color
+ *  already inside is returned untouched (no HSL round-trip drift). */
+function corridor(hex: string, minHue: number, maxHue: number, minSat: number): string {
+  const [h, s, l] = toHsl(hex);
+  const hue = Math.min(maxHue, Math.max(minHue, h > 300 ? h - 360 : h));
+  if (hue === h && s >= minSat) return hex;
+  return fromHsl((hue + 360) % 360, Math.max(s, minSat), l);
+}
+
+/** The three session statuses as the app chrome paints them. A theme's own
+ *  green/yellow are terminal colors first, and several palettes put them a
+ *  few degrees apart (Gruvbox: yellow-green 61°, yellow 42°, orange 24°) —
+ *  fine for syntax, unreadable as "done / working / needs you" at 7px. So
+ *  each takes the theme's color and is pushed into its own corridor: done is
+ *  green (120–160°), working amber (38–50°), needs-you red-orange, at least
+ *  24° below working. The terminal keeps the theme's palette untouched. */
+export function statusColors(c: ThemeColors): { success: string; warning: string; attention: string } {
+  const success = corridor(c.success, 120, 160, 0.4);
+  const warning = corridor(c.warning, 38, 50, 0.55);
+  const workHue = toHsl(warning)[0];
+  const attention = corridor(mix(c.warning, c.destructive, 0.5), -10, workHue - 24, 0.6);
+  return { success, warning, attention };
+}
+
 /** Full set of CSS custom properties derived from the core colors. */
 export function cssVars(c: ThemeColors): Record<string, string> {
   // Row states are overlays, not theme colors: they have to read as "this
@@ -130,6 +174,7 @@ export function cssVars(c: ThemeColors): Record<string, string> {
   // White lifts a dark surface; on a light one it would vanish, so ink it is.
   const overlay = isLight(c) ? (a: number) => `rgba(0, 0, 0, ${a})` : (a: number) => `rgba(255, 255, 255, ${a})`;
   const k = isLight(c) ? 1.2 : 1;
+  const status = statusColors(c);
   return {
     '--background': c.background,
     '--foreground': c.foreground,
@@ -151,11 +196,11 @@ export function cssVars(c: ThemeColors): Record<string, string> {
     '--border-hover': mix(c.border, c.foreground, 0.087),
     '--input': c.border,
     '--ring': c.primary,
-    '--success': c.success,
+    '--success': status.success,
     '--success-foreground': c.background,
-    '--warning': c.warning,
+    '--warning': status.warning,
     '--warning-foreground': c.background,
-    '--attention': mix(c.warning, c.destructive, 0.5),
+    '--attention': status.attention,
     '--usage': c.usage,
     // The two text tiers between `foreground` and `mutedForeground`'s floor.
     // Derived rather than editable: a theme picks how loud its text is, and

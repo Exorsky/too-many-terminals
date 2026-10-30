@@ -10,6 +10,7 @@ import {
   DEFAULT_THEME,
   isLight,
   PRESETS,
+  statusColors,
   resolveTheme,
   sanitizeCustomThemes,
   THEME_COLOR_KEYS,
@@ -21,7 +22,7 @@ import { parseScheme } from '@/lib/theme-import';
 
 /** Swatch colors shown on each theme card. */
 function swatches(c: ThemeColors): string[] {
-  return [c.background, c.card, c.primary, c.warning, c.foreground];
+  return [c.background, c.card, c.primary, c.foreground];
 }
 
 export default function CustomizeTab() {
@@ -221,6 +222,18 @@ export default function CustomizeTab() {
                           style={{ backgroundColor: color }}
                         />
                       ))}
+                      {/* The session statuses as this theme paints them — done,
+                          working, needs you — on the theme's own background, so
+                          whether they tell apart is visible before you pick it. */}
+                      <span
+                        aria-label="Status colors: done, working, needs you"
+                        className="inline-flex items-center gap-1 ml-1.5 px-1.5 h-[18px] rounded-full shrink-0"
+                        style={{ backgroundColor: theme.colors.background }}
+                      >
+                        {Object.values(statusColors(theme.colors)).map((color, i) => (
+                          <span key={i} className="size-2 rounded-full" style={{ backgroundColor: color }} />
+                        ))}
+                      </span>
                     </div>
                     <div className="flex items-center gap-1 min-h-6">
                       {theme.builtIn ? (

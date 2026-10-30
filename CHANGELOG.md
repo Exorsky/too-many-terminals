@@ -23,6 +23,13 @@ listed here; see `git log` for the full history.
   branch graph that shows how branches fork and merge. Any file opens as a
   diff beside the session.
 
+### Fixed
+
+- **Status colors tell apart in every theme.** Done, working and needs-you
+  keep to their own hues — green, amber, red-orange — whatever the theme's
+  palette, so Gruvbox, Solarized and friends no longer paint all three in
+  yellows. Theme cards preview them; the terminal keeps the theme's colors.
+
 ## [0.28.1] - 2026-10-29
 
 ### Fixed
