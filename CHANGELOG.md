@@ -11,6 +11,8 @@ listed here; see `git log` for the full history.
 
 ## [Unreleased]
 
+## [0.29.0] - 2026-10-30
+
 ### Added
 
 - **Git at a glance.** When a session's folder is a git repo, its sidebar row
