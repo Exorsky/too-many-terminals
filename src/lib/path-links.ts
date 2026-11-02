@@ -90,7 +90,7 @@ export function imageType(path: string): string | null {
 /** Things the OS runs rather than shows when "opened": an `.app` is a
  *  folder to `stat`, and a `.command` opens a shell. One click on a path in
  *  someone's output must never launch it — these are only ever revealed. */
-const LAUNCHES_RE = /\.(app|command|tool|terminal|workflow|scpt|exe|bat|cmd|com|msi|scr|lnk|vbs|ps1|jar)$/i;
+const LAUNCHES_RE = /\.(app|command|tool|terminal|workflow|scpt|exe|bat|cmd|com|msi|scr|lnk|vbs|vbe|js|jse|wsf|wsh|hta|cpl|msc|reg|pif|url|scf|appref-ms|application|ps1|jar)$/i;
 
 export function launches(path: string): boolean {
   return LAUNCHES_RE.test(path.replace(/[\\/]+$/, ''));
@@ -162,6 +162,7 @@ export const hidePathCard = pathCard.hide;
 export const holdPathCard = pathCard.hold;
 export const pinPathCard = pathCard.pin;
 export const closePathCard = pathCard.close;
+export const dropPathCard = pathCard.drop;
 export const usePathCard = pathCard.useCard;
 
 type Opener = (info: PathInfo, cwd: string) => void;

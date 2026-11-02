@@ -115,6 +115,17 @@ export function luminance(hex: string): number {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
+/** `--link`: the theme's blue; on a dark theme lifted toward white until it
+ *  reads as text (4.5:1 against the background). */
+export function linkColor(c: ThemeColors): string {
+  if (isLight(c)) return c.blue;
+  const contrast = (hex: string) => (luminance(hex) + 0.05) / (luminance(c.background) + 0.05);
+  let out = c.blue;
+  // WCAG AA for text: lift toward white in steps until it reads.
+  for (let t = 0.15; contrast(out) < 4.5 && t < 1; t += 0.15) out = mix(c.blue, '#ffffff', t);
+  return out;
+}
+
 /** A light theme: dark text on a light background. Decides which way the
  *  row overlays and the terminal's black/white go — derived, not a flag, so a
  *  custom theme can't claim one thing and paint another. */
@@ -214,9 +225,10 @@ export function cssVars(c: ThemeColors): Record<string, string> {
     // Rendered Markdown: body text a step below foreground, and the two
     // accents transcripts use (assistant turns, inline code).
     '--prose': mix(c.background, c.foreground, 0.92),
-    // Links: the shell's fixed light blue reads on every dark theme; on a
-    // light one it's too pale, so the theme's own blue takes over.
-    '--link': isLight(c) ? c.blue : '#7fb2ff',
+    // Links (Jira chips, git marks): the theme's own blue, so an accent theme
+    // that sets blue to its accent (Charcoal Orange, Amber) gets accent-colored
+    // links. A blue too dark to read as text on a dark background is lifted.
+    '--link': linkColor(c),
     '--cyan': c.cyan,
     '--magenta': c.magenta,
   };
@@ -300,6 +312,31 @@ const CLASSIC_THEME: Theme = {
 export const PRESETS: Theme[] = [
   DEFAULT_THEME,
   CLASSIC_THEME,
+  {
+    // The app icon's palette: a charcoal tile, grey panes, one orange one.
+    id: 'charcoal-orange',
+    name: 'Charcoal Orange',
+    builtIn: true,
+    colors: {
+      background: '#1a1a1b',
+      foreground: '#ececed',
+      card: '#232324',
+      border: '#353436',
+      primary: '#f7931a',
+      blue: '#f7931a',
+      mutedForeground: '#7a787d',
+      usage: '#f7931a',
+      destructive: '#ff5f57',
+      success: '#8cc265',
+      // Yellow, not the icon's orange: warning must not read as the accent.
+      warning: '#e8c547',
+      // Inline code and the like: a light peach, the icon's orange lifted so
+      // it stays apart from the accent.
+      magenta: '#ffb46b',
+      cyan: '#9fb4c7',
+      selection: '#4a3416',
+    },
+  },
   {
     id: 'amber',
     name: 'Amber',

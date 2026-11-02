@@ -85,7 +85,7 @@
   --warning-foreground: #0a0a0c;
   --attention: #df6c46;
   --usage: #8b7df7;
-  --link: #7fb2ff;
+  --link: #8b7df7;
   /* Derived by `cssVars()` per theme; these are the Default theme's values, so
      the shell is correct before `applyTheme` runs. Keep them in step with
      DEFAULT_THEME — `themes.test.ts` asserts the pair. */

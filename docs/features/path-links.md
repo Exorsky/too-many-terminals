@@ -89,7 +89,7 @@ Anything the OS would *run* instead of show — `.app` bundles, `.command`,
 `.exe`, `.bat` and so on (`launches` in `path-links.ts`) — is revealed in the
 file manager and never opened, and it gets no **Open with app**. One click on a
 path in someone's output must never launch it. Previews read regular files only,
-capped at 4 MB while reading, so `/dev/zero` or a FIFO can't hang a worker.
+capped at 4 MB while reading, and the file type is checked before opening, so `/dev/zero` or a FIFO can't hang a worker.
 
 The bare-name walk is skipped when the session runs in your home folder. That
 walk would cover all of `~`, and on macOS reaching into Documents or Library

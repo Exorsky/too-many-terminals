@@ -91,6 +91,16 @@ describe('toXtermTheme (Classic theme)', () => {
   });
 });
 
+describe('linkColor', () => {
+  it("follows the theme's blue and lifts one too dark to read", async () => {
+    const { linkColor } = await import('./themes');
+    const charcoal = PRESETS.find((t) => t.id === 'charcoal-orange')!.colors;
+    expect(linkColor(charcoal)).toBe('#f7931a');
+    const dark = { ...charcoal, blue: '#1a3a8a' };
+    expect(linkColor(dark)).not.toBe('#1a3a8a');
+  });
+});
+
 describe('PRESETS', () => {
   it('has unique ids and Default first', () => {
     const ids = PRESETS.map((t) => t.id);

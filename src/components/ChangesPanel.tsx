@@ -212,7 +212,8 @@ const ROW = 26;
 const LANE = 12;
 /** Lane colors cycle through the theme's accents — none of them a status
  *  color. Lane 0, the mainline, is the quietest. */
-const LANE_COLORS = ['var(--muted-foreground)', 'var(--primary)', 'var(--cyan)', 'var(--magenta)', 'var(--link)'];
+// No --link: it follows the theme's blue, which most presets set to primary.
+const LANE_COLORS = ['var(--muted-foreground)', 'var(--primary)', 'var(--cyan)', 'var(--magenta)'];
 const laneColor = (i: number) => LANE_COLORS[i % LANE_COLORS.length];
 
 /** How the branches fork and merge: a lane per line of history, dots for

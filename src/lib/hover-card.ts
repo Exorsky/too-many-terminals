@@ -49,6 +49,13 @@ export function createHoverCard<T>(same: (a: T, b: T) => boolean = Object.is) {
       card = card && same(card.value, value) ? { ...card, pinned: true } : { value, x, y, pinned: true };
       emit();
     },
+    /** Close only if the open card is `value`, leaving a pending show for
+     *  another target alone — for a lookup that came back empty late. */
+    drop(value: T): void {
+      if (!card || !same(card.value, value)) return;
+      card = null;
+      emit();
+    },
     close(): void {
       clearTimeout(showTimer);
       clearTimeout(hideTimer);

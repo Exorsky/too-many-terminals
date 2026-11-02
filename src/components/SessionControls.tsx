@@ -59,19 +59,9 @@ export default function SessionControls({
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" sideOffset={6} className="w-56">
-          <DropdownMenuItem onClick={() => onSplitShell('right')}>
-            <SquareTerminal size={13} />
-            <span>Shell to the right</span>
-            <span className="ml-auto font-mono text-[11px] text-muted-foreground">{IS_MAC ? '⌘D' : `${mod}Shift+D`}</span>
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => onSplitShell('bottom')}>
-            <SquareTerminal size={13} />
-            <span>Shell below</span>
-            <span className="ml-auto font-mono text-[11px] text-muted-foreground">{IS_MAC ? '⌘⇧D' : `${mod}Shift+Alt+D`}</span>
-          </DropdownMenuItem>
+          {/* Transcript first: on a Claude session it's the split people reach for. */}
           {canRead && (
             <>
-              <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => { onSetMode('split'); onSetSplitDirection('right'); }}>
                 <Columns2 size={13} />
                 <span>Transcript to the right</span>
@@ -88,8 +78,19 @@ export default function SessionControls({
                   <span>Close transcript</span>
                 </DropdownMenuItem>
               )}
+              <DropdownMenuSeparator />
             </>
           )}
+          <DropdownMenuItem onClick={() => onSplitShell('right')}>
+            <SquareTerminal size={13} />
+            <span>Shell to the right</span>
+            <span className="ml-auto font-mono text-[11px] text-muted-foreground">{IS_MAC ? '⌘D' : `${mod}Shift+D`}</span>
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => onSplitShell('bottom')}>
+            <SquareTerminal size={13} />
+            <span>Shell below</span>
+            <span className="ml-auto font-mono text-[11px] text-muted-foreground">{IS_MAC ? '⌘⇧D' : `${mod}Shift+Alt+D`}</span>
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
 

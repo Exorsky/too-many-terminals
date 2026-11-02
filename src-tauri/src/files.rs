@@ -49,10 +49,12 @@ pub fn read_text(path: &Path) -> Result<String, String> {
 /// FIFO blocks forever.
 fn read_capped(path: &Path) -> Result<Vec<u8>, String> {
     use std::io::Read;
-    let file = std::fs::File::open(path).map_err(|e| e.to_string())?;
-    if !file.metadata().map_err(|e| e.to_string())?.is_file() {
+    // Checked before opening: opening a FIFO for reading blocks until a
+    // writer shows up.
+    if !std::fs::metadata(path).map_err(|e| e.to_string())?.is_file() {
         return Err("Not a regular file".to_string());
     }
+    let file = std::fs::File::open(path).map_err(|e| e.to_string())?;
     let mut buf = Vec::new();
     file.take(MAX_READ_BYTES + 1).read_to_end(&mut buf).map_err(|e| e.to_string())?;
     if buf.len() as u64 > MAX_READ_BYTES {
@@ -176,9 +178,15 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn refuses_device_files() {
+    fn refuses_device_files_and_fifos() {
         assert!(read_text(Path::new("/dev/zero")).is_err());
         assert!(read_bytes(Path::new("/dev/zero")).is_err());
+        let tmp = tempfile::tempdir().unwrap();
+        let fifo = tmp.path().join("pipe");
+        let made = std::process::Command::new("mkfifo").arg(&fifo).status().unwrap();
+        assert!(made.success());
+        assert!(read_text(&fifo).is_err()); // returns, rather than waiting for a writer
+        assert!(read_bytes(&fifo).is_err());
     }
 
     #[test]

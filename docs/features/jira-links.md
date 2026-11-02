@@ -31,7 +31,7 @@ links in the sidebar.
 
 Search already matches keys, because they're part of the name: type `4821`.
 
-Blue (`--link`) is a link color, never a status — the reserved
+`--link` is a link color, never a status. It follows the theme's own blue (`linkColor`), so an accent theme such as Charcoal Orange gets orange chips — the reserved
 success/warning/attention/destructive set stays reserved (see
 [design.md](../design.md#status-vocabulary)).
 

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { FileImage, FileText, Folder } from 'lucide-react';
 import * as ipc from '@/lib/ipc';
 import type { PathInfo } from '@/lib/ipc';
-import { closePathCard, hidePathCard, holdPathCard, imageType, launches, resolvePath, setPathOpener, usePathCard } from '@/lib/path-links';
+import { closePathCard, dropPathCard, hidePathCard, holdPathCard, imageType, launches, resolvePath, setPathOpener, usePathCard } from '@/lib/path-links';
 
 type Preview =
   | { kind: 'image'; url: string }
@@ -92,7 +92,7 @@ export default function PathCard({ onOpenFile }: {
       if (!alive) return;
       // Nothing there: drop the card, or a pinned one would stay invisible
       // and keep swallowing Esc and hovers.
-      if (!i) { closePathCard(); return; }
+      if (!i) { dropPathCard(target); return; }
       setInfo(i);
       try {
         const type = imageType(i.path);

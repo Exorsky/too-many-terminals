@@ -20,6 +20,13 @@ listed here; see `git log` for the full history.
   text files as a tab, images and folders with the OS. The card can also open a
   text file in its default app, reveal the path in Finder/Explorer or copy it. Paths with spaces link when they're
   quoted. The switch is in Settings › Integrations › Path links (on by default).
+- **Charcoal Orange theme**, matching the new app icon.
+
+### Changed
+
+- **New app icon**: a charcoal tile of grey panes with one orange pane.
+- The Split menu lists the transcript splits first and the shell splits below
+  them.
 
 ## [0.29.0] - 2026-10-30
 
