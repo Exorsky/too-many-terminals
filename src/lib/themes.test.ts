@@ -91,6 +91,23 @@ describe('toXtermTheme (Classic theme)', () => {
   });
 });
 
+describe('statusColors', () => {
+  it('keeps needs-you apart from an orange accent', async () => {
+    const { statusColors } = await import('./themes');
+    const hue = (hex: string) => {
+      const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+      const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+      const h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+      return (h * 60 + 360) % 360;
+    };
+    for (const id of ['charcoal-orange', 'amber']) {
+      const c = PRESETS.find((t) => t.id === id)!.colors;
+      const d = Math.abs(((hue(statusColors(c).attention) - hue(c.primary) + 540) % 360) - 180);
+      expect(d, id).toBeGreaterThanOrEqual(20);
+    }
+  });
+});
+
 describe('linkColor', () => {
   it("follows the theme's blue and lifts one too dark to read", async () => {
     const { linkColor } = await import('./themes');
@@ -152,8 +169,8 @@ describe('resolveTheme', () => {
     expect(resolveTheme('custom-1', [custom])).toBe(custom);
   });
 
-  it('falls back to Default for unknown ids', () => {
-    expect(resolveTheme('deleted-theme', [custom])).toBe(DEFAULT_THEME);
+  it('falls back to the starter theme for unknown ids', () => {
+    expect(resolveTheme('deleted-theme', [custom]).id).toBe('charcoal-orange');
   });
 });
 

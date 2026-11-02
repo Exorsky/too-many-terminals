@@ -7,12 +7,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
   applyTheme,
-  DEFAULT_THEME,
   isLight,
   PRESETS,
   statusColors,
   resolveTheme,
   sanitizeCustomThemes,
+  STARTER_THEME_ID,
   THEME_COLOR_KEYS,
   THEME_COLOR_LABELS,
   type Theme,
@@ -27,7 +27,7 @@ function swatches(c: ThemeColors): string[] {
 
 export default function CustomizeTab() {
   const [loaded, setLoaded] = useState(false);
-  const [selectedId, setSelectedId] = useState('default');
+  const [selectedId, setSelectedId] = useState(STARTER_THEME_ID);
   const [customThemes, setCustomThemes] = useState<Theme[]>([]);
   /** Id of the custom theme open in the editor, or null when closed. */
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -127,9 +127,9 @@ export default function CustomizeTab() {
     if (editingId === theme.id) setEditingId(null);
     let id = selectedId;
     if (selectedId === theme.id) {
-      id = DEFAULT_THEME.id;
+      id = STARTER_THEME_ID;
       setSelectedId(id);
-      applyTheme(DEFAULT_THEME);
+      applyTheme(resolveTheme(id, []));
     }
     persist(id, customs);
   };

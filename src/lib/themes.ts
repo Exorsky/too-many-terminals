@@ -173,7 +173,14 @@ export function statusColors(c: ThemeColors): { success: string; warning: string
   const success = corridor(c.success, 120, 160, 0.4);
   const warning = corridor(c.warning, 38, 50, 0.55);
   const workHue = toHsl(warning)[0];
-  const attention = corridor(mix(c.warning, c.destructive, 0.5), -10, workHue - 24, 0.6);
+  let attention = corridor(mix(c.warning, c.destructive, 0.5), -10, workHue - 24, 0.6);
+  // Needs-you sits beside the pinned mark, which is the accent. An orange
+  // accent (Charcoal Orange, Amber) would make the two one color, so
+  // needs-you steps 25° below the accent, toward red.
+  const [ph, ps] = toHsl(c.primary);
+  const [ah, as, al] = toHsl(attention);
+  const apart = Math.abs(((ah - ph + 540) % 360) - 180);
+  if (ps > 0.4 && apart < 20) attention = fromHsl((Math.max(-10, (ph > 300 ? ph - 360 : ph) - 25) + 360) % 360, as, al);
   return { success, warning, attention };
 }
 
@@ -265,7 +272,7 @@ export function toXtermTheme(c: ThemeColors): ITheme {
 
 export const DEFAULT_THEME: Theme = {
   id: 'default',
-  name: 'Default',
+  name: 'Original',
   builtIn: true,
   colors: {
     background: '#0a0a0c',
@@ -782,10 +789,15 @@ export function sanitizeCustomThemes(raw: unknown[]): Theme[] {
 }
 
 /** Find a theme by id among presets + customs; unknown ids fall back to Default. */
+/** What a new install starts with, and where a deleted or unknown theme
+ *  falls back to. `DEFAULT_THEME` (shown as Original) is still the base a
+ *  custom theme's missing colors are filled from. */
+export const STARTER_THEME_ID = 'charcoal-orange';
+
 export function resolveTheme(id: string, customThemes: Theme[]): Theme {
   return (
     PRESETS.find((t) => t.id === id) ??
     customThemes.find((t) => t.id === id) ??
-    DEFAULT_THEME
+    PRESETS.find((t) => t.id === STARTER_THEME_ID)!
   );
 }

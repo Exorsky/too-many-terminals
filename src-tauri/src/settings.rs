@@ -47,7 +47,7 @@ pub struct AppSettings {
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
-            selected_theme_id: "default".to_string(),
+            selected_theme_id: "charcoal-orange".to_string(),
             custom_themes: Vec::new(),
             show_markdown_toggle: true,
             notifications_enabled: true,
@@ -101,7 +101,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let settings = load_settings(tmp.path());
         assert_eq!(settings, AppSettings::default());
-        assert_eq!(settings.selected_theme_id, "default");
+        assert_eq!(settings.selected_theme_id, "charcoal-orange");
     }
 
     #[test]

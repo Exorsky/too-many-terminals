@@ -13,7 +13,7 @@ import * as ipc from '@/lib/ipc';
 import type { AppSettings } from '@/types';
 
 export const DEFAULT_SETTINGS: AppSettings = {
-  selectedThemeId: 'default',
+  selectedThemeId: 'charcoal-orange',
   customThemes: [],
   showMarkdownToggle: true,
   notificationsEnabled: true,

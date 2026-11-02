@@ -50,8 +50,8 @@ program colored for a dark terminal (white, or Claude Code's default dark
 `/theme`) is nudged readable. For the best result, also switch Claude Code's
 own `/theme` to light.
 
-Built-in presets (`PRESETS`): **Default** (the original look — its values also
-ship as the static `:root` in `globals.css`), **Classic blue**, **Charcoal Orange** (the app icon's palette: charcoal, grey, one orange accent, with a yellow warning so it never reads as the accent), **Amber**,
+Built-in presets (`PRESETS`): **Original** (id `default`, the original look — its values also
+ship as the static `:root` in `globals.css`), **Classic blue**, **Charcoal Orange** (the app icon's palette: charcoal, grey, one orange accent, with a yellow warning so it never reads as the accent; the starter theme, `STARTER_THEME_ID`: what a new install gets and where a deleted or unknown theme falls back to), **Amber**,
 **Violet**, **Seafoam**, and fifteen well-known palettes taken from each
 project's own terminal extras: Catppuccin Mocha / Latte, Tokyo Night, Gruvbox
 Dark, Nord, Rosé Pine / Dawn, Dracula, Solarized Dark / Light, GitHub Dark /

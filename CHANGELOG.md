@@ -25,6 +25,12 @@ listed here; see `git log` for the full history.
 ### Changed
 
 - **New app icon**: a charcoal tile of grey panes with one orange pane.
+- New installs start on **Charcoal Orange**. Deleting the selected custom theme
+  also falls back to it. The previous default is still there, renamed **Original**.
+- Links (Jira chips, git marks) take the theme's own color instead of a fixed
+  light blue.
+- In a theme with an orange accent, the "needs you" status moves toward red, so
+  it doesn't read as the pinned mark.
 - The Split menu lists the transcript splits first and the shell splits below
   them.
 

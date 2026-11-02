@@ -30,7 +30,7 @@ describe('CustomizeTab', () => {
     render(<CustomizeTab />);
     const light = await screen.findByRole('region', { name: 'Light themes' });
     expect(within(light).getByText('Catppuccin Latte')).toBeInTheDocument();
-    expect(within(light).queryByText('Default')).toBeNull();
+    expect(within(light).queryByText('Original')).toBeNull();
     expect(within(screen.getByRole('region', { name: 'Dark themes' })).getByText('Tokyo Night')).toBeInTheDocument();
   });
 
@@ -55,7 +55,7 @@ describe('CustomizeTab', () => {
 
   it('renders all built-in presets', async () => {
     render(<CustomizeTab />);
-    expect(await screen.findByText('Default')).toBeInTheDocument();
+    expect(await screen.findByText('Original')).toBeInTheDocument();
     expect(screen.getByText('Amber')).toBeInTheDocument();
     expect(screen.getByText('Violet')).toBeInTheDocument();
     expect(screen.getByText('Seafoam')).toBeInTheDocument();
@@ -95,7 +95,7 @@ describe('CustomizeTab', () => {
 
   it('editing a color live-previews and Save persists it', async () => {
     render(<CustomizeTab />);
-    await userEvent.click(await screen.findByLabelText('Duplicate Default'));
+    await userEvent.click(await screen.findByLabelText('Duplicate Original'));
     vi.mocked(ipc.saveSettings).mockClear();
 
     fireEvent.change(screen.getByLabelText('Accent'), { target: { value: '#ff0000' } });
@@ -110,7 +110,7 @@ describe('CustomizeTab', () => {
     expect(screen.queryByLabelText('Theme name')).not.toBeInTheDocument();
   });
 
-  it('deleting the selected custom theme falls back to Default', async () => {
+  it('deleting the selected custom theme falls back to the starter theme', async () => {
     vi.mocked(ipc.loadSettings).mockResolvedValue({
       selectedThemeId: 'my-theme',
       customThemes: [{ id: 'my-theme', name: 'My Theme', colors: {} }],
@@ -123,12 +123,12 @@ describe('CustomizeTab', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Delete theme' }));
 
     expect(screen.queryByText('My Theme')).not.toBeInTheDocument();
-    expect(ipc.saveSettings).toHaveBeenCalledWith(expect.objectContaining({ selectedThemeId: 'default', customThemes: [] }));
+    expect(ipc.saveSettings).toHaveBeenCalledWith(expect.objectContaining({ selectedThemeId: 'charcoal-orange', customThemes: [] }));
   });
 
   it('built-in themes have no edit or delete buttons', async () => {
     render(<CustomizeTab />);
-    await screen.findByText('Default');
+    await screen.findByText('Original');
     expect(screen.queryByLabelText('Edit Default')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Delete Default')).not.toBeInTheDocument();
   });
