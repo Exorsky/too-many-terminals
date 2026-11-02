@@ -12,7 +12,7 @@ vi.mock('./file-search', () => ({
 
 import * as ipc from './ipc';
 import { searchFiles } from './file-search';
-import { findPaths, imageType, outermost, resolvePath, statPaths, wholePath } from './path-links';
+import { findPaths, imageType, knownPaths, outermost, resolvePath, statPaths, wholePath } from './path-links';
 
 const paths = (line: string) => findPaths(line).map((m) => m.path);
 
@@ -89,4 +89,11 @@ it('resolvePath finds a bare file name deeper in the tree, by its exact name', a
   expect(await resolvePath('/repo', 'docs/missing.md')).toBeNull(); // a path with a folder is never searched
   expect(await resolvePath('/home/me/', 'notes.md')).toBeNull(); // never walks all of ~
   expect(searchFiles).toHaveBeenCalledTimes(1);
+});
+
+it('knownPaths answers from the cache without waiting, and only when every path was asked', async () => {
+  expect(knownPaths('/k', ['src/b.ts'])).toBeUndefined();
+  await statPaths('/k', ['src/b.ts', 'nope/x']);
+  expect(knownPaths('/k', ['nope/x', 'src/b.ts'])?.map((i) => i?.path ?? null)).toEqual([null, '/repo/src/b.ts']);
+  expect(knownPaths('/k', ['src/b.ts', 'src/c.ts'])).toBeUndefined();
 });

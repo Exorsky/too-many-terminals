@@ -38,10 +38,20 @@ candidate that doesn't exist, so it can't hide a real path inside it.
 Shape alone also matches `and/or`, `example.com` and `w/o`, so **nothing links
 until the backend says it exists**. `stat_paths` (`src-tauri/src/files.rs`)
 resolves each candidate the way a shell in `cwd` would: absolute paths as they
-are, `~` against home, everything else against `cwd`. `.` and `..` are folded
+are, `~` against home, everything else against `cwd`. On Windows a Git Bash
+path (`/c/Users/me`, which Claude Code's Bash tool prints) is read as
+`C:\Users\me`. `.` and `..` are folded
 lexically, without canonicalizing, so `/tmp` stays `/tmp`. The answers are
 cached for ten seconds per (cwd, path). The terminal asks again for every line
 the pointer crosses, and a file Claude has just written starts linking soon after.
+
+**The terminal answers from the cache, synchronously.** xterm checks an async
+link reply against the cell the pointer was on when it *asked*, and a late reply
+for the previous line overwrites the current one's. With WebView2's slower IPC on
+Windows, that lost every other link. So the terminal stats the visible lines
+ahead of the hover (200ms after a render), `knownPaths` answers from the cache
+without waiting (an old answer counts and is refreshed in the background), and
+an async reply that a newer request superseded is dropped.
 
 **A bare file name** that isn't in `cwd` itself (Claude often writes
 `path-links.md` for `docs/features/path-links.md`) falls back to the shallowest

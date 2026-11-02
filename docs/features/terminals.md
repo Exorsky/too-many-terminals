@@ -353,7 +353,9 @@ does nothing — the terminal's old copy-on-select/paste-on-right-click is gone.
    (portable-pty), and starts a reader thread streaming raw bytes over the channel.
 3. `Terminal.tsx` lazily creates one xterm instance per tab, cached in
    `terminalCache.ts` across React unmounts so hidden tabs keep buffering output.
-   Fit-on-resize (ResizeObserver → `pty_resize`), Ctrl+V paste, links open externally via
+   Fit-on-resize (ResizeObserver → `pty_resize`), Ctrl+V paste (with no text on the
+   clipboard, e.g. a screenshot, it sends Claude Code's image-paste key instead:
+   Alt+V on Windows, Ctrl+V elsewhere), links open externally via
    the opener plugin.
 4. Closing a tab calls `pty_kill` (Windows: `taskkill /T`), disposes the xterm instance,
    and removes the tab. Backend `pty-exit` events mark tabs whose process died on its own.

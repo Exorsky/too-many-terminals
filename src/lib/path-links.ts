@@ -119,6 +119,19 @@ export async function statPaths(cwd: string, paths: string[]): Promise<(PathInfo
   return paths.map((p) => known.get(key(p))?.info ?? null);
 }
 
+/** What `statPaths` already knows, without waiting — `undefined` if any of
+ *  `paths` was never asked. An old answer still counts and is refreshed in
+ *  the background. The terminal's link provider needs this: xterm checks an
+ *  async reply against where the pointer *was* when it asked, so a slow
+ *  answer (WebView2's IPC on Windows) loses the link it found. */
+export function knownPaths(cwd: string, paths: string[]): (PathInfo | null)[] | undefined {
+  const now = Date.now();
+  const got = paths.map((p) => known.get(`${cwd}\0${p}`));
+  if (got.some((k) => !k)) return undefined;
+  if (got.some((k) => now - k!.at > TTL_MS)) statPaths(cwd, paths).catch(() => {});
+  return got.map((k) => k!.info);
+}
+
 const byName = new Map<string, { info: Promise<PathInfo | null>; at: number }>();
 let home: Promise<string> | null = null;
 

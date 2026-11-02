@@ -91,7 +91,10 @@ pub fn stat_paths(cwd: &Path, home: Option<&Path>, candidates: &[String]) -> Vec
                 (Some(rest), Some(h)) if rest.is_empty() || rest.starts_with(['/', '\\']) => {
                     h.join(rest.trim_start_matches(['/', '\\']))
                 }
-                _ => cwd.join(c), // join keeps an absolute `c` as it is
+                _ => match msys_drive(c) {
+                    Some(win) if cfg!(windows) => PathBuf::from(win),
+                    _ => cwd.join(c), // join keeps an absolute `c` as it is
+                },
             };
             let full = normalize(&full);
             let meta = std::fs::metadata(&full).ok()?;
@@ -102,6 +105,15 @@ pub fn stat_paths(cwd: &Path, home: Option<&Path>, candidates: &[String]) -> Vec
             })
         })
         .collect()
+}
+
+/// Git Bash's `/c/Users/me` as `C:\Users\me` — Claude Code's Bash tool on
+/// Windows prints paths that way. Shape only; the caller applies it on
+/// Windows, where `/c/...` would otherwise land under the cwd's drive.
+fn msys_drive(c: &str) -> Option<String> {
+    let b = c.as_bytes();
+    let ok = b.len() >= 2 && b[0] == b'/' && b[1].is_ascii_alphabetic() && (b.len() == 2 || b[2] == b'/');
+    ok.then(|| format!("{}:\\{}", b[1].to_ascii_uppercase() as char, c.get(3..).unwrap_or("")))
 }
 
 /// Drops `.` and folds `..` without touching the disk, so `src/../x` shows as
@@ -196,7 +208,7 @@ mod tests {
         std::fs::create_dir(tmp.path().join("src")).unwrap();
         std::fs::write(tmp.path().join("src/a.ts"), "abc").unwrap();
         std::fs::write(home.path().join("notes.md"), "x").unwrap();
-        let abs = tmp.path().join("src/a.ts").to_string_lossy().into_owned();
+        let abs = tmp.path().join("src").join("a.ts").to_string_lossy().into_owned();
         let ask: Vec<String> = ["src/a.ts", "./src/../src", "and/or", "~/notes.md", &abs]
             .iter()
             .map(|s| s.to_string())
@@ -214,6 +226,14 @@ mod tests {
         assert!(got[2].is_none());
         assert_eq!(got[3].as_ref().unwrap().path, home.path().join("notes.md").to_string_lossy());
         assert_eq!(got[4].as_ref().unwrap().path, abs);
+    }
+
+    #[test]
+    fn reads_git_bash_drive_paths() {
+        assert_eq!(msys_drive("/c/Users/me").as_deref(), Some("C:\\Users/me"));
+        assert_eq!(msys_drive("/d").as_deref(), Some("D:\\"));
+        assert_eq!(msys_drive("/tmp/x"), None);
+        assert_eq!(msys_drive("src/a.ts"), None);
     }
 
     #[test]

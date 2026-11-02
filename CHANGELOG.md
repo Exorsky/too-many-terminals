@@ -11,6 +11,17 @@ listed here; see `git log` for the full history.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Path links in the terminal work on every hover on Windows.** A slow existence
+  check used to lose the link if the pointer moved while it ran, so a path
+  underlined only every other time. Visible lines are now checked ahead of the
+  hover and answered from the cache at once.
+- **Git Bash paths link on Windows.** `/c/Users/...` from Claude Code's Bash tool
+  is read as `C:\Users\...` instead of a folder under the session's drive.
+- **Ctrl+V pastes a screenshot into Claude Code on Windows.** With no text on the
+  clipboard, the terminal sends Claude Code's image-paste key instead of nothing.
+
 ## [0.30.0] - 2026-11-02
 
 ### Added

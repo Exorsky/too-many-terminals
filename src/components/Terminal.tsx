@@ -5,8 +5,9 @@ import { WebLinksAddon } from '@xterm/addon-web-links';
 import { WebglAddon } from '@xterm/addon-webgl';
 import '@xterm/xterm/css/xterm.css';
 import * as ipc from '@/lib/ipc';
+import type { PathInfo } from '@/lib/ipc';
 import { findIssueKeys, hideIssueCard, issueUrl, jiraOn, showIssueCard } from '@/lib/jira';
-import { clickPathLink, findPaths, hidePathCard, outermost, showPathCard, statPaths } from '@/lib/path-links';
+import { clickPathLink, findPaths, hidePathCard, knownPaths, outermost, showPathCard, statPaths } from '@/lib/path-links';
 import { getSettings } from '@/lib/settings-store';
 import { getActiveXtermTheme, terminalContrast } from '@/lib/themes';
 import { isInterruptKeystroke } from '@/lib/utils';
@@ -102,32 +103,65 @@ const Terminal = React.memo(function Terminal({ tabId, isVisible, focused = true
       // File and folder paths. Only ones that exist get a link — a path's
       // shape alone matches `and/or` and `example.com` too. Settings are read
       // per line, like Jira's, so the switch applies to open terminals.
-      if (cwd) term.registerLinkProvider({
-        provideLinks(y, callback) {
-          const line = getSettings().pathLinksEnabled ? term.buffer.active.getLine(y - 1)?.translateToString(true) : undefined;
-          const found = line ? findPaths(line) : [];
-          if (!found.length) { callback(undefined); return; }
-          statPaths(cwd, found.map((f) => f.path)).then((infos) => {
-            const links = outermost(found.filter((_, i) => infos[i])).map(({ path, index, length }) => ({
-              text: path,
-              range: { start: { x: index + 1, y }, end: { x: index + length, y } },
-              activate: (e: MouseEvent) => clickPathLink({ cwd, path }, e, e.clientX, e.clientY + 14),
-              hover: (e: MouseEvent) => showPathCard({ cwd, path }, e.clientX, e.clientY + 14),
-              leave: hidePathCard,
-            }));
-            callback(links.length ? links : undefined);
-          }, () => callback(undefined));
-        },
-      });
+      // Answered from the cache synchronously whenever possible: xterm
+      // checks an async reply against the cell the pointer was on when it
+      // asked, and a late reply for the previous line overwrites the current
+      // one's. So visible lines are stat'ed ahead of the hover, and a reply
+      // a newer request has superseded is dropped.
+      if (cwd) {
+        let asked = 0;
+        term.registerLinkProvider({
+          provideLinks(y, callback) {
+            const gen = ++asked;
+            const line = getSettings().pathLinksEnabled ? term.buffer.active.getLine(y - 1)?.translateToString(true) : undefined;
+            const found = line ? findPaths(line) : [];
+            if (!found.length) { callback(undefined); return; }
+            const reply = (infos: (PathInfo | null)[]) => {
+              const links = outermost(found.filter((_, i) => infos[i])).map(({ path, index, length }) => ({
+                text: path,
+                range: { start: { x: index + 1, y }, end: { x: index + length, y } },
+                activate: (e: MouseEvent) => clickPathLink({ cwd, path }, e, e.clientX, e.clientY + 14),
+                hover: (e: MouseEvent) => showPathCard({ cwd, path }, e.clientX, e.clientY + 14),
+                leave: hidePathCard,
+              }));
+              callback(links.length ? links : undefined);
+            };
+            const paths = found.map((f) => f.path);
+            const now = knownPaths(cwd, paths);
+            if (now) { reply(now); return; }
+            statPaths(cwd, paths).then(
+              (infos) => { if (gen === asked) reply(infos); },
+              () => { if (gen === asked) callback(undefined); },
+            );
+          },
+        });
+        let prefetch: ReturnType<typeof setTimeout> | undefined;
+        term.onRender(() => {
+          clearTimeout(prefetch);
+          prefetch = setTimeout(() => {
+            if (!getSettings().pathLinksEnabled || !term.element?.isConnected) return; // disposed or detached
+            const buf = term.buffer.active;
+            const paths = new Set<string>();
+            for (let y = buf.viewportY; y < buf.viewportY + term.rows; y++) {
+              for (const f of findPaths(buf.getLine(y)?.translateToString(true) ?? '')) paths.add(f.path);
+            }
+            if (paths.size) statPaths(cwd, [...paths]).catch(() => {});
+          }, 200);
+        });
+      }
 
-      // Ctrl+V / Ctrl+Shift+V: paste from clipboard into terminal.
-      // Without this, xterm sends \x16 (literal-next) to the PTY.
+      // Ctrl+V: paste clipboard text into the terminal. With no text on the
+      // clipboard (a screenshot), the keystroke goes to the PTY instead, as
+      // Claude Code's own image paste reads the clipboard itself: Alt+V
+      // (ESC v) on Windows, Ctrl+V (\x16) elsewhere.
       term.attachCustomKeyEventHandler((e) => {
         if (e.ctrlKey && e.key === 'v' && e.type === 'keydown') {
           e.preventDefault();
-          navigator.clipboard.readText().then((text) => {
-            if (text) term.paste(text);
-          });
+          const imageKey = navigator.userAgent.includes('Windows') ? '\x1bv' : '\x16';
+          navigator.clipboard.readText().then(
+            (text) => { if (text) term.paste(text); else ipc.writeToPty(tabId, imageKey); },
+            () => ipc.writeToPty(tabId, imageKey),
+          );
           return false;
         }
         return true;
