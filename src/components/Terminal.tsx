@@ -6,6 +6,7 @@ import { WebglAddon } from '@xterm/addon-webgl';
 import '@xterm/xterm/css/xterm.css';
 import * as ipc from '@/lib/ipc';
 import { findIssueKeys, hideIssueCard, issueUrl, jiraOn, showIssueCard } from '@/lib/jira';
+import { clickPathLink, findPaths, hidePathCard, outermost, showPathCard, statPaths } from '@/lib/path-links';
 import { getSettings } from '@/lib/settings-store';
 import { getActiveXtermTheme, terminalContrast } from '@/lib/themes';
 import { isInterruptKeystroke } from '@/lib/utils';
@@ -25,6 +26,11 @@ interface TerminalProps {
    *  decides whether that's worth acting on (only meaningful for a claude
    *  tab currently marked working). */
   onInterrupt?: () => void;
+  /** The session's directory — relative paths in the output resolve from it.
+   *  Read when the terminal is first created. Claude's cwd never moves; a
+   *  shell's does after `cd`, and its relative paths still resolve from here
+   *  (see docs/features/path-links.md). */
+  cwd?: string;
 }
 
 /** Activate the WebGL renderer on an already-open terminal (no-op if it's
@@ -46,7 +52,7 @@ function ensureWebgl(cached: CachedTerminal): void {
   }
 }
 
-const Terminal = React.memo(function Terminal({ tabId, isVisible, focused = true, onInterrupt }: TerminalProps) {
+const Terminal = React.memo(function Terminal({ tabId, isVisible, focused = true, onInterrupt, cwd }: TerminalProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   // The container this terminal's DOM currently lives in. Invalidated by a new
   // container (the component remounted somewhere else) *and* by a new `tabId`
@@ -90,6 +96,27 @@ const Terminal = React.memo(function Terminal({ tabId, isVisible, focused = true
             leave: hideIssueCard,
           }));
           callback(links.length ? links : undefined);
+        },
+      });
+
+      // File and folder paths. Only ones that exist get a link — a path's
+      // shape alone matches `and/or` and `example.com` too. Settings are read
+      // per line, like Jira's, so the switch applies to open terminals.
+      if (cwd) term.registerLinkProvider({
+        provideLinks(y, callback) {
+          const line = getSettings().pathLinksEnabled ? term.buffer.active.getLine(y - 1)?.translateToString(true) : undefined;
+          const found = line ? findPaths(line) : [];
+          if (!found.length) { callback(undefined); return; }
+          statPaths(cwd, found.map((f) => f.path)).then((infos) => {
+            const links = outermost(found.filter((_, i) => infos[i])).map(({ path, index, length }) => ({
+              text: path,
+              range: { start: { x: index + 1, y }, end: { x: index + length, y } },
+              activate: (e: MouseEvent) => clickPathLink({ cwd, path }, e, e.clientX, e.clientY + 14),
+              hover: (e: MouseEvent) => showPathCard({ cwd, path }, e.clientX, e.clientY + 14),
+              leave: hidePathCard,
+            }));
+            callback(links.length ? links : undefined);
+          }, () => callback(undefined));
         },
       });
 

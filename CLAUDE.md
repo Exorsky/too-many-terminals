@@ -19,6 +19,7 @@ Feature and architecture docs live in `docs/` — **keep them updated when featu
 - [docs/features/home-screen.md](docs/features/home-screen.md) — idle Home: a metrics dashboard built from your session history
 - [docs/features/attention-inbox.md](docs/features/attention-inbox.md) — the session ledger: live counts that filter the list (waiting / running / just finished / pinned)
 - [docs/features/jira-links.md](docs/features/jira-links.md) — Jira issue keys as links + hover cards in names, terminals and transcripts; My issues
+- [docs/features/path-links.md](docs/features/path-links.md) — file/folder paths in terminals and transcripts as links + hover cards with a preview
 - [docs/features/git.md](docs/features/git.md) — read-only git: branch on rows and breadcrumb, file-tree marks, the Changes panel (session changes, branch graph, diffs)
 - [docs/features/command-palette.md](docs/features/command-palette.md) — Ctrl+Shift+P fuzzy jump to any open terminal
 - [docs/features/notifications.md](docs/features/notifications.md) — desktop notifications when an unfocused session needs you

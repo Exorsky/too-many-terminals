@@ -23,13 +23,15 @@ const NODE_STYLES: Record<TranscriptTurn['role'], string> = {
  *  most of those reads return identical content — `useTranscript` keeps the same
  *  `turns` reference when nothing changed, so this skips rebuilding the whole
  *  document (and, with it, throwing away any text the reader had selected). */
-function TranscriptDocument({ turns, view, fill = false }: {
+function TranscriptDocument({ turns, view, fill = false, cwd }: {
   turns: TranscriptTurn[];
   view: 'rendered' | 'raw';
   /** Fill the container width (split pane) instead of a centered reading
    *  measure. The pane already constrains width, so an extra cap just leaves
    *  the text floating in a narrow column with uneven side gaps. */
   fill?: boolean;
+  /** Where relative paths in replies resolve from. */
+  cwd?: string;
 }) {
   if (view === 'raw') {
     return (
@@ -75,7 +77,7 @@ function TranscriptDocument({ turns, view, fill = false }: {
               <div className="flex flex-col gap-2">
                 {turn.blocks.map((b, j) =>
                   b.kind === 'text' ? (
-                    <Markdown key={j} source={b.text} />
+                    <Markdown key={j} source={b.text} cwd={cwd} />
                   ) : (
                     <div key={j} className="flex items-start gap-2 self-start max-w-full text-[13px] rounded-md border border-border bg-card px-2.5 py-1.5">
                       <span className="text-warning shrink-0 font-semibold">{b.name}</span>

@@ -3,7 +3,7 @@
  * transcripts. One detector, one URL rule, one cached read-only lookup.
  * See docs/features/jira-links.md.
  */
-import { useSyncExternalStore } from 'react';
+import { createHoverCard } from './hover-card';
 import * as ipc from './ipc';
 import type { JiraIssue, JiraIssueDetail } from './ipc';
 import type { AppSettings } from '@/types';
@@ -136,41 +136,17 @@ export interface IssueCardState {
   y: number;
 }
 
-let card: IssueCardState | null = null;
-let showTimer: ReturnType<typeof setTimeout> | undefined;
-let hideTimer: ReturnType<typeof setTimeout> | undefined;
-const listeners = new Set<() => void>();
-const emit = () => { for (const l of listeners) l(); };
+const issueCard = createHoverCard<string>();
 
-/** Ask for the card at a screen point. Waits 300ms like every other hover
- *  surface in the app — including when a card is already open for another
- *  key: each new key is a Jira request, so sweeping the pointer across a
- *  column of keys must only cost one for the key it stops on. */
-export function showIssueCard(key: string, x: number, y: number): void {
-  clearTimeout(hideTimer);
-  clearTimeout(showTimer);
-  if (card?.key === key) return;
-  showTimer = setTimeout(() => { card = { key, x, y }; emit(); }, 300);
-}
-
-/** Close after a short grace, so the pointer can travel onto the card. */
-export function hideIssueCard(): void {
-  clearTimeout(showTimer);
-  clearTimeout(hideTimer);
-  hideTimer = setTimeout(() => { card = null; emit(); }, 150);
-}
-
-/** The card's own hover keeps it open. */
-export function holdIssueCard(): void {
-  clearTimeout(hideTimer);
-}
+/** Ask for the card at a screen point. Each new key is a Jira request, so the
+ *  300ms wait applies even when a card for another key is already open. */
+export const showIssueCard = issueCard.show;
+export const hideIssueCard = issueCard.hide;
+export const holdIssueCard = issueCard.hold;
 
 export function useIssueCard(): IssueCardState | null {
-  return useSyncExternalStore(
-    (l) => { listeners.add(l); return () => listeners.delete(l); },
-    () => card,
-    () => card,
-  );
+  const c = issueCard.useCard();
+  return c && { key: c.value, x: c.x, y: c.y };
 }
 
 // --- Markdown -------------------------------------------------------------

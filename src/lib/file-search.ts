@@ -22,8 +22,11 @@ export interface FileMatch {
 /** Finds files whose name contains `query`, breadth-first from each project
  *  root, skipping the usual noisy directories. Bounded by SCAN_CAP entries and
  *  `limit` matches so a huge or pathological tree can't hang the UI. */
-export async function searchFiles(roots: string[], query: string, limit = 200): Promise<FileMatch[]> {
+export async function searchFiles(roots: string[], query: string, limit = 200, exact = false): Promise<FileMatch[]> {
   const q = query.trim().toLowerCase();
+  // `exact`: the name itself, case and all — otherwise near-misses
+  // (`data.ts` for `a.ts`) can fill `limit` before the real one turns up.
+  const hit = exact ? (name: string) => name === query.trim() : (name: string) => name.toLowerCase().includes(q);
   if (!q) return [];
 
   const matches: FileMatch[] = [];
@@ -44,7 +47,7 @@ export async function searchFiles(roots: string[], query: string, limit = 200): 
         if (!IGNORED_DIRS.has(entry.name)) queue.push({ dir: entry.path, root });
         continue;
       }
-      if (entry.name.toLowerCase().includes(q)) {
+      if (hit(entry.name)) {
         matches.push({ name: entry.name, path: entry.path, root });
         if (matches.length >= limit) break;
       }

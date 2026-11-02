@@ -21,6 +21,8 @@ interface MarkdownPaneProps {
   label?: string;
   /** Fill the pane width instead of a centered reading measure (Split mode). */
   fill?: boolean;
+  /** The session's directory, so paths in replies resolve and link. */
+  cwd?: string;
   className?: string;
 }
 
@@ -32,7 +34,7 @@ interface MarkdownPaneProps {
  *  turns of a (live, ever-growing) session are what you land on; re-anchors
  *  to the bottom whenever the transcript reloads. */
 export default function MarkdownPane({
-  turns, error, view, onSetView, onRefresh, turnsCount, markdownText, label, fill = false, className,
+  turns, error, view, onSetView, onRefresh, turnsCount, markdownText, label, fill = false, cwd, className,
 }: MarkdownPaneProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   // Whether to keep the view pinned to the bottom. Starts true (open at bottom);
@@ -100,7 +102,7 @@ export default function MarkdownPane({
       </div>
       <div ref={scrollRef} data-testid="transcript-scroll" className="flex-1 min-h-0 overflow-y-auto scrollbar-thin">
         <TranscriptStates turns={turns} error={error} />
-        {turns && turns.length > 0 && <TranscriptDocument turns={turns} view={view} fill={fill} />}
+        {turns && turns.length > 0 && <TranscriptDocument turns={turns} view={view} fill={fill} cwd={cwd} />}
       </div>
     </div>
   );

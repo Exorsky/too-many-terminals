@@ -388,6 +388,30 @@ export function readFile(path: string): Promise<string> {
   return invoke('read_file', { path });
 }
 
+/** A file's raw bytes (≤ 4 MB) — an image for a hover preview. */
+export function readFileBytes(path: string): Promise<ArrayBuffer> {
+  return invoke('read_file_bytes', { path });
+}
+
+/** A path named in terminal output or a transcript that exists on disk. */
+export interface PathInfo {
+  /** Absolute, with `.` and `..` folded. */
+  path: string;
+  isDir: boolean;
+  size: number;
+}
+
+/** Resolves each of `paths` the way a shell in `cwd` would (`~`, relative,
+ *  absolute) — `null` where nothing exists. One answer per path, in order. */
+export function statPaths(cwd: string, paths: string[]): Promise<(PathInfo | null)[]> {
+  return invoke('stat_paths', { cwd, paths });
+}
+
+/** Opens a file or folder with whatever the OS opens it with. */
+export function openWithSystem(path: string): void {
+  void openPath(path);
+}
+
 /** Overwrites a file. `root` must be the project folder it was opened from —
  *  the backend refuses to write outside it. */
 export function writeFile(path: string, root: string, contents: string): Promise<void> {

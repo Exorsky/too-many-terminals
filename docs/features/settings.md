@@ -13,7 +13,7 @@ top tab strip. The rail has three groups:
 |---|---|
 | General | Interface, Notifications, Sessions, Appearance (themes, see [themes.md](themes.md)) |
 | Claude Code | Global files |
-| Integrations | one page per integration — Jira today |
+| Integrations | one page per integration — Path links, Jira |
 
 Each page is one focused screen instead of one long scrolling list; the rail
 uses the same active-row look (left accent bar) as the sidebar's own tab rows.
@@ -58,6 +58,12 @@ Two dropdowns, both about background behavior while a session is idle:
   re-fetches your rate-limit percentages. Nothing faster is offered because
   Anthropic's usage endpoint rate-limits and the backend enforces its own
   5-minute floor. See [usage-meter.md](usage-meter.md).
+
+## Integrations › Path links
+
+One switch (`pathLinksEnabled`, default `true`): file and folder paths in
+terminals and transcripts become links with a preview card. It reads only the
+local disk, so it's on out of the box. See [path-links.md](path-links.md).
 
 ## Integrations › Jira
 

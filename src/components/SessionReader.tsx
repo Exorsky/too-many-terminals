@@ -106,7 +106,7 @@ export default function SessionReader({ projectDir, entry, onClose, onResume }: 
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto scrollbar-thin">
         <TranscriptStates turns={turns} error={error} />
-        {turns && turns.length > 0 && <TranscriptDocument turns={turns} view={view} />}
+        {turns && turns.length > 0 && <TranscriptDocument turns={turns} view={view} cwd={projectDir} />}
       </div>
     </div>
   );

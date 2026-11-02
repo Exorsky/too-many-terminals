@@ -133,6 +133,6 @@ it('sweeping across keys with a card open only shows the key the pointer stops o
   step('PROJ-4', 300); // stopped here
   expect(shown).toEqual(['PROJ-1', 'PROJ-4']);
 
-  act(() => { hideIssueCard(); vi.advanceTimersByTime(200); });
+  act(() => { hideIssueCard(); vi.advanceTimersByTime(500); });
   vi.useRealTimers();
 });

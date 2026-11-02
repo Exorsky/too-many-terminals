@@ -1,9 +1,10 @@
-import { Children, isValidElement, useMemo, useRef, type ReactElement, type ReactNode } from 'react';
+import { Children, createContext, isValidElement, useContext, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react';
 import ReactMarkdown, { type Components, type ExtraProps } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { jiraOn, remarkIssueLinks } from '@/lib/jira';
 import { useSettings } from '@/lib/settings-store';
 import * as ipc from '@/lib/ipc';
+import { clickPathLink, hidePathCard, resolvePath, showPathCard, wholePath } from '@/lib/path-links';
 import { isExternalHref } from '@/lib/paths';
 import { cn } from '@/lib/utils';
 import CodeBlock from './CodeBlock';
@@ -16,6 +17,39 @@ interface MarkdownProps {
    *  (`FileViewer`). Without it such links do nothing, which is what a
    *  transcript wants: it has no file to resolve against. */
   onOpenLink?: (href: string) => void;
+  /** Where a path in a code span (`src/app.ts`) resolves from. Without it code
+   *  spans stay plain. */
+  cwd?: string;
+}
+
+/** `cwd` for the code spans below. A context, not a prop, because the
+ *  components map is built once and must not change identity. */
+const PathBase = createContext<string | null>(null);
+
+const CODE_CLS = 'font-mono text-[0.85em] px-1 py-px rounded-[3px] bg-raised border border-border text-magenta';
+
+/** Inline code. A span that is exactly a path gets the path card on hover;
+ *  a click pins it, ⌘-click opens. It only looks like a link once the first
+ *  hover has found the path on disk — `and/or` never does. */
+function InlineCode({ children }: { children?: ReactNode }) {
+  const cwd = useContext(PathBase);
+  const path = cwd ? wholePath(textOf(children)) : null;
+  const [exists, setExists] = useState(false);
+  if (!cwd || !path) return <code className={CODE_CLS}>{children}</code>;
+  const target = { cwd, path };
+  return (
+    <code
+      className={cn(CODE_CLS, exists && 'cursor-pointer underline decoration-dotted underline-offset-2')}
+      onMouseEnter={(e) => {
+        if (!exists) void resolvePath(cwd, path).then((i) => setExists(!!i), () => {});
+        showPathCard(target, e.clientX, e.currentTarget.getBoundingClientRect().bottom + 4);
+      }}
+      onMouseLeave={hidePathCard}
+      onClick={exists ? (e) => clickPathLink(target, e.nativeEvent, e.clientX, e.currentTarget.getBoundingClientRect().bottom + 4) : undefined}
+    >
+      {children}
+    </code>
+  );
 }
 
 type HastNode = { value?: string; children?: HastNode[] };
@@ -68,7 +102,7 @@ function heading(level: 1 | 2 | 3 | 4 | 5 | 6) {
  *  (tables, task lists, strikethrough, autolinks) through `react-markdown`,
  *  which builds real elements rather than HTML, so nothing is injected as raw
  *  markup. Prose is proportional (the document voice); code stays monospace. */
-export default function Markdown({ source, onOpenLink }: MarkdownProps) {
+export default function Markdown({ source, onOpenLink, cwd }: MarkdownProps) {
   const rootRef = useRef<HTMLDivElement>(null);
 
   /** A `#anchor` scrolls inside this document. Scoped to this instance first —
@@ -146,11 +180,7 @@ export default function Markdown({ source, onOpenLink }: MarkdownProps) {
       return <CodeBlock lang={lang} code={code} />;
     },
 
-    code: ({ children }) => (
-      <code className="font-mono text-[0.85em] px-1 py-px rounded-[3px] bg-raised border border-border text-magenta">
-        {children}
-      </code>
-    ),
+    code: InlineCode,
 
     p: ({ children }) => <p className="m-0">{children}</p>,
     strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
@@ -217,9 +247,11 @@ export default function Markdown({ source, onOpenLink }: MarkdownProps) {
 
   return (
     <div ref={rootRef} className="flex flex-col gap-3 font-sans text-[14.5px] leading-[1.62] text-prose">
-      <ReactMarkdown remarkPlugins={remarkPlugins} components={components}>
-        {source}
-      </ReactMarkdown>
+      <PathBase.Provider value={settings.pathLinksEnabled ? cwd ?? null : null}>
+        <ReactMarkdown remarkPlugins={remarkPlugins} components={components}>
+          {source}
+        </ReactMarkdown>
+      </PathBase.Provider>
     </div>
   );
 }

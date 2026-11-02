@@ -38,7 +38,7 @@ success/warning/attention/destructive set stays reserved (see
 ## The card
 
 `IssueCard`, mounted once by App and driven by `showIssueCard` /
-`hideIssueCard` — 300ms before it opens, a 150ms grace so the pointer can reach
+`hideIssueCard` — 300ms before it opens, a 400ms grace so the pointer can reach
 it. It shows status, title, assignee, reporter, priority, created and last
 updated (full date, `DD.MM.YYYY HH:MM`, local time) and
 which open sessions already mention the key, with **Open in Jira**, **Copy

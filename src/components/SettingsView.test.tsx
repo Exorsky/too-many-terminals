@@ -5,8 +5,8 @@ import * as ipc from '@/lib/ipc';
 import { resetSettingsForTest, DEFAULT_SETTINGS } from '@/lib/settings-store';
 
 /** Fields added after these fixtures were written. */
-const { newTabPosition, jiraEnabled, jiraBaseUrl, jiraProjectKeys, jiraTokenVar } = DEFAULT_SETTINGS;
-const NEW_DEFAULTS = { newTabPosition, jiraEnabled, jiraBaseUrl, jiraProjectKeys, jiraTokenVar };
+const { newTabPosition, pathLinksEnabled, jiraEnabled, jiraBaseUrl, jiraProjectKeys, jiraTokenVar } = DEFAULT_SETTINGS;
+const NEW_DEFAULTS = { newTabPosition, pathLinksEnabled, jiraEnabled, jiraBaseUrl, jiraProjectKeys, jiraTokenVar };
 import SettingsView from './SettingsView';
 
 vi.mock('@/lib/ipc');
@@ -78,6 +78,18 @@ describe('the Jira token variable', () => {
     expect(isEnvVarName('JIRA_API_TOKEN')).toBe(true);
     expect(isEnvVarName('aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789abcdEFGH')).toBe(false);
     expect(isEnvVarName('jira token')).toBe(false);
+  });
+});
+
+describe('Settings › Integrations › Path links', () => {
+  it('is on by default and switches off', async () => {
+    render(<SettingsView />);
+    const rail = screen.getByRole('navigation', { name: 'Settings' });
+    await userEvent.click(within(rail).getByRole('button', { name: /Path links/ }));
+    const toggle = screen.getByRole('switch', { name: 'Path links' });
+    expect(toggle).toBeChecked();
+    await userEvent.click(toggle);
+    expect(ipc.saveSettings).toHaveBeenCalledWith(expect.objectContaining({ pathLinksEnabled: false }));
   });
 });
 

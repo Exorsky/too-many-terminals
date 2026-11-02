@@ -8,6 +8,7 @@ import PaneSessionMenu from '@/components/PaneSessionMenu';
 import PaneTabs from '@/components/PaneTabs';
 import SessionTabs from '@/components/SessionTabs';
 import IssueCard from '@/components/IssueCard';
+import PathCard from '@/components/PathCard';
 import JiraView from '@/components/JiraView';
 import DiffView from '@/components/DiffView';
 import GitBranch from '@/components/GitBranch';
@@ -1432,6 +1433,7 @@ export default function App() {
         sessions={sessions}
         onNewSession={(key, summary) => { setNewIssue({ key, summary }); setNewOpen(true); }}
       />
+      <PathCard onOpenFile={(dir, path) => addToWorkspace({ kind: 'file', dir, path })} />
       <ConfirmDialog />
     </div>
   );

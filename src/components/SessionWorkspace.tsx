@@ -198,6 +198,7 @@ export default function SessionWorkspace({
                   isVisible={active && onClaude && !mdFull}
                   focused={live && onClaude}
                   onInterrupt={onInterrupt}
+                  cwd={session.cwd}
                 />
               )}
             </div>
@@ -224,6 +225,7 @@ export default function SessionWorkspace({
               markdownText={fullMarkdown}
               label={splitActive ? 'Transcript' : undefined}
               fill={splitActive}
+              cwd={session.cwd}
               className={splitActive ? 'flex-1 bg-card' : 'flex-1'}
             />
           )}
@@ -243,6 +245,7 @@ export default function SessionWorkspace({
             tabId={shellId}
             isVisible={active}
             focused={live}
+            cwd={session.cwd}
           />
         </div>
         )}

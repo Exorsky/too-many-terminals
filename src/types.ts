@@ -273,6 +273,9 @@ export interface AppSettings {
   /** Where a newly opened session tab lands: the left edge (newest first) or
    *  right after the current tab, as most terminals do. */
   newTabPosition: NewTabPosition;
+  /** File and folder paths in terminals and transcripts link to a hover card.
+   *  On by default: it reads only the local disk. */
+  pathLinksEnabled: boolean;
   /** The Jira integration's switch. Off keeps the fields below but links and
    *  asks nothing. */
   jiraEnabled: boolean;

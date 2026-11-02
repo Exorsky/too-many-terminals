@@ -80,6 +80,8 @@ pub fn run() {
             commands::uninstall_hooks,
             commands::list_dir,
             commands::read_file,
+            commands::read_file_bytes,
+            commands::stat_paths,
             commands::write_file,
             commands::git_status,
             commands::git_head,

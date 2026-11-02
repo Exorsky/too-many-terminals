@@ -30,6 +30,9 @@ pub struct AppSettings {
     pub compact_list: bool,
     /// Where a new session tab lands: "start" (left edge) or "afterCurrent".
     pub new_tab_position: String,
+    /// File and folder paths in terminals and transcripts become links with a
+    /// hover card. On by default — it only reads the local disk.
+    pub path_links_enabled: bool,
     /// The Jira integration's own switch: off keeps the URL and keys but sends
     /// nothing and links nothing.
     pub jira_enabled: bool,
@@ -52,6 +55,7 @@ impl Default for AppSettings {
             usage_refresh_seconds: 300,
             compact_list: false,
             new_tab_position: "start".to_string(),
+            path_links_enabled: true,
             jira_enabled: false,
             jira_base_url: String::new(),
             jira_project_keys: Vec::new(),

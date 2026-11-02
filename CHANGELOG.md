@@ -11,6 +11,16 @@ listed here; see `git log` for the full history.
 
 ## [Unreleased]
 
+### Added
+
+- **Paths are links.** A file or folder path in a terminal or a transcript code
+  span that exists on disk is underlined. Hover it to see a card with a preview:
+  the first lines of a text file, an image, or a folder's contents. A click pins
+  the card so you can use its buttons. ⌘-click (Ctrl-click) opens the path:
+  text files as a tab, images and folders with the OS. The card can also open a
+  text file in its default app, reveal the path in Finder/Explorer or copy it. Paths with spaces link when they're
+  quoted. The switch is in Settings › Integrations › Path links (on by default).
+
 ## [0.29.0] - 2026-10-30
 
 ### Added

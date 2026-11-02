@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
-  Bell, Bot, FileText, FolderOpen, Link2, Settings as SettingsIcon, Sparkles, SlidersHorizontal, Moon,
+  Bell, Bot, FileSearch, FileText, FolderOpen, Link2, Settings as SettingsIcon, Sparkles, SlidersHorizontal, Moon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { patchSettings, useSettings } from '@/lib/settings-store';
@@ -9,7 +9,7 @@ import { jiraOn } from '@/lib/jira';
 import type { AppSettings, NewTabPosition } from '@/types';
 import CustomizeTab from './CustomizeTab';
 
-type SettingsCategory = 'interface' | 'notifications' | 'sessions' | 'appearance' | 'claude' | 'jira';
+type SettingsCategory = 'interface' | 'notifications' | 'sessions' | 'appearance' | 'claude' | 'paths' | 'jira';
 
 /** The rail, in three groups: the app itself, Claude Code's own files, and
  *  one page per integration — each with its own switch, so adding the next
@@ -25,12 +25,19 @@ const GROUPS: { label: string; items: { id: SettingsCategory; label: string; ico
     ],
   },
   { label: 'Claude Code', items: [{ id: 'claude', label: 'Global files', icon: Bot }] },
-  { label: 'Integrations', items: [{ id: 'jira', label: 'Jira', icon: Link2 }] },
+  {
+    label: 'Integrations',
+    items: [
+      { id: 'paths', label: 'Path links', icon: FileSearch },
+      { id: 'jira', label: 'Jira', icon: Link2 },
+    ],
+  },
 ];
 
 /** Which integrations actually work, for the dot beside each in the rail —
  *  switched on *and* configured, so the dot never says on while nothing is. */
 function integrationOn(id: SettingsCategory, s: AppSettings): boolean | null {
+  if (id === 'paths') return s.pathLinksEnabled;
   return id === 'jira' ? jiraOn(s) : null;
 }
 
@@ -258,6 +265,20 @@ function InterfaceCategory() {
  *  exists to avoid — so it's refused, not saved. */
 export function isEnvVarName(v: string): boolean {
   return /^[A-Z_][A-Z0-9_]*$/.test(v);
+}
+
+function PathLinksIntegration() {
+  const settings = useSettings();
+  return (
+    <div className="flex flex-col px-5 py-4 max-w-xl">
+      <SettingRow
+        title="Path links"
+        description="File and folder paths in terminal output and in transcript code spans become links when they exist on disk. Hover for a preview (text, image or folder contents), click to pin the card, ⌘-click (Ctrl-click) to open. Paths with spaces link when quoted. Reads the local disk only."
+        checked={settings.pathLinksEnabled}
+        onChange={(v) => patchSettings({ pathLinksEnabled: v })}
+      />
+    </div>
+  );
 }
 
 function JiraIntegration() {
@@ -488,6 +509,7 @@ export default function SettingsView({ onOpenFile }: {
           {category === 'notifications' && <NotificationsCategory />}
           {category === 'sessions' && <SessionsCategory />}
           {category === 'claude' && <ClaudeCategory onOpenFile={onOpenFile} />}
+          {category === 'paths' && <PathLinksIntegration />}
           {category === 'jira' && <JiraIntegration />}
           {category === 'appearance' && <CustomizeTab />}
         </div>

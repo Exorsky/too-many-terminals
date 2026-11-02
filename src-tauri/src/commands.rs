@@ -505,6 +505,18 @@ pub fn read_file(path: String) -> Result<String, String> {
     files::read_text(std::path::Path::new(&path))
 }
 
+/// Raw bytes, not JSON: an image preview would otherwise cross IPC as an
+/// array of numbers four times its size.
+#[tauri::command(async)]
+pub fn read_file_bytes(path: String) -> Result<tauri::ipc::Response, String> {
+    files::read_bytes(std::path::Path::new(&path)).map(tauri::ipc::Response::new)
+}
+
+#[tauri::command(async)]
+pub fn stat_paths(cwd: String, paths: Vec<String>) -> Vec<Option<files::PathInfo>> {
+    files::stat_paths(std::path::Path::new(&cwd), dirs::home_dir().as_deref(), &paths)
+}
+
 #[tauri::command(async)]
 pub fn write_file(path: String, root: String, contents: String) -> Result<(), String> {
     files::write_text(std::path::Path::new(&path), std::path::Path::new(&root), &contents)

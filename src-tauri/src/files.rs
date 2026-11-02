@@ -1,5 +1,5 @@
 use serde::Serialize;
-use std::path::Path;
+use std::path::{Component, Path, PathBuf};
 
 /// One entry in a directory listing, as shown by the file explorer.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -41,7 +41,81 @@ pub fn read_text(path: &Path) -> Result<String, String> {
     if meta.len() > MAX_READ_BYTES {
         return Err("File is larger than 4 MB — open it outside the app".to_string());
     }
-    std::fs::read_to_string(path).map_err(|_| "Not a text file".to_string())
+    String::from_utf8(read_capped(path)?).map_err(|_| "Not a text file".to_string())
+}
+
+/// Regular files only, and never more than the cap. A hover can now point
+/// at anything that exists: `/dev/zero` reports size 0 and never ends, and a
+/// FIFO blocks forever.
+fn read_capped(path: &Path) -> Result<Vec<u8>, String> {
+    use std::io::Read;
+    let file = std::fs::File::open(path).map_err(|e| e.to_string())?;
+    if !file.metadata().map_err(|e| e.to_string())?.is_file() {
+        return Err("Not a regular file".to_string());
+    }
+    let mut buf = Vec::new();
+    file.take(MAX_READ_BYTES + 1).read_to_end(&mut buf).map_err(|e| e.to_string())?;
+    if buf.len() as u64 > MAX_READ_BYTES {
+        return Err("File is larger than 4 MB — open it outside the app".to_string());
+    }
+    Ok(buf)
+}
+
+/// Reads a file's raw bytes — an image for a hover preview. Same size cap as
+/// text, so a stray multi-GB file can't be pulled into the webview.
+pub fn read_bytes(path: &Path) -> Result<Vec<u8>, String> {
+    read_capped(path)
+}
+
+/// A path named in terminal output or a transcript that exists on disk.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PathInfo {
+    /// Absolute, lexically normalized (no `.`/`..`; symlinks left alone).
+    pub path: String,
+    pub is_dir: bool,
+    pub size: u64,
+}
+
+/// Resolves each candidate the way a shell in `cwd` would read it — absolute
+/// as-is, `~` against `home`, anything else against `cwd` — and keeps the ones
+/// that exist. One entry per candidate, `None` where nothing is there, so the
+/// caller can zip the answer with what it asked.
+pub fn stat_paths(cwd: &Path, home: Option<&Path>, candidates: &[String]) -> Vec<Option<PathInfo>> {
+    candidates
+        .iter()
+        .map(|c| {
+            let full = match (c.strip_prefix('~'), home) {
+                (Some(rest), Some(h)) if rest.is_empty() || rest.starts_with(['/', '\\']) => {
+                    h.join(rest.trim_start_matches(['/', '\\']))
+                }
+                _ => cwd.join(c), // join keeps an absolute `c` as it is
+            };
+            let full = normalize(&full);
+            let meta = std::fs::metadata(&full).ok()?;
+            Some(PathInfo {
+                path: full.to_string_lossy().into_owned(),
+                is_dir: meta.is_dir(),
+                size: meta.len(),
+            })
+        })
+        .collect()
+}
+
+/// Drops `.` and folds `..` without touching the disk, so `src/../x` shows as
+/// `x` and `/tmp` stays `/tmp` (canonicalize would make it `/private/tmp`).
+fn normalize(p: &Path) -> PathBuf {
+    let mut out = PathBuf::new();
+    for c in p.components() {
+        match c {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                out.pop();
+            }
+            other => out.push(other),
+        }
+    }
+    out
 }
 
 /// Overwrites an existing file with editor contents. `root` must be the open
@@ -98,6 +172,40 @@ mod tests {
         let file = tmp.path().join("bin.dat");
         std::fs::write(&file, [0xff, 0xfe, 0x00, 0xff, 0x00, 0x01]).unwrap();
         assert!(read_text(&file).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn refuses_device_files() {
+        assert!(read_text(Path::new("/dev/zero")).is_err());
+        assert!(read_bytes(Path::new("/dev/zero")).is_err());
+    }
+
+    #[test]
+    fn stats_only_paths_that_exist() {
+        let tmp = tempfile::tempdir().unwrap();
+        let home = tempfile::tempdir().unwrap();
+        std::fs::create_dir(tmp.path().join("src")).unwrap();
+        std::fs::write(tmp.path().join("src/a.ts"), "abc").unwrap();
+        std::fs::write(home.path().join("notes.md"), "x").unwrap();
+        let abs = tmp.path().join("src/a.ts").to_string_lossy().into_owned();
+        let ask: Vec<String> = ["src/a.ts", "./src/../src", "and/or", "~/notes.md", &abs]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+
+        let got = stat_paths(tmp.path(), Some(home.path()), &ask);
+
+        let file = got[0].as_ref().unwrap();
+        assert_eq!(file.path, abs);
+        assert!(!file.is_dir);
+        assert_eq!(file.size, 3);
+        let dir = got[1].as_ref().unwrap();
+        assert!(dir.is_dir);
+        assert_eq!(dir.path, tmp.path().join("src").to_string_lossy());
+        assert!(got[2].is_none());
+        assert_eq!(got[3].as_ref().unwrap().path, home.path().join("notes.md").to_string_lossy());
+        assert_eq!(got[4].as_ref().unwrap().path, abs);
     }
 
     #[test]
