@@ -11,6 +11,21 @@ listed here; see `git log` for the full history.
 
 ## [Unreleased]
 
+### Changed
+
+- **Library is now History.** The panel lists every past session by day, so it is
+  named for that, with a clock icon.
+
+### Fixed
+
+- **Resuming a session that is already open no longer duplicates it.** Resume in
+  History or the reader opens the existing sidebar row instead of adding a second
+  one on the same transcript, waking, unarchiving or restarting it as needed.
+- **Enter in History search no longer resumes the wrong session.** While the
+  transcript search runs, the list is hidden behind a loader, so nothing can be
+  picked from a half-searched list. Enter in the search field moves to the list,
+  and a second Enter resumes.
+
 ## [0.31.0] - 2026-11-02
 
 ### Fixed

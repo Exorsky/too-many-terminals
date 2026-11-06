@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ArrowRight, CalendarDays, ChevronRight, FileText, Library, Loader2, Search, Trash2, Upload, X,
+  ArrowRight, CalendarDays, ChevronRight, FileText, History as HistoryIcon, Loader2, Search, Trash2, Upload, X,
 } from 'lucide-react';
 import { projectHue, type SessionHistoryEntry, type TranscriptHit } from '@/types';
 import { ageBucket, type AgeBucket } from '@/lib/sessions';
@@ -104,7 +104,7 @@ function Facet({ label, count, active, onClick, hue }: {
   );
 }
 
-/** The Library: every past Claude session, read from the transcripts on disk.
+/** History: every past Claude session, read from the transcripts on disk.
  *  Filters on the left, one dense list by day in the middle, the picked
  *  session on the right. See docs/features/session-history.md. */
 export default function SessionHistoryPanel({ projects, sessionNames, onResume, onRead }: SessionHistoryPanelProps) {
@@ -238,19 +238,21 @@ export default function SessionHistoryPanel({ projects, sessionNames, onResume, 
   // Entries arrive newest first, so consecutive runs of one day are the groups.
   const days = useMemo(() => {
     const out: { key: string; label: string; items: HistoryEntry[] }[] = [];
-    for (const entry of filteredEntries) {
+    for (const entry of searching ? [] : filteredEntries) {
       const key = dayKey(entry.lastUsedIso);
       if (out[out.length - 1]?.key !== key) out.push({ key, label: dayLabel(entry.lastUsedIso, now.getTime()), items: [] });
       out[out.length - 1].items.push(entry);
     }
     return out;
-  }, [filteredEntries, now]);
+  }, [filteredEntries, searching, now]);
 
   useEffect(() => {
     setActiveIndex(0);
   }, [query, projectFilter, dayFilter, when]);
 
-  const active: HistoryEntry | undefined = filteredEntries[activeIndex];
+  // Nothing is pickable while the transcript scan runs: the list is hidden
+  // until it lands, so a reflexive Enter can't resume a half-searched first row.
+  const active: HistoryEntry | undefined = searching ? undefined : filteredEntries[activeIndex];
 
   useEffect(() => {
     if (active) rowRefs.current.get(active.sessionId)?.scrollIntoView?.({ block: 'nearest' });
@@ -287,12 +289,16 @@ export default function SessionHistoryPanel({ projects, sessionNames, onResume, 
     if (inSearch) {
       if (e.key === 'Escape') {
         if (query) { setQuery(''); } else { searchInputRef.current?.blur(); }
-      } else if (e.key === 'ArrowDown') {
+      } else if (e.key === 'ArrowDown' || e.key === 'Enter') {
+        // Enter here is a reflexive "submit search", typed while the content
+        // scan may still be running — it hands over to the list rather than
+        // resuming whatever happens to be first. A second Enter resumes.
         e.preventDefault();
+        // Nothing to land on (scan running, or no results): stay in the field
+        // rather than dropping focus on the page, where no key reaches us.
+        if (!active) return;
         searchInputRef.current?.blur();
-        if (active) rowRefs.current.get(active.sessionId)?.focus();
-      } else if (e.key === 'Enter' && active) {
-        onResume(active.projectDir, active);
+        rowRefs.current.get(active.sessionId)?.focus();
       }
       return;
     }
@@ -347,7 +353,7 @@ export default function SessionHistoryPanel({ projects, sessionNames, onResume, 
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search names, folders and transcripts…"
-            aria-label="Search the Library"
+            aria-label="Search history"
             autoComplete="off"
             spellCheck={false}
             className="flex-1 min-w-0 bg-transparent border-none outline-none text-[13.5px] text-foreground placeholder:text-muted-foreground font-inherit"
@@ -365,18 +371,6 @@ export default function SessionHistoryPanel({ projects, sessionNames, onResume, 
             <kbd className="shrink-0 font-mono text-[11px] text-faint">/</kbd>
           )}
         </label>
-        {/* The transcript scan is the one thing here that isn't instant, and
-            while it runs the list shows only the metadata matches — so without
-            this the honest reading of a thin list is "nothing else exists",
-            not "still looking". */}
-        {searching && (
-          <span className="flex items-center gap-2 shrink-0" role="status" aria-live="polite">
-            <span className="relative w-6 h-px shrink-0 bg-border overflow-hidden">
-              <span className="absolute inset-y-0 w-1/2 bg-primary animate-[history-scan_1s_ease-in-out_infinite]" />
-            </span>
-            <span className="text-[12px] text-muted-foreground">Searching transcripts…</span>
-          </span>
-        )}
         {entries !== null && (
           <span className="ml-auto shrink-0 text-[11.5px] text-muted-foreground font-mono tabular-nums">
             {isFiltering
@@ -496,7 +490,7 @@ export default function SessionHistoryPanel({ projects, sessionNames, onResume, 
 
           {entries !== null && entries.length === 0 && (
             <div className="flex flex-col items-center gap-1.5 text-center px-6 py-14 text-muted-foreground">
-              <Library size={20} className="text-faint mb-1" />
+              <HistoryIcon size={20} className="text-faint mb-1" />
               <div className="text-[13.5px] text-foreground">No sessions yet</div>
               <div className="text-[12px] max-w-[34ch] leading-relaxed">
                 Sessions appear here once you start chatting with Claude.
@@ -504,7 +498,17 @@ export default function SessionHistoryPanel({ projects, sessionNames, onResume, 
             </div>
           )}
 
-          {entries !== null && entries.length > 0 && filteredEntries.length === 0 && (
+          {/* The transcript scan is the one thing here that isn't instant. The
+              list waits for it rather than showing the metadata matches first:
+              a list that reshuffles under you is a list you misclick in. */}
+          {entries !== null && searching && (
+            <div className="flex items-center gap-2 px-4 py-6 text-[13px] text-muted-foreground" role="status" aria-live="polite">
+              <Loader2 size={14} className="animate-spin" />
+              <span>Searching transcripts…</span>
+            </div>
+          )}
+
+          {entries !== null && entries.length > 0 && !searching && filteredEntries.length === 0 && (
             <div className="flex flex-col items-center gap-1.5 text-center px-6 py-14 text-muted-foreground">
               <Search size={20} className="text-faint mb-1" />
               <div className="text-[13.5px] text-foreground">

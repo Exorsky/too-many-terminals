@@ -512,6 +512,50 @@ describe('archiving', () => {
   });
 });
 
+describe('resuming from History', () => {
+  it('opens the session already in the list instead of adding a duplicate', async () => {
+    render(<App />);
+    await ready();
+    fireEvent.click(screen.getByRole('button', { name: 'History' }));
+    const rows = await waitFor(() => {
+      const found = document.querySelectorAll('[data-library-row]');
+      expect(found.length).toBeGreaterThan(0);
+      return found;
+    });
+    const alpha = [...rows].find((r) => r.textContent?.includes('Alpha'))!;
+    fireEvent.doubleClick(alpha);
+
+    await waitFor(() => expect(painted()).toEqual(['tab-alpha']));
+    expect(document.querySelectorAll('[data-session-row]').length).toBe(3);
+    expect(sessionRow('Alpha')).toBeInTheDocument();
+  });
+
+  it('respawns an exited session in place rather than focusing its dead terminal', async () => {
+    let exit: (tabId: string) => void = () => {};
+    vi.mocked(ipc.onPtyExit).mockImplementation((cb) => { exit = cb; return Promise.resolve(() => {}); });
+    render(<App />);
+    await ready();
+    fireEvent.click(sessionRow('Alpha'));
+    await waitFor(() => expect(vi.mocked(ipc.spawnPty).mock.calls.filter(([o]) => o.tabId === 'tab-alpha')).toHaveLength(1));
+    act(() => exit('tab-alpha'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'History' }));
+    const alpha = await waitFor(() => {
+      const row = [...document.querySelectorAll('[data-library-row]')].find((r) => r.textContent?.includes('Alpha'));
+      expect(row).toBeDefined();
+      return row!;
+    });
+    fireEvent.doubleClick(alpha);
+
+    await waitFor(() => {
+      const spawns = vi.mocked(ipc.spawnPty).mock.calls.filter(([o]) => o.tabId === 'tab-alpha');
+      expect(spawns).toHaveLength(2);
+      expect(spawns[1][0].resumeSessionId).toBe('sess-a');
+    });
+    expect(document.querySelectorAll('[data-session-row]').length).toBe(3);
+  });
+});
+
 describe('the pane grid', () => {
   function panes() {
     return [...document.querySelectorAll('[data-pane]')] as HTMLElement[];

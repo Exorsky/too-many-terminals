@@ -240,7 +240,7 @@ export function compactAge(at: number | undefined, now: number): string {
  *  11pm yesterday and one from 1am today are two hours apart but sit on
  *  different days, and "yesterday" is what you remember them by.
  *
- *  `week` is 2–6 days back, `month` 7–29; the Library's "This week" and "This
+ *  `week` is 2–6 days back, `month` 7–29; History's "This week" and "This
  *  month" filters are cumulative over these; the sidebar's day groups are not. */
 export type AgeBucket = 'today' | 'yesterday' | 'week' | 'month' | 'older';
 

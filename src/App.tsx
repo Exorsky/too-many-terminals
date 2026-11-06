@@ -540,7 +540,7 @@ export default function App() {
     const ok = await confirmAction({
       title: `Close ${tab ? `"${tab.name}"` : 'this session'}?`,
       body: tab?.kind === 'claude'
-        ? 'Stops Claude and takes it out of the sidebar. The conversation stays in the Library and can be resumed.'
+        ? 'Stops Claude and takes it out of the sidebar. The conversation stays in History and can be resumed.'
         : 'Stops the shell and takes it out of the sidebar.',
       confirmLabel: 'Close session',
     });
@@ -580,13 +580,29 @@ export default function App() {
 
   const handleResumeRecent = useCallback((r: RecentEntry) => {
     setReaderTarget(null);
+    // Already in the workspace (asleep, archived or live): open that one. A
+    // second tab would be a duplicate row and a second `claude --resume`
+    // writing the same transcript.
+    const existing = state.tabs.find((t) => t.kind === 'claude' && t.resumeSessionId === r.entry.sessionId);
+    if (existing) {
+      if (existing.archived) dispatch({ type: 'archive', tabId: existing.id, archived: false });
+      // Exited (e.g. `/exit`): back to dormant, so showing it respawns
+      // `--resume` in place. Not `sleepTab` — that waits for an exit event a
+      // dead process never sends, and would swallow the next real one.
+      if (existing.exited) {
+        spawnedRef.current.delete(existing.id);
+        dispatch({ type: 'sleep', tabId: existing.id });
+      }
+      handleSelect(existing.id);
+      return;
+    }
     // A resumed session is filed where its directory says it belongs: under
     // that project if the folder is open, else the Inbox.
     spawnSessionAt(r.dir, 'claude', null, r.name, {
       projectDir: projects.includes(r.dir) ? r.dir : null,
       resumeSessionId: r.entry.sessionId,
     });
-  }, [spawnSessionAt, projects]);
+  }, [spawnSessionAt, projects, state.tabs, dispatch, handleSelect]);
 
   const handleResumeSession = useCallback((dir: string, entry: SessionHistoryEntry) => {
     const name = sessionNames[entry.sessionId] || entry.preview.slice(0, 30) || UNNAMED_SESSION;
@@ -970,7 +986,7 @@ export default function App() {
               drift as the two ends change width. */}
           <div data-tauri-drag-region className="absolute left-1/2 -translate-x-1/2 max-w-[50%] flex items-center gap-1.5 min-w-0 text-[12px] text-muted-foreground">
             <Breadcrumb
-              title={showSettings ? 'Settings' : showArchive ? 'Library' : view === 'todo' ? 'To-Do' : view === 'jira' ? 'My issues' : onLogbook ? 'Logbook' : null}
+              title={showSettings ? 'Settings' : showArchive ? 'History' : view === 'todo' ? 'To-Do' : view === 'jira' ? 'My issues' : onLogbook ? 'Logbook' : null}
               session={onSessions ? activeTab : null}
               projects={projects}
             />

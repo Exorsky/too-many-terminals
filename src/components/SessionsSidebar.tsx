@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Archive, CheckSquare, ChevronLeft, ChevronRight, Columns2, Folder, FolderInput, FolderOpen, FolderPlus, Inbox,
-  Library, MoreHorizontal, Pencil, Pin, PinOff, Plus, Search, Settings, Code, SquareTerminal, TicketCheck, Upload, X,
+  History as HistoryIcon, MoreHorizontal, Pencil, Pin, PinOff, Plus, Search, Settings, Code, SquareTerminal, TicketCheck, Upload, X,
 } from 'lucide-react';
 import { TAB_MIME } from '@/lib/dnd';
 import * as ipc from '@/lib/ipc';
@@ -52,7 +52,7 @@ export interface SessionsSidebarProps {
   /** Transcript mtimes by Claude session id, for the age column. */
   lastUsed: Map<string, number>;
   showSettings: boolean;
-  /** The Library (closed sessions) is the overlay currently up — the footer
+  /** History (closed sessions) is the overlay currently up — the footer
    *  row's pressed state, not a switch for the Archived group below. */
   showArchive: boolean;
   /** What the list shows: `ALL`, `INBOX`, or a project's directory. Lives in
@@ -338,7 +338,7 @@ export function inScope(tab: Tab, scope: string): boolean {
 }
 
 /** A project's identity colour, the same hue the New session dialog and the
- *  Library use for it. The Inbox has none — it's drawn as a hollow ring. */
+ *  History use for it. The Inbox has none — it's drawn as a hollow ring. */
 function hueStyle(projects: string[], dir: string | null): React.CSSProperties {
   if (dir === null) return { boxShadow: 'inset 0 0 0 1px var(--muted-foreground)' };
   return { background: `hsl(${projectHue(Math.max(0, projects.indexOf(dir)))} 60% 62%)` };
@@ -438,7 +438,7 @@ const SMALL_SCOPE = 8;
  *  Two levels. At the top: every session grouped by when — Now (live or
  *  pinned), Today, then older days folded — and the projects, each a row you
  *  go into. Inside a project: the same groups for that project alone, under a
- *  header in its colour with a way back. Closed sessions live in the Library,
+ *  header in its colour with a way back. Closed sessions live in History,
  *  not here. See docs/features/terminals.md. */
 export default function SessionsSidebar({
   tabs, selectedId, projects, lastUsed, showSettings, showArchive, scope, onScopeChange,
@@ -520,7 +520,7 @@ export default function SessionsSidebar({
       style={scope !== ALL ? { boxShadow: `inset 0 2px 0 ${scopeDir ? hueStyle(projects, scopeDir).background : 'var(--muted-foreground)'}` } : undefined}
     >
       {/* Every destination in the app, in one place. They used to be split
-          three ways — a Sessions/To-Do switch centred in the title bar, Library
+          three ways — a Sessions/To-Do switch centred in the title bar, History
           and Settings at the foot of this column, ⌘K in the title bar's
           corner — so "where do I go" had three answers. */}
       <nav aria-label="Main" className="flex flex-col gap-px px-1.5 pt-2 pb-2 shrink-0 border-b border-border">
@@ -546,7 +546,7 @@ export default function SessionsSidebar({
         {onShowJira && (
           <NavRow icon={TicketCheck} label="My issues" active={view === 'jira' && !showSettings && !showArchive} onClick={onShowJira} />
         )}
-        <NavRow icon={Library} label="Library" active={showArchive} onClick={onToggleArchive} />
+        <NavRow icon={HistoryIcon} label="History" active={showArchive} onClick={onToggleArchive} />
         <NavRow icon={Settings} label="Settings" hint="⌘," active={showSettings} onClick={onToggleSettings} />
       </nav>
 
@@ -741,7 +741,7 @@ export default function SessionsSidebar({
         )}
 
         {/* Archived sessions are still in the workspace, so they get a group
-            of their own rather than living in the Library — that holds
+            of their own rather than living in History — that holds
             *closed* sessions, which is a different thing. */}
         {archived.length > 0 && (
           <div className="mt-3">
@@ -831,8 +831,8 @@ export function CollapsedRail({
           <TicketCheck size={15} />
         </button>
       )}
-      <button type="button" aria-label="Library" title="Library" className={square(showArchive)} onClick={onToggleArchive}>
-        <Library size={15} />
+      <button type="button" aria-label="History" title="History" className={square(showArchive)} onClick={onToggleArchive}>
+        <HistoryIcon size={15} />
       </button>
       <button type="button" aria-label="Settings" title="Settings  ⌘," className={square(showSettings)} onClick={onToggleSettings}>
         <Settings size={15} />

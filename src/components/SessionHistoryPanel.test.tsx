@@ -76,7 +76,7 @@ describe('SessionHistoryPanel', () => {
 
     await userEvent.type(screen.getByPlaceholderText('Search names, folders and transcripts…'), 'testing session');
     // The matched substring renders inside its own <mark> — still present, so the row survived the filter.
-    expect(screen.getByText('Testing Session')).toBeInTheDocument();
+    expect(await screen.findByText('Testing Session')).toBeInTheDocument();
   });
 
   it('a search term matching only the name does not fall into the "no results" empty state', async () => {
@@ -85,6 +85,29 @@ describe('SessionHistoryPanel', () => {
 
     await userEvent.type(screen.getByPlaceholderText('Search names, folders and transcripts…'), 'zzz-not-a-match');
     expect(await screen.findByText(/No sessions match/)).toBeInTheDocument();
+  });
+
+  it('hides the list while transcripts are searched, so Enter cannot resume a half-searched row', async () => {
+    let finish: (hits: TranscriptHit[]) => void = () => {};
+    vi.mocked(ipc.searchTranscripts).mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+    const { onResume } = renderPanel();
+    await screen.findByText('add a script to bulk-rename screenshots');
+
+    await userEvent.type(screen.getByPlaceholderText('Search names, folders and transcripts…'), 'bulk{Enter}');
+    expect(screen.getByText('Searching transcripts…')).toBeInTheDocument();
+    expect(document.querySelector('[data-library-row]')).toBeNull();
+    expect(onResume).not.toHaveBeenCalled();
+    // Nothing to move to yet, so focus stays in the field, not on the page.
+    expect(document.activeElement).toBe(screen.getByPlaceholderText('Search names, folders and transcripts…'));
+
+    finish([]);
+    expect(await screen.findByText('bulk')).toBeInTheDocument();
+    expect(screen.queryByText('Searching transcripts…')).toBeNull();
+    // Enter in the field hands over to the list; a second Enter resumes.
+    await userEvent.type(screen.getByPlaceholderText('Search names, folders and transcripts…'), '{Enter}');
+    expect(onResume).not.toHaveBeenCalled();
+    await userEvent.keyboard('{Enter}');
+    expect(onResume).toHaveBeenCalledTimes(1);
   });
 
   describe('the calendar', () => {

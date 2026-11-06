@@ -209,11 +209,11 @@ treatment. Before this, most custom buttons had none at all.
 Anything that destroys something — closing a session, removing a project,
 deleting a transcript, a task or a theme — goes through `confirmAction()`
 (`src/lib/confirm.ts`), rendered by the single `ConfirmDialog` App mounts. One
-dialog, not per-component inline "Delete? Yes / No" rows: the Library used to
+dialog, not per-component inline "Delete? Yes / No" rows: History used to
 have one, and it was a different shape from every other place that deletes.
 
 - The title names the thing (`Close "API refactor"?`), the body says what
-  happens **and what survives** ("the conversation stays in the Library"), and
+  happens **and what survives** ("the conversation stays in History"), and
   the button repeats the verb of the menu item that asked.
 - Focus starts on **Cancel**, so a reflexive Enter never destroys anything; Esc
   and a click outside cancel too.
@@ -281,10 +281,10 @@ came down to what kind of content is involved, not taste:
   strip**, not a rail. Open terminal/file tabs are equals you bounce between
   mid-task; a rail would frame them as categories, which they aren't.
 - **App-level destinations** → **one block, in one place**: Search, Sessions,
-  To-Do, Library, Settings at the top of the sidebar, in the list's own rhythm;
+  To-Do, History, Settings at the top of the sidebar, in the list's own rhythm;
   the same five as squares, same order, when the sidebar folds to its rail. They
   had drifted into three places — a Sessions/To-Do switch centred in the title
-  bar, Library/Settings at the sidebar's foot, ⌘K in the title bar's corner —
+  bar, History/Settings at the sidebar's foot, ⌘K in the title bar's corner —
   so "where do I go" had three answers. The title bar now holds only context
   (a breadcrumb: project › issue › session) and status (the usage meter).
 - *(Superseded)* **App-level destinations, next to a screen that isn't about them** → a

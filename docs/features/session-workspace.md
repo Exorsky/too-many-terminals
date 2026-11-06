@@ -10,7 +10,7 @@
 │ ⌘K Search…      ├──────────────────────────────┬─────────────────────────────────┤
 │ Sessions    14  │ Claude                     × │ Shell                         × │
 │ To-Do        4  │                              │                                 │
-│ Library         │        T E R M I N A L       │          S H E L L              │
+│ History         │        T E R M I N A L       │          S H E L L              │
 │ Settings    ⌘,  │                              │                                 │
 │ + New session   │                              │                                 │
 │ Now / Today / … │                              │                                 │

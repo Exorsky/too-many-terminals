@@ -1,6 +1,6 @@
-# Session history: the Library
+# Session history
 
-The **Library** row in the sidebar footer opens every past Claude Code session merged
+The **History** row in the sidebar navigation (called Library until v0.31.0) opens every past Claude Code session merged
 across every open project folder, read from the transcripts Claude Code itself writes
 under `~/.claude/projects/<encoded-dir>/*.jsonl`. Read-only and offline; nothing uploaded.
 
@@ -45,7 +45,8 @@ Click picks a row, double-click or Enter resumes it.
   The placeholder `Claude` a fresh tab starts with is not a name and never enters the map.
 - With more than one folder open, rows show their folder and the Projects filter appears.
 - **Resume** (double-click / Enter / the Resume button) opens a new Claude tab, in that entry's project, with
-  `claude --resume <sessionId>`.
+  `claude --resume <sessionId>`. If that session is already in the workspace (live, asleep or archived), the existing
+  session is opened instead — never a second tab on the same transcript.
 - **Read** (the Read button / Space) opens the transcript as a rendered document — see
   [session-reader.md](session-reader.md).
 - A live session's tab context menu also has **Open in VS Code**, handing it off to the
@@ -65,6 +66,7 @@ Click picks a row, double-click or Enter resumes it.
   the days clickable there and not on Home. History lists transcripts without scanning them,
   so its squares carry no token figure — the caption simply leaves it out.
 - Keyboard: `/` search, ↑↓ pick, Enter resume, Space read, Del delete, `c` calendar.
+  Enter in the search field only moves focus to the list; a second Enter resumes.
 
 ## Searching inside transcripts
 
@@ -87,11 +89,12 @@ invalidated on every turn Claude writes, which is a cache-coherency problem
 bought in exchange for nothing. Revisit if the numbers stop holding.
 
 The frontend keeps the two searches apart: the metadata filter is local and
-instant, the transcript scan is debounced by 220ms and crosses to Rust. That
-split is why the list reacts on the first keystroke. While the scan runs the
-panel shows a `Searching transcripts…` status row — without it, a short list
-reads as "there is nothing else" rather than "still looking". Queries shorter
-than two characters never start a scan.
+instant, the transcript scan is debounced by 220ms and crosses to Rust. While
+the scan runs the list is hidden and a `Searching transcripts…` row stands in
+its place: showing the metadata matches first meant a list that reshuffled when
+the hits landed, and a reflexive Enter resumed whatever happened to be first.
+Nothing is pickable until the results are in. Queries shorter than two
+characters never start a scan, so the list stays put for them.
 
 ### Recovering a project directory
 
