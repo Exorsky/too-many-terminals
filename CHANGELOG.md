@@ -11,6 +11,8 @@ listed here; see `git log` for the full history.
 
 ## [Unreleased]
 
+## [0.31.1] - 2026-11-06
+
 ### Changed
 
 - **Library is now History.** The panel lists every past session by day, so it is
@@ -638,6 +640,7 @@ listed here; see `git log` for the full history.
   italics, autolinks, and horizontal rules.
 
 [Unreleased]: https://github.com/Exorsky/too-many-terminals/compare/v0.30.0...HEAD
+[0.31.1]: https://github.com/Exorsky/too-many-terminals/compare/v0.31.0...v0.31.1
 [0.31.0]: https://github.com/Exorsky/too-many-terminals/compare/v0.30.0...v0.31.0
 [0.30.0]: https://github.com/Exorsky/too-many-terminals/compare/v0.29.0...v0.30.0
 [0.29.0]: https://github.com/Exorsky/too-many-terminals/compare/v0.28.1...v0.29.0
