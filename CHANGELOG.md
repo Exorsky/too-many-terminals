@@ -11,6 +11,14 @@ listed here; see `git log` for the full history.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Sessions are no longer named after an apology.** When the auto-namer
+  answers "I can't help with this…" (a prompt that is only a link or a
+  screenshot), the session takes the first words of your prompt instead. IDE
+  context like `<ide_opened_file>` no longer leaks into names, and a ticket
+  key in the prompt now leads the name.
+
 ## [0.31.1] - 2026-11-06
 
 ### Changed

@@ -122,6 +122,20 @@ elsewhere) and gives up silently. Calls are serialized through a single worker t
 (`NamingQueue`, spawned once in `lib.rs`'s `.setup()`) — concurrent `claude -p` calls
 get rate-limited.
 
+What goes in and what comes back is filtered (`namer.rs`, all unit-tested):
+
+- **`strip_tagged_blocks`** drops `<tag>…</tag>` blocks from the prompt before
+  Haiku sees it. An IDE's `<ide_opened_file>` context used to be echoed back
+  as the title.
+- **`clean_name`** keeps the reply's first line and rejects anything that
+  reads as a refusal (`I can't…`, `I cannot…`, `I don't…`, `Sorry…`, a
+  leading `<`). A prompt that is only a link or "see the screenshot" used to
+  name the session "I can't help with this. The message you've provide".
+- **`fallback_name`** — when the reply is rejected or the call fails, the
+  first six words of the prompt (links removed) become the name instead.
+- The prompt asks Haiku to **lead with a ticket key** when the message has
+  one, so the [Jira chip](jira-links.md) and its hover card name the session.
+
 The hook client (`run_hook_client`, `prompt-submit` case) gates itself with a flag
 file (`hooks::naming_flag_path`, `<tmp>/too-many-terminals-named-<tabId>`) so only the
 *first* prompt of a session triggers naming; the flag is written right after sending

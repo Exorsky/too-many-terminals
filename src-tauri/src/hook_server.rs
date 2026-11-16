@@ -42,7 +42,7 @@ enum RoutedAction {
     /// idle/requires_response/new.
     Status { tab_id: String, status: &'static str, detail: Option<String> },
     SessionResolved { tab_id: String, session_id: String },
-    GenerateName { tab_id: String, prompt: String },
+    GenerateName { tab_id: String, message: String },
     NamingFlagReset { tab_id: String },
 }
 
@@ -107,10 +107,9 @@ fn route_message(msg: &HookMessage) -> Vec<RoutedAction> {
         }
 
         "tab:generate-name" => match msg.data.as_deref() {
-            Some(prompt) if !prompt.trim().is_empty() => vec![RoutedAction::GenerateName {
-                tab_id: msg.tab_id.clone(),
-                prompt: crate::namer::naming_prompt(prompt),
-            }],
+            Some(prompt) if !prompt.trim().is_empty() => {
+                vec![RoutedAction::GenerateName { tab_id: msg.tab_id.clone(), message: prompt.to_string() }]
+            }
             _ => vec![],
         },
 
@@ -144,8 +143,8 @@ fn apply_action(action: RoutedAction, app: &AppHandle, naming_queue: &NamingQueu
         RoutedAction::SessionResolved { tab_id, session_id } => {
             let _ = app.emit("claude-session-resolved", SessionResolvedPayload { tab_id, session_id });
         }
-        RoutedAction::GenerateName { tab_id, prompt } => {
-            naming_queue.submit(NamingJob { tab_id, prompt });
+        RoutedAction::GenerateName { tab_id, message } => {
+            naming_queue.submit(NamingJob { tab_id, message });
         }
         RoutedAction::NamingFlagReset { tab_id } => {
             hooks::reset_naming_flag(&tab_id);
@@ -284,15 +283,9 @@ mod tests {
     }
 
     #[test]
-    fn generate_name_wraps_the_prompt() {
+    fn generate_name_carries_the_prompt() {
         let actions = route_message(&msg("t1", "tab:generate-name", Some("fix the bug")));
-        match &actions[..] {
-            [RoutedAction::GenerateName { tab_id, prompt }] => {
-                assert_eq!(tab_id, "t1");
-                assert!(prompt.contains("fix the bug"));
-            }
-            other => panic!("unexpected: {other:?}"),
-        }
+        assert_eq!(actions, vec![RoutedAction::GenerateName { tab_id: "t1".into(), message: "fix the bug".into() }]);
     }
 
     #[test]

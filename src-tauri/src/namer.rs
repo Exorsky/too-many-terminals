@@ -21,17 +21,75 @@ const PROMPT_TRUNCATE_CHARS: usize = 500;
 const NAMING_TIMEOUT: Duration = Duration::from_secs(30);
 
 pub fn naming_prompt(user_message: &str) -> String {
-    let truncated: String = user_message.chars().take(PROMPT_TRUNCATE_CHARS).collect();
+    let stripped = strip_tagged_blocks(user_message);
+    let truncated: String = stripped.trim().chars().take(PROMPT_TRUNCATE_CHARS).collect();
     format!(
-        "Generate a short tab title (3-5 words) for a coding conversation that starts with this message. Reply with ONLY the title, no quotes, no punctuation:\n\n{truncated}"
+        "Generate a short tab title (3-5 words) for a conversation that starts with this message. If it mentions a ticket key like ABC-123, start the title with that key. Reply with ONLY the title, no quotes, no punctuation:\n\n{truncated}"
     )
 }
 
-/// Trims whitespace/wrapping quotes and caps length; `None` if nothing useful remains.
+/// Removes `<tag>…</tag>` blocks (an IDE's `<ide_opened_file>`, system
+/// reminders) that ride along with a prompt — they aren't what the user typed,
+/// and Haiku used to echo them back as the title.
+pub fn strip_tagged_blocks(text: &str) -> String {
+    let mut out = String::new();
+    let mut rest = text;
+    while let Some(start) = rest.find('<') {
+        let after = &rest[start + 1..];
+        let tag: String =
+            after.chars().take_while(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '-').collect();
+        let close = format!("</{tag}>");
+        let end = (!tag.is_empty() && after[tag.len()..].starts_with('>'))
+            .then(|| after.find(&close))
+            .flatten();
+        match end {
+            Some(end) => {
+                out.push_str(&rest[..start]);
+                rest = &after[end + close.len()..];
+            }
+            None => {
+                out.push_str(&rest[..=start]);
+                rest = after;
+            }
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+/// Haiku answers a prompt it can't title (a bare URL, "see the image") with
+/// an apology instead of a title. Those used to become the session name.
+fn looks_like_refusal(name: &str) -> bool {
+    const OPENERS: [&str; 9] = [
+        "i can't", "i can\u{2019}t", "i cannot", "i don't", "i do not", "i'm sorry", "i\u{2019}m sorry",
+        "i'm unable", "i am unable",
+    ];
+    let lower = name.to_lowercase();
+    lower.starts_with('<') || lower.starts_with("sorry") || OPENERS.iter().any(|o| lower.starts_with(o))
+}
+
+/// Trims whitespace/wrapping quotes and caps length; `None` if nothing useful
+/// remains or the reply is a refusal rather than a title.
 pub fn clean_name(raw: &str) -> Option<String> {
-    let trimmed = raw.trim().trim_matches(|c| c == '"' || c == '\'').trim();
+    let first_line = raw.trim().lines().next().unwrap_or("");
+    let trimmed = first_line.trim().trim_matches(|c| c == '"' || c == '\'').trim();
+    if looks_like_refusal(trimmed) {
+        return None;
+    }
     let truncated: String = trimmed.chars().take(NAME_MAX_CHARS).collect();
     (!truncated.is_empty()).then_some(truncated)
+}
+
+/// The name to use when the model gives nothing usable: the first few words
+/// the user typed, minus tagged blocks and links.
+pub fn fallback_name(user_message: &str) -> Option<String> {
+    let stripped = strip_tagged_blocks(user_message);
+    let words: Vec<&str> = stripped
+        .split_whitespace()
+        .filter(|w| !w.starts_with("http://") && !w.starts_with("https://"))
+        .take(6)
+        .collect();
+    clean_name(&words.join(" "))
 }
 
 fn naming_flags() -> Vec<String> {
@@ -119,7 +177,8 @@ fn kill_pid(pid: u32) {
 
 pub struct NamingJob {
     pub tab_id: String,
-    pub prompt: String,
+    /// The user's first prompt, as typed.
+    pub message: String,
 }
 
 #[derive(Serialize, Clone)]
@@ -142,7 +201,9 @@ impl NamingQueue {
         let (sender, receiver) = mpsc::channel::<NamingJob>();
         std::thread::spawn(move || {
             for job in receiver {
-                if let Some(name) = run_naming_subprocess(&job.prompt) {
+                let name = run_naming_subprocess(&naming_prompt(&job.message))
+                    .or_else(|| fallback_name(&job.message));
+                if let Some(name) = name {
                     let _ = app.emit(
                         "claude-tab-named",
                         TabNamedPayload { tab_id: job.tab_id, name },
@@ -187,6 +248,44 @@ mod tests {
         let long = "a".repeat(100);
         let cleaned = clean_name(&long).unwrap();
         assert_eq!(cleaned.chars().count(), 50);
+    }
+
+    #[test]
+    fn clean_name_rejects_refusals() {
+        for reply in [
+            "I can't help with this. The message you've provided",
+            "I cannot access external URLs",
+            "I don't see any images attached to your message",
+            "I\u{2019}m sorry, I can't",
+            "<ide_opened_file>The user opened",
+        ] {
+            assert_eq!(clean_name(reply), None, "{reply}");
+        }
+        assert_eq!(clean_name("Icinga alert tuning"), Some("Icinga alert tuning".into()));
+    }
+
+    #[test]
+    fn clean_name_keeps_only_the_first_line() {
+        assert_eq!(clean_name("Fix login bug\nBecause the message is about"), Some("Fix login bug".into()));
+    }
+
+    #[test]
+    fn strip_tagged_blocks_drops_ide_context_but_keeps_plain_angle_brackets() {
+        let msg = "<ide_opened_file>The user opened /a/b.ts</ide_opened_file>review this file";
+        assert_eq!(strip_tagged_blocks(msg), "review this file");
+        assert_eq!(strip_tagged_blocks("is a < b and b > c"), "is a < b and b > c");
+        assert_eq!(strip_tagged_blocks("<unclosed>text"), "<unclosed>text");
+        assert!(!naming_prompt(msg).contains("ide_opened_file"));
+    }
+
+    #[test]
+    fn fallback_name_uses_the_first_words_without_links() {
+        assert_eq!(
+            fallback_name("https://teams.microsoft.com/l/x read the last message in this chat please"),
+            Some("read the last message in this".into()),
+        );
+        assert_eq!(fallback_name("https://example.com"), None);
+        assert_eq!(fallback_name("<ide_selection>x</ide_selection>  "), None);
     }
 
     #[test]
