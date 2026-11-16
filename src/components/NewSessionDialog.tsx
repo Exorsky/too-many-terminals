@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { Dialog } from 'radix-ui';
-import { Inbox, Plus, X } from 'lucide-react';
-import { projectHue } from '@/types';
+import { History, Inbox, Pencil, Plus, X } from 'lucide-react';
+import { projectHue, type Tab } from '@/types';
 import { cn, folderName } from '@/lib/utils';
-import { fetchIssue, issueUrl, jiraOn, parseIssueInput } from '@/lib/jira';
+import { fetchIssue, issuePrompt, jiraOn, parseIssueInput, sessionsForIssue } from '@/lib/jira';
+import { compactAge, recencyOf } from '@/lib/sessions';
 import { useSettings } from '@/lib/settings-store';
 import type { NewSessionKind } from './SessionsSidebar';
 
@@ -40,7 +41,16 @@ export interface NewSessionDialogProps {
   onAddProject: () => void;
   /** Open with this Jira issue filled in (from an issue card). */
   initialIssue?: { key: string; summary: string } | null;
+  /** Every session, so a ticket that already has one is offered first. */
+  sessions?: Tab[];
+  /** Transcript mtimes by Claude session id — which of those is the latest. */
+  lastUsed?: Map<string, number>;
+  /** Go back to an existing session instead of starting another. */
+  onResume?: (tabId: string) => void;
 }
+
+const NO_SESSIONS: Tab[] = [];
+const NO_TIMES = new Map<string, number>();
 
 /** New session: where, then what, then an optional name.
  *
@@ -50,6 +60,7 @@ export interface NewSessionDialogProps {
  *  See docs/features/scratch-sessions.md. */
 export default function NewSessionDialog({
   open, onOpenChange, defaultDir, projects, counts, onStart, onAddProject, initialIssue = null,
+  sessions = NO_SESSIONS, lastUsed = NO_TIMES, onResume,
 }: NewSessionDialogProps) {
   const [dir, setDir] = useState<string | null>(null);
   const [kind, setKind] = useState<NewSessionKind>('claude');
@@ -79,6 +90,14 @@ export default function NewSessionDialog({
   }, [issueKey, jiraTokenVar, summary?.key]);
   const issueTitle = summary?.key === issueKey ? summary.text : '';
 
+  // A ticket that already has a session gets that session offered first: the
+  // same ticket spread over five sessions is five half-histories.
+  const seenAt = (t: Tab) => recencyOf(t, t.resumeSessionId ? lastUsed.get(t.resumeSessionId) : undefined);
+  const existing = issueKey && kind !== 'shell' && onResume
+    ? sessionsForIssue(sessions, issueKey).sort((a, b) => seenAt(b) - seenAt(a))
+    : NO_SESSIONS;
+  const now = Date.now();
+
   // Every opening starts from the defaults; a half-filled form from last time
   // would start the wrong thing on a reflexive Enter.
   useEffect(() => {
@@ -101,14 +120,16 @@ export default function NewSessionDialog({
   }, [projects, open]);
 
   const wheres: (string | null)[] = [null, ...projects];
-  const start = () => {
+  const resume = (tabId: string) => { onOpenChange(false); onResume?.(tabId); };
+  const start = (forceNew = false) => {
+    if (!forceNew && existing.length) { resume(existing[0].id); return; }
     onOpenChange(false);
     if (!issueKey) { onStart(dir, kind, name.trim()); return; }
     const title = issueTitle ? `${issueKey} · ${issueTitle}` : issueKey;
-    // The prompt is the ticket, nothing invented around it — and it lands
-    // unsubmitted, the same as starting a session from a To-Do.
+    // The ticket, or the project's template from Settings › Jira — and it
+    // lands unsubmitted, the same as starting a session from a To-Do.
     const prompt = kind === 'shell' ? undefined
-      : `${issueKey}${issueTitle ? `: ${issueTitle}` : ''}\n${issueUrl(jiraBaseUrl, issueKey)}`;
+      : issuePrompt(settings.jiraPromptTemplates ?? {}, issueKey, issueTitle, jiraBaseUrl);
     onStart(dir, kind, name.trim() || title.slice(0, 80), prompt);
   };
 
@@ -124,7 +145,7 @@ export default function NewSessionDialog({
       setKind(KINDS[Math.max(0, Math.min(KINDS.length - 1, i))].kind);
     } else if (e.key === 'Enter' && !(e.target instanceof HTMLButtonElement)) {
       e.preventDefault();
-      start();
+      start(e.metaKey || e.ctrlKey);
     }
   };
 
@@ -220,6 +241,34 @@ export default function NewSessionDialog({
                 </label>
               )}
 
+              {existing.length > 0 && (
+                <div data-existing-sessions className="rounded-sm border border-border overflow-hidden">
+                  <div className="flex items-center gap-1.5 px-2.5 h-7 border-b border-border text-[12px] text-dim">
+                    <History size={12} className="text-muted-foreground" />
+                    {issueKey} already has {existing.length} session{existing.length === 1 ? '' : 's'}
+                  </div>
+                  {existing.slice(0, 3).map((t, i) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => resume(t.id)}
+                      className={cn(
+                        'flex items-center gap-2 w-full h-[30px] px-2.5 border-none cursor-pointer font-inherit text-left text-[12.5px]',
+                        i === 0 ? 'bg-selected text-foreground' : 'bg-transparent text-dim hover:bg-hover hover:text-foreground',
+                      )}
+                    >
+                      <span className="flex-1 truncate">{t.name}</span>
+                      {!!t.writes && (
+                        <span className="flex items-center gap-0.5 font-mono tabular-nums text-[10.5px] text-muted-foreground">
+                          <Pencil size={10} />{t.writes}
+                        </span>
+                      )}
+                      <span className="font-mono tabular-nums text-[11px] text-muted-foreground">{compactAge(seenAt(t), now)}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
               <label className="flex flex-col gap-1.5">
                 <span className="text-[12px] font-semibold text-muted-foreground">
                   Name <span className="font-normal text-faint">— optional{kind !== 'shell' && ', Claude names it otherwise'}</span>
@@ -247,12 +296,21 @@ export default function NewSessionDialog({
             <Dialog.Close className="ml-auto px-3 h-7 rounded-sm border border-border bg-transparent text-[13px] text-dim cursor-pointer font-inherit hover:bg-hover hover:text-foreground">
               Cancel
             </Dialog.Close>
+            {existing.length > 0 && (
+              <button
+                type="button"
+                className="px-3 h-7 rounded-sm border border-border bg-transparent text-[13px] text-dim cursor-pointer font-inherit hover:bg-hover hover:text-foreground"
+                onClick={() => start(true)}
+              >
+                New session anyway <kbd className="ml-1 font-mono text-[11px] text-faint">⌘↵</kbd>
+              </button>
+            )}
             <button
               type="button"
               className="px-3 h-7 rounded-sm border border-border-hover bg-transparent text-[13px] text-foreground cursor-pointer font-inherit hover:bg-hover"
-              onClick={start}
+              onClick={() => start()}
             >
-              Start session
+              {existing.length > 0 ? 'Resume latest' : 'Start session'}
             </button>
           </div>
         </Dialog.Content>

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ExternalLink, MessageSquareReply, Plus, RefreshCw, SquareTerminal, X } from 'lucide-react';
 import * as ipc from '@/lib/ipc';
 import type { JiraIssue, JiraIssueDetail } from '@/lib/ipc';
-import { fetchIssueDetail, fetchMyIssues, findIssueKeys, issueUrl } from '@/lib/jira';
+import { fetchIssueDetail, fetchMyIssues, issueUrl, sessionsForIssue } from '@/lib/jira';
 import { sessionState, STATE_LABEL } from '@/lib/sessions';
 import { useSettings } from '@/lib/settings-store';
 import { cn } from '@/lib/utils';
@@ -87,8 +87,7 @@ export default function JiraView({ sessions, onOpenSession, onNewSession }: {
   }, [jiraTokenVar]);
   useEffect(() => { if (jiraTokenVar) load(false); }, [jiraTokenVar, load]);
 
-  const sessionFor = (key: string) =>
-    sessions.find((s) => !s.archived && findIssueKeys(s.name, [key.split('-')[0]]).some((m) => m.key === key));
+  const sessionFor = (key: string) => sessionsForIssue(sessions, key)[0];
   /** The one thing to do with an issue: go back to its session, or start one. */
   const act = (issue: JiraIssue) => {
     const session = sessionFor(issue.key);

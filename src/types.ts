@@ -298,4 +298,8 @@ export interface AppSettings {
    *  looked up in the app's environment and then in ~/.claude/settings.json's
    *  `env` block. Empty means links only, no issue details. */
   jiraTokenVar: string;
+  /** Project key → the prompt pasted into a session started from one of its
+   *  issues, with `{key}`, `{summary}`, `{url}` filled in. A missing or empty
+   *  entry pastes the ticket itself. */
+  jiraPromptTemplates?: Record<string, string>;
 }

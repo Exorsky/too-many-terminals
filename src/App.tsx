@@ -1455,6 +1455,9 @@ export default function App() {
         onStart={(dir, kind, name, prompt) => { void newSession(dir, kind, name, prompt); }}
         onAddProject={handleAddProject}
         initialIssue={newIssue}
+        sessions={sessions}
+        lastUsed={lastUsed}
+        onResume={handleSelect}
       />
       <IssueCard
         sessions={sessions}

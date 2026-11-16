@@ -123,6 +123,21 @@ prompt is pre-filled — not submitted — with the key, title and link, the sam
 way [starting from a To-Do](todo.md) works. "New session for this" on a card
 opens the dialog with the issue filled in.
 
+**Prompt templates.** Settings › Integrations › Jira has a *Prompt for KEY
+issues* field per project key. When one is set, it replaces the default prompt,
+with `{key}`, `{summary}` and `{url}` filled in (`issuePrompt` in
+`src/lib/jira.ts`). For example `/inmn-ticket-analysis {key}` makes every INMN
+session start on that skill. It is still pasted, not submitted.
+
+**A ticket that already has a session.** If open sessions already carry the key
+in their name (`sessionsForIssue`, the same match My issues uses for its
+session dot), the dialog lists up to three, newest first, with their write
+badge and age. **Enter resumes the latest** and the primary button reads
+*Resume latest*. **⌘↵ / Ctrl+↵**, or *New session anyway*, starts a new one.
+Clicking a listed session opens that one. The same ticket spread over several
+sessions leaves each with half the history, which is what this is for. Shell
+sessions skip the check.
+
 ## Files
 
 - `src/lib/jira.ts` (+ `jira.test.ts`) — detector, URL, input parsing, cache,

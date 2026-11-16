@@ -120,4 +120,20 @@ describe('Settings › Integrations › Jira', () => {
     const saved = vi.mocked(ipc.saveSettings).mock.calls.map((c) => c[0].jiraTokenVar);
     expect(saved).not.toContain('aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789abcdEFGH');
   });
+  it('keeps a prompt template per project key, and an empty one removes it', async () => {
+    render(<SettingsView />);
+    await userEvent.click(screen.getByRole('button', { name: /Jira/ }));
+    await userEvent.type(screen.getByLabelText('Project keys'), 'INMN, ITA');
+    await userEvent.tab();
+    const inmn = await screen.findByLabelText('Prompt for INMN issues');
+    expect(screen.getByLabelText('Prompt for ITA issues')).toBeInTheDocument();
+    await userEvent.type(inmn, '/inmn-ticket-analysis {{key}');
+    await userEvent.tab();
+    expect(ipc.saveSettings).toHaveBeenLastCalledWith(
+      expect.objectContaining({ jiraPromptTemplates: { INMN: '/inmn-ticket-analysis {key}' } }),
+    );
+    await userEvent.clear(inmn);
+    await userEvent.tab();
+    expect(ipc.saveSettings).toHaveBeenLastCalledWith(expect.objectContaining({ jiraPromptTemplates: {} }));
+  });
 });

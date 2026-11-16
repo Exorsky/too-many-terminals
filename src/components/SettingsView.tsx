@@ -337,6 +337,22 @@ function JiraIntegration() {
             ? <span className="text-success">● found</span>
             : <span className="text-attention">● not found</span>}
       />
+      {settings.jiraProjectKeys.map((key, i) => (
+        <TextRow
+          key={key}
+          title={`Prompt for ${key} issues`}
+          description={i === 0
+            ? 'What a session started from an issue is handed — pasted, never sent, so you press Enter yourself. {key}, {summary} and {url} are filled in. Empty pastes the ticket itself.'
+            : ''}
+          value={settings.jiraPromptTemplates?.[key] ?? ''}
+          placeholder="{key}: {summary}"
+          mono
+          onCommit={(v) => {
+            const { [key]: _old, ...rest } = settings.jiraPromptTemplates ?? {};
+            patchSettings({ jiraPromptTemplates: v ? { ...rest, [key]: v } : rest });
+          }}
+        />
+      ))}
     </div>
   );
 }

@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -42,6 +43,9 @@ pub struct AppSettings {
     pub jira_project_keys: Vec<String>,
     /// Name of the env var holding a Jira token — the name, never the value.
     pub jira_token_var: String,
+    /// Project key → prompt template for a session started from one of its
+    /// issues (`{key}`, `{summary}`, `{url}`). Missing means the ticket itself.
+    pub jira_prompt_templates: BTreeMap<String, String>,
 }
 
 impl Default for AppSettings {
@@ -60,6 +64,7 @@ impl Default for AppSettings {
             jira_base_url: String::new(),
             jira_project_keys: Vec::new(),
             jira_token_var: String::new(),
+            jira_prompt_templates: BTreeMap::new(),
         }
     }
 }

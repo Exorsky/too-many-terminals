@@ -22,6 +22,13 @@ listed here; see `git log` for the full history.
 - **A waiting session says what it's asking.** Its row and its desktop
   notification read "Permission · running api jira POST …" instead of a bare
   "Needs your input".
+- **One ticket, one session.** Typing a Jira key in New session that an open
+  session already carries lists those sessions: Enter resumes the latest,
+  ⌘↵ (Ctrl+↵) starts a new one anyway.
+- **Prompt templates per Jira project.** Settings › Integrations › Jira takes a
+  prompt per project key, e.g. `/inmn-ticket-analysis {key}`, pasted into
+  every session started from that project's issues. `{key}`, `{summary}` and
+  `{url}` are filled in.
 
 ### Fixed
 

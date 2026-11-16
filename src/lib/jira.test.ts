@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { findIssueKeys, firstIssueKey, issueUrl, parseIssueInput, stripIssueKey } from './jira';
+import {
+  findIssueKeys, firstIssueKey, issuePrompt, issueUrl, parseIssueInput, sessionsForIssue, stripIssueKey,
+} from './jira';
+import type { Tab } from '@/types';
 
 describe('finding issue keys', () => {
   it('finds every key and where it sits', () => {
@@ -135,4 +138,27 @@ it('sweeping across keys with a card open only shows the key the pointer stops o
 
   act(() => { hideIssueCard(); vi.advanceTimersByTime(500); });
   vi.useRealTimers();
+});
+
+describe('starting a session from an issue', () => {
+  const base = 'https://jira.example.com';
+
+  it('hands over the ticket itself when the project has no template', () => {
+    expect(issuePrompt({}, 'ITA-7', 'Rotate cert', base)).toBe('ITA-7: Rotate cert\nhttps://jira.example.com/browse/ITA-7');
+    expect(issuePrompt({ ITA: '  ' }, 'ITA-7', '', base)).toBe('ITA-7\nhttps://jira.example.com/browse/ITA-7');
+  });
+
+  it("fills in the project's template", () => {
+    const templates = { INMN: '/inmn-ticket-analysis {key}', SCOC: '{key} {summary} {url} {key}' };
+    expect(issuePrompt(templates, 'INMN-5020', 'x', base)).toBe('/inmn-ticket-analysis INMN-5020');
+    expect(issuePrompt(templates, 'SCOC-1', 'CVE', base))
+      .toBe('SCOC-1 CVE https://jira.example.com/browse/SCOC-1 SCOC-1');
+  });
+
+  it('finds the open sessions that already carry the key', () => {
+    const tab = (id: string, name: string, archived = false) =>
+      ({ id, name, archived, kind: 'claude', cwd: '/', projectDir: null, shellId: null, resumeSessionId: null, exited: false, status: 'idle' }) as Tab;
+    const sessions = [tab('a', 'ITA-29941 · add tenant'), tab('b', 'ITA-299410 other'), tab('c', 'ITA-29941', true), tab('d', 'fix ITA-29941')];
+    expect(sessionsForIssue(sessions, 'ITA-29941').map((t) => t.id)).toEqual(['a', 'd']);
+  });
 });

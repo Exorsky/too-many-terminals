@@ -26,6 +26,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   jiraBaseUrl: '',
   jiraProjectKeys: [],
   jiraTokenVar: '',
+  jiraPromptTemplates: {},
 };
 
 let current: AppSettings = { ...DEFAULT_SETTINGS };

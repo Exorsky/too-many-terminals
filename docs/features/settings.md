@@ -71,7 +71,10 @@ A switch first (`jiraEnabled`), then the base URL, project keys and the *name*
 of a token variable. Off keeps the fields but links nothing, asks Jira nothing
 and hides My issues. Settings files from before the switch existed load with
 it on if a URL was set, so upgrading doesn't silently turn Jira off
-(`settings::load_settings`). See [jira-links.md](jira-links.md).
+(`settings::load_settings`). Below them, one *Prompt for KEY issues* field per
+project key (`jiraPromptTemplates`): what a session started from that
+project's issue is handed. Empty removes the entry and pastes the ticket
+itself. See [jira-links.md](jira-links.md#starting-a-session-from-a-ticket).
 
 ## Claude Code › Global files
 

@@ -6,7 +6,7 @@
 import { createHoverCard } from './hover-card';
 import * as ipc from './ipc';
 import type { JiraIssue, JiraIssueDetail } from './ipc';
-import type { AppSettings } from '@/types';
+import type { AppSettings, Tab } from '@/types';
 
 /** `ABC-123`. The project part is 2–10 uppercase letters/digits starting with a
  *  letter; the number never starts with 0. */
@@ -56,6 +56,24 @@ export function parseIssueInput(input: string, projects: string[]): string | nul
   // Upper-cased so a key typed in lowercase still counts; a URL's own parts
   // never look like `ABC-123`.
   return firstIssueKey(input.trim().toUpperCase(), projects);
+}
+
+/** Open (non-archived) sessions whose name carries `key`, in the order given. */
+export function sessionsForIssue(sessions: Tab[], key: string): Tab[] {
+  const project = key.split('-')[0];
+  return sessions.filter((s) => !s.archived && findIssueKeys(s.name, [project]).some((m) => m.key === key));
+}
+
+/** What a session started from an issue is handed: the issue's project
+ *  template from Settings › Jira with `{key}`, `{summary}` and `{url}` filled
+ *  in, or — with no template — the ticket itself, nothing invented around it. */
+export function issuePrompt(
+  templates: Record<string, string>, key: string, summary: string, base: string,
+): string {
+  const url = issueUrl(base, key);
+  const template = templates[key.split('-')[0]]?.trim();
+  if (!template) return `${key}${summary ? `: ${summary}` : ''}\n${url}`;
+  return template.split('{key}').join(key).split('{summary}').join(summary).split('{url}').join(url);
 }
 
 // --- lookups --------------------------------------------------------------
