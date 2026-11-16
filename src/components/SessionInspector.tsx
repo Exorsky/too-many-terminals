@@ -4,6 +4,7 @@ import * as ipc from '@/lib/ipc';
 import { compactAge, recencyOf, sessionState, STATE_LABEL } from '@/lib/sessions';
 import { ACTION_ROW, cn, folderName, ICON_BUTTON } from '@/lib/utils';
 import type { Task, Tab } from '@/types';
+import SessionActivity from './SessionActivity';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
@@ -23,6 +24,8 @@ export interface SessionInspectorProps {
   onOpenDirectory: () => void;
   onCreateTask: () => void;
   onOpenTask: (taskId: string) => void;
+  /** The transcript's write count, so the sidebar badge catches up after a restart. */
+  onWritesSeen: (count: number) => void;
 }
 
 /** One `Label   value` line. The whole panel is these plus two button groups —
@@ -78,7 +81,7 @@ function Action({ icon: Icon, label, onClick, destructive }: {
  *  See docs/features/session-workspace.md. */
 export default function SessionInspector({
   session, projects, lastUsedAt, linkedTasks, onClose, onRename, onSetProject, onArchive,
-  onCloseSession, onOpenInVscode, onOpenDirectory, onCreateTask, onOpenTask,
+  onCloseSession, onOpenInVscode, onOpenDirectory, onCreateTask, onOpenTask, onWritesSeen,
 }: SessionInspectorProps) {
   const [draft, setDraft] = useState(session.name);
   const [now, setNow] = useState(() => Date.now());
@@ -153,6 +156,10 @@ export default function SessionInspector({
         <Field label="Claude id" title={session.resumeSessionId}>
           <span className="text-[11px] text-muted-foreground">{session.resumeSessionId.slice(0, 8)}…</span>
         </Field>
+      )}
+
+      {session.kind === 'claude' && (
+        <SessionActivity session={session} onWritesSeen={onWritesSeen} Label={SectionLabel} />
       )}
 
       {linkedTasks.length > 0 && (

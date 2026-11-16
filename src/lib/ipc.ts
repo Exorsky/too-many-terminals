@@ -81,6 +81,19 @@ export function onTabStatus(
     callback(event.payload.tabId, event.payload.status, event.payload.detail));
 }
 
+/** Fired by the PostToolUse hook when a tool call changed something outside
+ *  the machine (see docs/features/session-activity.md). */
+export function onTabWrite(callback: (tabId: string, label: string) => void): Promise<UnlistenFn> {
+  return listen<{ tabId: string; label: string }>('claude-tab-write', (event) =>
+    callback(event.payload.tabId, event.payload.label));
+}
+
+/** One session's tokens, tool counts and writes, read from its transcript.
+ *  `null` until Claude Code has written one. */
+export function getSessionActivity(cwd: string, sessionId: string): Promise<SessionStat | null> {
+  return invoke('get_session_activity', { cwd, sessionId });
+}
+
 /** Fired once a background `claude -p` call has generated a short title for
  *  a Claude tab from its first prompt. */
 export function onTabNamed(

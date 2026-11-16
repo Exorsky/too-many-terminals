@@ -27,7 +27,7 @@ Two transitions notify:
 
 | transition | notification |
 | --- | --- |
-| → `requires_response` | *"<tab name> — Needs your input"* |
+| → `requires_response` | *"<tab name> — <what it is asking>"*, e.g. "Permission · running git push", falling back to "Needs your input" ([session-activity.md](session-activity.md#what-a-waiting-session-is-asking)) |
 | `working` → `idle` | *"<tab name> — Finished"* |
 
 Shell tabs never emit hook status, so they never notify.

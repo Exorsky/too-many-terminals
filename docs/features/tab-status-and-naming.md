@@ -22,8 +22,8 @@ point straight at this executable.
 `commands.rs::pty_spawn`, only for `kind == "claude"`:
 
 1. `hooks::install_hooks(cwd, exe_path)` merges hook entries into
-   `<cwd>/.claude/settings.local.json` for all six events (SessionStart,
-   UserPromptSubmit, PreToolUse, Stop, Notification, SessionEnd) — matching, not
+   `<cwd>/.claude/settings.local.json` for all seven events (SessionStart,
+   UserPromptSubmit, PreToolUse, PostToolUse, Stop, Notification, SessionEnd) — matching, not
    overwriting, any hooks the user configured themselves (detected by a
    `--too-many-terminals-hook` marker in the command string, so re-installs replace only
    our own entries; the legacy `--claude-terminal-hook` marker is also recognized so
@@ -57,8 +57,9 @@ through the pure `route_message` function (fully unit-tested, no I/O).
 | --- | --- | --- |
 | SessionStart | `tab:ready` | status → `idle` (has a session id) or `new`; also emits `claude-session-resolved` (reinforces/replaces the poll-based detection in `session_history.rs`) |
 | PreToolUse | `tab:status:working` | status → `working`, `data` → an activity summary (see below) |
+| PostToolUse (matcher `Bash\|PowerShell\|mcp__.*`) | `tab:write` | sent only when the call wrote outside the machine; bumps the session's write count — see [session-activity.md](session-activity.md) |
 | Stop | `tab:status:idle` | status → `idle` |
-| Notification | `tab:status:input` | status → `requires_response`, **unless** the notification is Claude Code's idle nudge (message contains "waiting for your input", fired ~60s after a turn ends even when nothing was asked) — that's ignored so a finished session doesn't falsely appear in "Waiting on you". The hook client forwards the notification `message` as `data` so the server can tell the two apart; a missing message defaults to `requires_response`. |
+| Notification | `tab:status:input` | status → `requires_response`, **unless** the notification is Claude Code's idle nudge (message contains "waiting for your input", fired ~60s after a turn ends even when nothing was asked) — that's ignored so a finished session doesn't falsely appear in "Waiting on you". The hook client forwards the notification `message` as `data` so the server can tell the two apart; a missing message defaults to `requires_response`. The message travels on as `detail`, so the row and the notification can say what is being asked ([session-activity.md](session-activity.md#what-a-waiting-session-is-asking)). |
 | SessionEnd | `tab:closed` | ignored — real exits are already handled by the pty's own exit event; `/clear` is detected via the *next* SessionStart instead |
 | UserPromptSubmit (first prompt only) | `tab:generate-name` | queued for naming (see below) |
 

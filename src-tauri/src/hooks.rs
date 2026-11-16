@@ -1,5 +1,5 @@
-//! Installs Claude Code's own lifecycle hooks (SessionStart, PreToolUse, Stop,
-//! Notification, SessionEnd, UserPromptSubmit) into a project's
+//! Installs Claude Code's own lifecycle hooks (SessionStart, PreToolUse,
+//! PostToolUse, Stop, Notification, SessionEnd, UserPromptSubmit) into a project's
 //! `.claude/settings.local.json`, pointing them back at this same executable
 //! invoked with `--too-many-terminals-hook <event>`. That invocation runs
 //! [`run_hook_client`] instead of launching the GUI — it reads the hook's
@@ -13,13 +13,17 @@ use std::path::{Path, PathBuf};
 use serde_json::{json, Value};
 
 /// (Claude Code hook name, argument we pass ourselves via `--too-many-terminals-hook`).
-const HOOK_EVENTS: [(&str, &str); 6] = [
-    ("SessionStart", "session-start"),
-    ("UserPromptSubmit", "prompt-submit"),
-    ("PreToolUse", "pre-tool-use"),
-    ("Stop", "stop"),
-    ("Notification", "notification"),
-    ("SessionEnd", "session-end"),
+/// The third field is the hook's tool matcher: PostToolUse only listens to the
+/// tools that can write outside the machine (see `activity::write_label`), so
+/// a Read or Grep doesn't spawn a hook process for nothing.
+const HOOK_EVENTS: [(&str, &str, &str); 7] = [
+    ("SessionStart", "session-start", ""),
+    ("UserPromptSubmit", "prompt-submit", ""),
+    ("PreToolUse", "pre-tool-use", ""),
+    ("PostToolUse", "post-tool-use", "Bash|PowerShell|mcp__.*"),
+    ("Stop", "stop", ""),
+    ("Notification", "notification", ""),
+    ("SessionEnd", "session-end", ""),
 ];
 
 /// Substring that marks a hook command entry as ours, regardless of where the
@@ -98,7 +102,7 @@ pub fn merge_settings(existing: Value, exe: &str) -> Value {
         .unwrap_or_default();
     let mut hooks = hooks;
 
-    for (event_name, event_arg) in HOOK_EVENTS {
+    for (event_name, event_arg, matcher) in HOOK_EVENTS {
         let mut entries = hooks
             .get(event_name)
             .and_then(Value::as_array)
@@ -106,7 +110,7 @@ pub fn merge_settings(existing: Value, exe: &str) -> Value {
             .unwrap_or_default();
         entries.retain(|group| !is_our_group(group));
         entries.push(json!({
-            "matcher": "",
+            "matcher": matcher,
             "hooks": [{
                 "type": "command",
                 "command": build_hook_command(exe, event_arg),
@@ -127,7 +131,7 @@ pub fn remove_our_hooks(existing: Value) -> Value {
         return existing;
     };
     if let Some(Value::Object(mut hooks)) = root.remove("hooks") {
-        for (event_name, _) in HOOK_EVENTS {
+        for (event_name, _, _) in HOOK_EVENTS {
             if let Some(Value::Array(entries)) = hooks.get_mut(event_name) {
                 entries.retain(|group| !is_our_group(group));
             }
@@ -287,6 +291,13 @@ pub fn run_hook_client(event_arg: &str) {
             "event": "tab:status:working",
             "data": tool_summary(&payload),
         })),
+        // Only successful calls reach PostToolUse, so this counts writes that
+        // happened, not ones you denied. Anything that isn't a write sends nothing.
+        "post-tool-use" => {
+            let tool_name = payload.get("tool_name").and_then(Value::as_str).unwrap_or("");
+            crate::activity::write_label(tool_name, payload.get("tool_input"))
+                .map(|label| json!({ "tabId": tab_id, "event": "tab:write", "data": label }))
+        }
         "stop" => Some(json!({ "tabId": tab_id, "event": "tab:status:idle", "data": null })),
         // Forward the Notification's `message` so the server can tell a real
         // permission/input request from Claude Code's idle "waiting for your
@@ -408,9 +419,11 @@ mod tests {
     }
 
     #[test]
-    fn installs_all_six_events_pointing_at_our_exe() {
+    fn installs_every_event_pointing_at_our_exe() {
         let settings = merge_settings(json!({}), "/path/to/exe");
-        for (event, arg) in HOOK_EVENTS {
+        assert_eq!(settings["hooks"]["PostToolUse"][0]["matcher"], "Bash|PowerShell|mcp__.*");
+        assert_eq!(settings["hooks"]["Stop"][0]["matcher"], "");
+        for (event, arg, _) in HOOK_EVENTS {
             assert_eq!(command_of(&settings, event), format!("\"/path/to/exe\" --too-many-terminals-hook {arg}"));
         }
     }

@@ -16,7 +16,7 @@ function stat(over: Partial<SessionStat> = {}): SessionStat {
   return {
     sessionId: 's', lastUsedIso: day(1), startedIso: null, endedIso: null,
     turns: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0,
-    model: null, preview: '', commands: [], ...over,
+    model: null, preview: '', commands: [], writes: [], reads: 0, edits: 0, shell: 0, ...over,
   };
 }
 

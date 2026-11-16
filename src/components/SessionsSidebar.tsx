@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Archive, CheckSquare, ChevronLeft, ChevronRight, Columns2, Folder, FolderInput, FolderOpen, FolderPlus, Inbox,
-  History as HistoryIcon, MoreHorizontal, Pencil, Pin, PinOff, Plus, Search, Settings, Code, SquareTerminal, TicketCheck, Upload, X,
+  History as HistoryIcon, Lock, MoreHorizontal, Pencil, Pin, PinOff, Plus, Search, Settings, Code, SquareTerminal, TicketCheck, Upload, X,
 } from 'lucide-react';
 import { TAB_MIME } from '@/lib/dnd';
 import * as ipc from '@/lib/ipc';
@@ -176,8 +176,9 @@ function SessionRow({
   const issue = useIssueName(tab.name);
 
   const age = compactAge(recencyOf(tab, lastUsedAt), now);
-  // One second line at most: what Claude is doing beats where it lives.
-  const detail = (tab.status === 'working' ? tab.statusDetail : undefined)
+  // One second line at most: what Claude is doing (or asking) beats where it lives.
+  const asking = tab.status === 'requires_response' ? tab.statusDetail : undefined;
+  const detail = (tab.status === 'working' ? tab.statusDetail : asking)
     ?? (showProject && tab.projectDir ? folderName(tab.projectDir) : undefined);
   // The branch rides on that line: which branch a session is on is the thing
   // you can't see from its name, and the mistake it catches — two sessions
@@ -240,6 +241,16 @@ function SessionRow({
         <span data-session-name className="truncate flex-1">{issue.label}</span>
         {issue.key && <IssueChip text={issue.key} size="xs" />}
         {tab.pinned && <Pin size={10} className="shrink-0 text-muted-foreground" />}
+        {/* Metadata, not a live state: muted like the pin, never a status colour. */}
+        {!!tab.writes && (
+          <span
+            data-session-writes
+            title={`${tab.writes} change${tab.writes === 1 ? '' : 's'} outside this machine — see the inspector's Activity`}
+            className="shrink-0 flex items-center gap-0.5 text-[10.5px] font-mono tabular-nums text-muted-foreground"
+          >
+            <Pencil size={10} />{tab.writes}
+          </span>
+        )}
         {/* The age gives way to the ⋯ on hover rather than sitting beside it:
             two things in one 40px gutter is how a calm list turns into a
             toolbar. */}
@@ -318,6 +329,7 @@ function SessionRow({
       </div>
       {(detail || git) && !compact && (
         <div data-session-meta className="flex items-center gap-1 w-full min-w-0 pl-4 text-[11px] leading-tight text-muted-foreground">
+          {asking && <Lock size={10} className="shrink-0 text-attention" />}
           {detail && <span className="truncate">{detail}</span>}
           {detail && git && <span className="shrink-0 text-faint">·</span>}
           {git && <GitBranch status={git} className="shrink min-w-0" />}

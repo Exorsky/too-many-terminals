@@ -68,10 +68,14 @@ export interface Tab {
    *  with the same instant and bury the real order, so those fall back to their
    *  transcript's mtime instead. See `recencyOf` in Sidebar.tsx. */
   createdAt?: number;
-  /** A short "what Claude is doing right now" label from the PreToolUse
-   *  hook payload (e.g. "editing Sidebar.tsx") — only ever set alongside
-   *  `working`; cleared on any other status. */
+  /** While `working`, a short "what Claude is doing right now" label from the
+   *  PreToolUse hook (e.g. "editing Sidebar.tsx"). While `requires_response`,
+   *  what it is asking (`askDetail`). Cleared on any other status. */
   statusDetail?: string;
+  /** Tool calls that changed something outside the machine — a Jira comment,
+   *  a push, an MCP send — counted by the PostToolUse hook. Persisted; the
+   *  inspector's Activity list reads the full detail from the transcript. */
+  writes?: number;
   /** True right after a working → idle transition, until the tab is selected
    *  (seen) or starts working again — powers the "Just finished" strip. */
   justFinished?: boolean;
@@ -174,6 +178,11 @@ export interface SessionStat {
   preview: string;
   /** First token of every shell call, counted: `[["git", 12], ...]`. */
   commands: [string, number][];
+  /** Successful tool calls that changed something outside the machine. */
+  writes: { atIso: string | null; label: string }[];
+  reads: number;
+  edits: number;
+  shell: number;
 }
 
 // --- Transcript reading (a past session rendered as a document) ---
@@ -209,6 +218,7 @@ export interface SavedTab {
   /** User-pinned to the top of its group. */
   pinned?: boolean;
   gitStart?: string | null;
+  writes?: number;
 }
 
 export interface WorkspaceState {

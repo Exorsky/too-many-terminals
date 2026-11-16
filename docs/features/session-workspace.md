@@ -88,7 +88,9 @@ an app whose point is the terminal.
 
 It carries the session title (editable — this is where you come when the auto-namer
 got it wrong), state, project, working directory, created/last-used, the Claude
-session id, any linked To-Dos, and the infrequent actions: Move to project, Create
+session id, **Activity** (what the session wrote outside the machine) and
+**Tokens** (see [session-activity.md](session-activity.md)), any linked To-Dos,
+and the infrequent actions: Move to project, Create
 To-Do, Open directory, Open in VS Code, Export, Archive, Close.
 
 The task inspector in [To-Do](todo.md) is the same panel in a different mode — same

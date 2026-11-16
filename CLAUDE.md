@@ -22,6 +22,7 @@ Feature and architecture docs live in `docs/` — **keep them updated when featu
 - [docs/features/path-links.md](docs/features/path-links.md) — file/folder paths in terminals and transcripts as links + hover cards with a preview
 - [docs/features/git.md](docs/features/git.md) — read-only git: branch on rows and breadcrumb, file-tree marks, the Changes panel (session changes, branch graph, diffs)
 - [docs/features/command-palette.md](docs/features/command-palette.md) — Ctrl+Shift+P fuzzy jump to any open terminal
+- [docs/features/session-activity.md](docs/features/session-activity.md) — what a session wrote outside the machine (badge + inspector Activity), what a waiting session asks, tokens per session
 - [docs/features/notifications.md](docs/features/notifications.md) — desktop notifications when an unfocused session needs you
 - [docs/features/session-history.md](docs/features/session-history.md) — past-session browsing/resume
 - [docs/features/vscode-handoff.md](docs/features/vscode-handoff.md) — hand a live session off to the VS Code Claude Code extension

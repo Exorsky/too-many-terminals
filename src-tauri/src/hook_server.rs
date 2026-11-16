@@ -36,11 +36,15 @@ struct HookMessage {
 
 #[derive(Debug, PartialEq)]
 enum RoutedAction {
-    /// `detail` is only ever set alongside `working` — a short "what Claude
-    /// is doing right now" label from the PreToolUse payload (`hooks::tool_summary`).
-    /// Every other status carries `None`; there's nothing to summarize for
-    /// idle/requires_response/new.
+    /// `detail` is set alongside `working` — a short "what Claude is doing
+    /// right now" label from the PreToolUse payload (`hooks::tool_summary`) —
+    /// and alongside `requires_response`, where it is the Notification's own
+    /// message ("Claude needs your permission to use Bash"). idle/new carry
+    /// `None`.
     Status { tab_id: String, status: &'static str, detail: Option<String> },
+    /// A tool call that changed something outside the machine
+    /// (`activity::write_label`), reported by PostToolUse.
+    Write { tab_id: String, label: String },
     SessionResolved { tab_id: String, session_id: String },
     GenerateName { tab_id: String, message: String },
     NamingFlagReset { tab_id: String },
@@ -81,9 +85,20 @@ fn route_message(msg: &HookMessage) -> Vec<RoutedAction> {
             if is_idle_nudge {
                 vec![]
             } else {
-                vec![RoutedAction::Status { tab_id: msg.tab_id.clone(), status: "requires_response", detail: None }]
+                vec![RoutedAction::Status {
+                    tab_id: msg.tab_id.clone(),
+                    status: "requires_response",
+                    detail: msg.data.clone().filter(|m| !m.trim().is_empty()),
+                }]
             }
         }
+
+        "tab:write" => match msg.data.as_deref() {
+            Some(label) if !label.trim().is_empty() => {
+                vec![RoutedAction::Write { tab_id: msg.tab_id.clone(), label: label.to_string() }]
+            }
+            _ => vec![],
+        },
 
         "tab:ready" => {
             let ready: Option<ReadyPayload> = msg.data.as_deref().and_then(|d| serde_json::from_str(d).ok());
@@ -130,6 +145,13 @@ struct TabStatusPayload {
 
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
+struct TabWritePayload {
+    tab_id: String,
+    label: String,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
 struct SessionResolvedPayload {
     tab_id: String,
     session_id: String,
@@ -139,6 +161,9 @@ fn apply_action(action: RoutedAction, app: &AppHandle, naming_queue: &NamingQueu
     match action {
         RoutedAction::Status { tab_id, status, detail } => {
             let _ = app.emit("claude-tab-status", TabStatusPayload { tab_id, status: status.to_string(), detail });
+        }
+        RoutedAction::Write { tab_id, label } => {
+            let _ = app.emit("claude-tab-write", TabWritePayload { tab_id, label });
         }
         RoutedAction::SessionResolved { tab_id, session_id } => {
             let _ = app.emit("claude-session-resolved", SessionResolvedPayload { tab_id, session_id });
@@ -243,7 +268,22 @@ mod tests {
     #[test]
     fn permission_notification_maps_to_requires_response() {
         let actions = route_message(&msg("t1", "tab:status:input", Some("Claude needs your permission to use Bash")));
-        assert_eq!(actions, vec![RoutedAction::Status { tab_id: "t1".into(), status: "requires_response", detail: None }]);
+        assert_eq!(
+            actions,
+            vec![RoutedAction::Status {
+                tab_id: "t1".into(),
+                status: "requires_response",
+                detail: Some("Claude needs your permission to use Bash".into()),
+            }],
+        );
+    }
+
+    #[test]
+    fn write_carries_its_label_and_ignores_blank_ones() {
+        let actions = route_message(&msg("t1", "tab:write", Some("git push origin x")));
+        assert_eq!(actions, vec![RoutedAction::Write { tab_id: "t1".into(), label: "git push origin x".into() }]);
+        assert!(route_message(&msg("t1", "tab:write", Some(" "))).is_empty());
+        assert!(route_message(&msg("t1", "tab:write", None)).is_empty());
     }
 
     #[test]

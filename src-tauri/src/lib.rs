@@ -1,3 +1,4 @@
+mod activity;
 mod claude;
 mod commands;
 mod dotenv;
@@ -69,6 +70,7 @@ pub fn run() {
             commands::export_session,
             commands::import_session,
             commands::get_session_stats,
+            commands::get_session_activity,
             commands::get_session_usage_stats,
             commands::load_workspace,
             commands::save_workspace,

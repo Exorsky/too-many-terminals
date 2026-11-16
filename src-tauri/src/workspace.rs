@@ -42,6 +42,14 @@ pub struct SavedTab {
     /// sessions saved before the field existed.
     #[serde(default)]
     pub git_start: Option<String>,
+    /// Writes outside the machine counted for this session (the sidebar's
+    /// pencil badge). Zero is left out of the file.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub writes: u32,
+}
+
+fn is_zero(n: &u32) -> bool {
+    *n == 0
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
@@ -211,12 +219,12 @@ mod tests {
                 SavedTab {
                     id: "a".into(), kind: "claude".into(), name: "Alpha".into(), shell_id: None,
                     resume_session_id: None, cwd: "/proj".into(), project_dir: None,
-                    archived: false, pinned: false, git_start: None,
+                    archived: false, pinned: false, git_start: None, writes: 0,
                 },
                 SavedTab {
                     id: "b".into(), kind: "claude".into(), name: "Loose".into(), shell_id: None,
                     resume_session_id: None, cwd: "/home/u/.tmt/scratch/x".into(),
-                    project_dir: None, archived: false, pinned: false, git_start: None,
+                    project_dir: None, archived: false, pinned: false, git_start: None, writes: 0,
                 },
             ],
             ..Default::default()
@@ -238,7 +246,7 @@ mod tests {
             tabs: vec![SavedTab {
                 id: "a".into(), kind: "claude".into(), name: "Alpha".into(), shell_id: None,
                 resume_session_id: None, cwd: "/proj".into(), project_dir: None,
-                archived: false, pinned: false, git_start: None,
+                archived: false, pinned: false, git_start: None, writes: 0,
             }],
             ..Default::default()
         };
@@ -294,7 +302,7 @@ mod tests {
                     cwd: "/home/x/project".to_string(),
                     project_dir: Some("/home/x/project".to_string()),
                     archived: false,
-                    pinned: true, git_start: None,
+                    pinned: true, git_start: None, writes: 0,
                 },
                 SavedTab {
                     id: "tab-2".to_string(),
@@ -305,7 +313,7 @@ mod tests {
                     cwd: "/home/x/other".to_string(),
                     project_dir: None,
                     archived: true,
-                    pinned: false, git_start: None,
+                    pinned: false, git_start: None, writes: 0,
                 },
             ],
             // Outlives its tab on purpose — "sess-2" has no tab here.
@@ -363,7 +371,7 @@ mod tests {
             tabs: vec![SavedTab {
                 id: "a".into(), kind: "claude".into(), name: "Alpha".into(), shell_id: None,
                 resume_session_id: None, cwd: "/proj".into(), project_dir: None,
-                archived: false, pinned: false, git_start: None,
+                archived: false, pinned: false, git_start: None, writes: 0,
             }],
             ..Default::default()
         };

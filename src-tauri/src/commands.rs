@@ -343,6 +343,18 @@ pub fn get_session_stats(
     Ok(crate::session_stats::read_session_stats(&root, &project_dir))
 }
 
+/// One session's tokens, tool counts and writes — the inspector's Activity.
+/// `cwd` is the session's working directory, which is where Claude Code files
+/// its transcript.
+#[tauri::command(async)]
+pub fn get_session_activity(
+    cwd: String,
+    session_id: String,
+) -> Result<Option<crate::session_stats::SessionStat>, String> {
+    let root = projects_root().ok_or("could not resolve home directory")?;
+    Ok(crate::session_stats::read_session_stat(&root, &cwd, &session_id))
+}
+
 #[tauri::command]
 pub async fn get_session_usage_stats() -> Result<crate::session_usage::SessionUsageStats, String> {
     let credentials = crate::session_usage::credentials_path().ok_or("could not resolve home directory")?;

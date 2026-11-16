@@ -50,6 +50,21 @@ pub struct SessionStat {
     pub preview: String,
     /// First token of every Bash/PowerShell call, counted (e.g. `git` → 12).
     pub commands: Vec<(String, u32)>,
+    /// Tool calls that changed something outside the machine and succeeded
+    /// (`activity::write_label`), oldest first — the inspector's Activity list.
+    pub writes: Vec<WriteEntry>,
+    /// Read/Grep/Glob, Edit/Write/NotebookEdit and shell calls, counted.
+    pub reads: u32,
+    pub edits: u32,
+    pub shell: u32,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct WriteEntry {
+    /// When the call's result came back.
+    pub at_iso: Option<String>,
+    pub label: String,
 }
 
 /// The command a Bash/PowerShell call actually ran, reduced to its first word.
@@ -79,6 +94,9 @@ fn parse_session_file(path: &Path, mtime: SystemTime) -> Option<SessionStat> {
     let mut commands: HashMap<String, u32> = HashMap::new();
     let mut model_output: HashMap<String, u64> = HashMap::new();
     let mut preview: Option<String> = None;
+    // Writes wait here, keyed by tool_use id, until their result shows they
+    // weren't denied or failed.
+    let mut pending_writes: HashMap<String, String> = HashMap::new();
 
     for line in reader.lines() {
         let Ok(line) = line else { break };
@@ -98,6 +116,18 @@ fn parse_session_file(path: &Path, mtime: SystemTime) -> Option<SessionStat> {
 
         match entry.get("type").and_then(Value::as_str) {
             Some("user") => {
+                if let Some(Value::Array(items)) = entry.get("message").and_then(|m| m.get("content")) {
+                    for block in items.iter().filter(|b| b.get("type").and_then(Value::as_str) == Some("tool_result")) {
+                        let id = block.get("tool_use_id").and_then(Value::as_str).unwrap_or("");
+                        let failed = block.get("is_error").and_then(Value::as_bool).unwrap_or(false);
+                        if let Some(label) = pending_writes.remove(id) {
+                            if !failed {
+                                let at_iso = entry.get("timestamp").and_then(Value::as_str).map(str::to_string);
+                                stat.writes.push(WriteEntry { at_iso, label });
+                            }
+                        }
+                    }
+                }
                 let text = entry
                     .get("message")
                     .and_then(|m| m.get("content"))
@@ -133,6 +163,16 @@ fn parse_session_file(path: &Path, mtime: SystemTime) -> Option<SessionStat> {
                             continue;
                         }
                         let name = block.get("name").and_then(Value::as_str).unwrap_or("");
+                        match name {
+                            "Read" | "Grep" | "Glob" => stat.reads += 1,
+                            "Edit" | "Write" | "NotebookEdit" | "MultiEdit" => stat.edits += 1,
+                            "Bash" | "PowerShell" => stat.shell += 1,
+                            _ => {}
+                        }
+                        if let Some(label) = crate::activity::write_label(name, block.get("input")) {
+                            let id = block.get("id").and_then(Value::as_str).unwrap_or("").to_string();
+                            pending_writes.insert(id, label);
+                        }
                         if name != "Bash" && name != "PowerShell" {
                             continue;
                         }
@@ -155,6 +195,14 @@ fn parse_session_file(path: &Path, mtime: SystemTime) -> Option<SessionStat> {
     stat.model = model_output.into_iter().max_by_key(|(_, out)| *out).map(|(m, _)| m);
     stat.commands = commands.into_iter().collect();
     Some(stat)
+}
+
+/// One session's aggregates, for the inspector. `None` when its transcript
+/// isn't there (yet).
+pub fn read_session_stat(root: &Path, project_dir: &str, session_id: &str) -> Option<SessionStat> {
+    let path = root.join(encode_project_dir(project_dir)).join(format!("{session_id}.jsonl"));
+    let mtime = fs::metadata(&path).ok()?.modified().ok()?;
+    parse_session_file(&path, mtime)
 }
 
 /// Aggregates the newest [`MAX_SESSIONS`] transcripts for a project directory.
@@ -239,6 +287,29 @@ mod tests {
         assert_eq!(s.ended_iso.as_deref(), Some("2026-08-10T09:10:00Z"));
         // git counted twice; Read ignored (not a shell)
         assert_eq!(s.commands, vec![("git".to_string(), 2)]);
+    }
+
+    #[test]
+    fn lists_only_writes_that_succeeded_and_counts_tool_kinds() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_session(
+            tmp.path(),
+            "/p",
+            "s3",
+            &[
+                r#"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"a","name":"Bash","input":{"command":"git push origin x"}},{"type":"tool_use","id":"b","name":"Bash","input":{"command":"api jira POST /comment"}},{"type":"tool_use","id":"c","name":"Read","input":{"file_path":"a"}},{"type":"tool_use","id":"d","name":"Edit","input":{"file_path":"a"}}]}}"#,
+                r#"{"type":"user","timestamp":"2026-11-16T08:00:00Z","message":{"content":[{"type":"tool_result","tool_use_id":"a","content":"ok"},{"type":"tool_result","tool_use_id":"b","is_error":true,"content":"The user doesn't want to proceed"}]}}"#,
+                r#"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"e","name":"mcp__gws__users_suspend","input":{}}]}}"#,
+            ],
+        );
+        let s = read_session_stat(tmp.path(), "/p", "s3").unwrap();
+        // the denied POST and the unanswered MCP call are not writes
+        assert_eq!(
+            s.writes,
+            vec![WriteEntry { at_iso: Some("2026-11-16T08:00:00Z".into()), label: "git push origin x".into() }],
+        );
+        assert_eq!((s.reads, s.edits, s.shell), (1, 1, 2));
+        assert!(read_session_stat(tmp.path(), "/p", "missing").is_none());
     }
 
     #[test]

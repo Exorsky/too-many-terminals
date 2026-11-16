@@ -156,6 +156,11 @@ export type TabsAction =
   | { type: 'sleep'; tabId: string }
   | { type: 'pin'; tabId: string; pinned: boolean }
   | { type: 'gitStart'; tabId: string; oid: string }
+  /** One more write outside the machine (PostToolUse). */
+  | { type: 'write'; tabId: string }
+  /** The transcript's own count, once the inspector has read it — never lowers
+   *  the live count. */
+  | { type: 'writesSeen'; tabId: string; count: number }
   /** File a session under a project, or `null` to send it back to the Inbox.
    *  Organizational only — `cwd` is untouched, so nothing respawns and no
    *  transcript is orphaned. */
@@ -167,6 +172,17 @@ export type TabsAction =
  *  stale drag payload can't leave a pane pointing at nothing. */
 function contentExists(state: TabsState, content: PaneContent): boolean {
   return content.kind !== 'session' || state.tabs.some((t) => t.id === content.sessionId);
+}
+
+/** What a waiting session is asking, for its row and its notification.
+ *  Claude Code's permission notice names only the tool ("…permission to use
+ *  Bash"); the PreToolUse summary that arrived just before it names the
+ *  command, which is what you need to decide. */
+export function askDetail(message: string | undefined, lastActivity: string | undefined): string | undefined {
+  const text = message?.trim();
+  if (!text) return undefined;
+  const tool = /permission to use (.+)$/i.exec(text)?.[1];
+  return tool ? `Permission · ${lastActivity ?? tool}` : text;
 }
 
 export function tabsReducer(state: TabsState, action: TabsAction): TabsState {
@@ -258,8 +274,12 @@ export function tabsReducer(state: TabsState, action: TabsAction): TabsState {
         // Claude's resting state after any turn, so reaching it from anywhere
         // else (new, requires_response) isn't a completion signal.
         const justFinished = action.status === 'idle' && t.status === 'working';
-        // The activity detail only ever means something while working.
-        const statusDetail = action.status === 'working' ? action.detail : undefined;
+        // The detail means "doing" while working and "asking" while waiting.
+        const statusDetail = action.status === 'working'
+          ? action.detail
+          : action.status === 'requires_response'
+            ? askDetail(action.detail, t.status === 'working' ? t.statusDetail : undefined)
+            : undefined;
         return { ...t, status: action.status, statusChangedAt: now, justFinished, statusDetail };
       });
     }
@@ -286,6 +306,12 @@ export function tabsReducer(state: TabsState, action: TabsAction): TabsState {
 
     case 'pin':
       return patch(action.tabId, (t) => ({ ...t, pinned: action.pinned }));
+
+    case 'write':
+      return patch(action.tabId, (t) => ({ ...t, writes: (t.writes ?? 0) + 1 }));
+
+    case 'writesSeen':
+      return patch(action.tabId, (t) => (action.count > (t.writes ?? 0) ? { ...t, writes: action.count } : t));
 
     case 'gitStart':
       // Set once: a session's starting point never moves.

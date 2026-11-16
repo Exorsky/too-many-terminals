@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  activeTabId, currentLayout, initialTabsState, sessionModeOf, tabsReducer, type TabsState,
+  activeTabId, askDetail, currentLayout, initialTabsState, sessionModeOf, tabsReducer, type TabsState,
 } from './tabs';
 import { activeContent, contentKey, findPane, panesOf, sessionContent, visibleSessionIds, type Layout } from './panes';
 
@@ -366,5 +366,40 @@ describe('files on the workspace', () => {
     const state = tabsReducer(initialTabsState, { type: 'addToWorkspace', content: file });
     expect(onScreen(state)).toEqual(['file:/proj/src/App.tsx']);
     expect(state.open).toEqual([]);
+  });
+});
+
+describe('what a session is asking', () => {
+  it('names the command a permission prompt is about', () => {
+    expect(askDetail('Claude needs your permission to use Bash', 'running api jira POST /x'))
+      .toBe('Permission · running api jira POST /x');
+    expect(askDetail('Claude needs your permission to use Bash', undefined)).toBe('Permission · Bash');
+    expect(askDetail('Claude has a question', 'reading a.ts')).toBe('Claude has a question');
+    expect(askDetail('  ', 'x')).toBeUndefined();
+    expect(askDetail(undefined, 'x')).toBeUndefined();
+  });
+
+  it('keeps the ask on the tab while it waits and drops it after', () => {
+    let state = tabsReducer(initialTabsState, { type: 'add', tab: makeTab('a', { kind: 'claude' }) });
+    state = tabsReducer(state, { type: 'status', tabId: 'a', status: 'working', detail: 'running git push' });
+    state = tabsReducer(state, {
+      type: 'status', tabId: 'a', status: 'requires_response', detail: 'Claude needs your permission to use Bash',
+    });
+    expect(state.tabs[0].statusDetail).toBe('Permission · running git push');
+    state = tabsReducer(state, { type: 'status', tabId: 'a', status: 'idle' });
+    expect(state.tabs[0].statusDetail).toBeUndefined();
+  });
+});
+
+describe('writes outside the machine', () => {
+  it('counts live writes and only ever raises the count from the transcript', () => {
+    let state = tabsReducer(initialTabsState, { type: 'add', tab: makeTab('a', { kind: 'claude' }) });
+    state = tabsReducer(state, { type: 'write', tabId: 'a' });
+    state = tabsReducer(state, { type: 'write', tabId: 'a' });
+    expect(state.tabs[0].writes).toBe(2);
+    state = tabsReducer(state, { type: 'writesSeen', tabId: 'a', count: 1 });
+    expect(state.tabs[0].writes).toBe(2);
+    state = tabsReducer(state, { type: 'writesSeen', tabId: 'a', count: 5 });
+    expect(state.tabs[0].writes).toBe(5);
   });
 });

@@ -13,7 +13,7 @@ function stat(over: Partial<ProjectStat> = {}): ProjectStat {
   return {
     sessionId: 's', lastUsedIso: daysAgo(0), startedIso: null, endedIso: null,
     turns: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0,
-    model: null, preview: '', commands: [],
+    model: null, preview: '', commands: [], writes: [], reads: 0, edits: 0, shell: 0,
     projectDir: '/a', projectName: 'a', hue: 210, ...over,
   };
 }

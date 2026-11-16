@@ -47,6 +47,8 @@ vi.mock('@/lib/ipc', () => {
     envNames: ok({ vars: [], refused: [], unreadable: false, folderScoped: false }),
     onTabStatus: ok(noop),
     onTabNamed: ok(noop),
+    onTabWrite: ok(noop),
+    getSessionActivity: ok(null),
     onPtyExit: ok(noop),
     onClaudeSessionResolved: ok(noop),
     listDir: ok([]),

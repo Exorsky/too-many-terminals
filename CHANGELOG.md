@@ -11,6 +11,18 @@ listed here; see `git log` for the full history.
 
 ## [Unreleased]
 
+### Added
+
+- **See what a session changed outside your machine.** A session that posted
+  to Jira, pushed a branch, opened an MR or made an MCP call that sends or
+  updates gets a small pencil and a count on its sidebar row. The inspector's
+  new Activity section lists each of those writes with its time, counts reads,
+  shell calls and edits, and shows the session's tokens and cache-hit rate.
+  Denied or failed calls don't count.
+- **A waiting session says what it's asking.** Its row and its desktop
+  notification read "Permission · running api jira POST …" instead of a bare
+  "Needs your input".
+
 ### Fixed
 
 - **Sessions are no longer named after an apology.** When the auto-namer

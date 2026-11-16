@@ -40,7 +40,7 @@ import {
 } from '@/lib/sessions';
 import { useSettings } from '@/lib/settings-store';
 import { addTask, linkSession, loadTasks, updateTask, useTasks } from '@/lib/tasks';
-import { activeTabId, currentLayout, initialTabsState, sessionModeOf, tabsReducer } from '@/lib/tabs';
+import { activeTabId, askDetail, currentLayout, initialTabsState, sessionModeOf, tabsReducer } from '@/lib/tabs';
 import { useDragValue } from '@/lib/use-drag-value';
 import { cn, folderName, ICON_BUTTON } from '@/lib/utils';
 import { projectHue } from '@/types';
@@ -289,11 +289,16 @@ export default function App() {
   /** Notify on a real transition — Claude asking for input, or finishing a run
    *  — unless you're already looking right at that session. Skips the first
    *  status of a session so restoring a workspace doesn't fire a burst. */
-  const maybeNotify = useCallback((tabId: string, prev: TabStatus | undefined, status: TabStatus) => {
+  const maybeNotify = useCallback((tabId: string, prev: TabStatus | undefined, status: TabStatus, detail?: string) => {
     if (!notificationsRef.current || prev === undefined) return;
     if (document.hasFocus() && visibleTabIdsRef.current.has(tabId)) return;
-    const name = tabsRef.current.find((t) => t.id === tabId)?.name ?? 'Claude';
-    if (status === 'requires_response') void ipc.notify(name, 'Needs your input');
+    const tab = tabsRef.current.find((t) => t.id === tabId);
+    const name = tab?.name ?? 'Claude';
+    if (status === 'requires_response') {
+      // Same words the row shows, so you can decide from the notification.
+      const asking = askDetail(detail, tab?.status === 'working' ? tab.statusDetail : undefined);
+      void ipc.notify(name, asking ?? 'Needs your input');
+    }
     else if (status === 'idle' && prev === 'working') void ipc.notify(name, 'Finished');
   }, []);
 
@@ -302,7 +307,7 @@ export default function App() {
       const prev = prevStatusRef.current.get(tabId);
       prevStatusRef.current.set(tabId, status);
       dispatch({ type: 'status', tabId, status, detail });
-      maybeNotify(tabId, prev, status);
+      maybeNotify(tabId, prev, status, detail);
       // A run just ended: whatever it changed is on disk now, so the branch
       // and the dirty marks for that folder are worth asking for again.
       if (prev === 'working' && status !== 'working') {
@@ -318,6 +323,11 @@ export default function App() {
     });
     return () => { unlisten.then((fn) => fn()); };
   }, [maybeNotify, dispatch]);
+
+  useEffect(() => {
+    const unlisten = ipc.onTabWrite((tabId) => dispatch({ type: 'write', tabId }));
+    return () => { unlisten.then((fn) => fn()); };
+  }, [dispatch]);
 
   useEffect(() => {
     const unlisten = ipc.onTabNamed((tabId, name) => dispatch({ type: 'autoName', tabId, name }));
@@ -1375,6 +1385,7 @@ export default function App() {
             onOpenDirectory={() => ipc.openDirectory(activeTab.cwd)}
             onCreateTask={() => handleCreateTaskFromSession(activeTab.id)}
             onOpenTask={(taskId) => { setSelectedTaskId(taskId); setView('todo'); }}
+            onWritesSeen={(count) => dispatch({ type: 'writesSeen', tabId: activeTab.id, count })}
           />
         )}
         {/* The file explorer, back on the right edge where it was. Docked it
