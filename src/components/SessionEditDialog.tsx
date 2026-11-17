@@ -46,7 +46,8 @@ export default function SessionEditDialog({ tab, projects, onClose, onSave }: {
   const jira = jiraOn(settings);
   const startKey = jira ? firstIssueKey(tab.name, settings.jiraProjectKeys) : null;
   const startLabel = startKey ? stripIssueKey(tab.name, startKey) : tab.name;
-  const [label, setLabel] = useState(startLabel === startKey ? '' : startLabel);
+  const initialLabel = startLabel === startKey ? '' : startLabel;
+  const [label, setLabel] = useState(initialLabel);
   const [issueInput, setIssueInput] = useState(startKey ?? '');
   const [projectDir, setProjectDir] = useState(tab.projectDir);
   const [pinned, setPinned] = useState(!!tab.pinned);
@@ -54,7 +55,9 @@ export default function SessionEditDialog({ tab, projects, onClose, onSave }: {
   const key = jira ? parseIssueInput(issueInput, settings.jiraProjectKeys) : null;
   // Text that isn't a key would be silently dropped on save — refuse instead.
   const badIssue = jira && issueInput.trim() !== '' && !key;
-  const name = composeSessionName(label, key);
+  // Untouched name and issue keep the name exactly as it was: rebuilding it
+  // would turn "ITA-123 Fix login" into "ITA-123 · Fix login" on a pin toggle.
+  const name = key === startKey && label === initialLabel ? tab.name : composeSessionName(label, key);
   const canSave = name !== '' && !badIssue;
 
   const save = () => {
@@ -72,7 +75,9 @@ export default function SessionEditDialog({ tab, projects, onClose, onSave }: {
       className="top-[18%] w-[440px]"
       onKeyDown={(e) => {
         e.stopPropagation();
-        if (e.key === 'Enter' && !(e.target instanceof HTMLButtonElement)) { e.preventDefault(); save(); }
+        // An Enter the Project menu already used to pick an item isn't a save:
+        // it bubbles here through the portal before the pick has re-rendered.
+        if (e.key === 'Enter' && !e.defaultPrevented && !(e.target instanceof HTMLButtonElement)) { e.preventDefault(); save(); }
       }}
       footer={(
         <>

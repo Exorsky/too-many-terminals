@@ -49,6 +49,26 @@ describe('SessionEditDialog', () => {
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ name: 'VPN drops' }));
   });
 
+  it('keeps a name it did not touch exactly as it was', async () => {
+    const onSave = vi.fn();
+    render(<SessionEditDialog tab={tab({ name: 'PROJ-3 Fix login' })} projects={[]} onClose={() => {}} onSave={onSave} />);
+    await userEvent.click(screen.getByLabelText('Pinned'));
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ name: 'PROJ-3 Fix login', pinned: true }));
+  });
+
+  it('picking a project with Enter picks it, and does not save', async () => {
+    const onSave = vi.fn();
+    render(<SessionEditDialog tab={tab()} projects={['/work/api']} onClose={() => {}} onSave={onSave} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Project' }));
+    (await screen.findByRole('menuitemradio', { name: 'api' })).focus();
+    await userEvent.keyboard('{Enter}');
+    expect(onSave).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Project' })).toHaveTextContent('api');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ projectDir: '/work/api' }));
+  });
+
   it('refuses text that is not a key instead of dropping it', async () => {
     render(<SessionEditDialog tab={tab()} projects={[]} onClose={() => {}} onSave={() => {}} />);
     await userEvent.type(screen.getByPlaceholderText('ABC-123'), 'nonsense');
