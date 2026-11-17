@@ -98,6 +98,19 @@ describe('HomeScreen dashboard', () => {
     expect(rows).toEqual(['claude-terminal100100%', 'my-flows00%']);
   });
 
+  it('does not compare against history the 50-per-folder cap cut off', async () => {
+    // 50 sessions in the last 10 days: the folder hit the cap, so nothing
+    // before them was read — neither the previous 30 days nor this window's start.
+    const busy = Array.from({ length: 50 }, (_, i) => stat({ sessionId: `x${i}`, lastUsedIso: day(i % 10), outputTokens: 1, turns: 1 }));
+    vi.mocked(ipc.getSessionStats).mockResolvedValue(busy);
+    const { container } = setup([APP]);
+    await screen.findByRole('heading', { name: 'Sessions' });
+    expect(screen.getAllByText('earlier history not loaded')).toHaveLength(4);
+    expect(container.querySelector('[data-window-cut]')).not.toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: '7 days' }));
+    expect(container.querySelector('[data-window-cut]')).toBeNull();
+  });
+
   it('opens a session named on the dashboard', async () => {
     const { container, onOpenSession } = setup();
     await screen.findByRole('heading', { name: 'Largest sessions' });

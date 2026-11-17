@@ -34,6 +34,33 @@ export function previousRange<T extends SessionStat>(stats: T[], range: Range, n
   });
 }
 
+/** How many transcripts the backend reads per folder — `MAX_SESSIONS` in
+ *  `session_stats.rs`. Keep the two in step. */
+export const SESSION_CAP = 50;
+
+/** Since when the loaded stats are complete: a folder that hit the cap has
+ *  nothing older than its oldest loaded session, so the latest of those is the
+ *  line. Null when no folder hit the cap — everything on disk was read. */
+export function completeSince(stats: ProjectStat[], cap = SESSION_CAP): number | null {
+  const byFolder = new Map<string, number[]>();
+  for (const s of stats) {
+    const t = ms(s.lastUsedIso);
+    if (t !== null) (byFolder.get(s.projectDir) ?? byFolder.set(s.projectDir, []).get(s.projectDir)!).push(t);
+  }
+  let since: number | null = null;
+  for (const times of byFolder.values()) {
+    if (times.length < cap) continue;
+    const oldest = Math.min(...times);
+    since = since === null ? oldest : Math.max(since, oldest);
+  }
+  return since;
+}
+
+/** Whether the window starting `daysBack` days ago was read in full. */
+export function isComplete(since: number | null, daysBack: number, now: number): boolean {
+  return since === null || since <= now - daysBack * DAY;
+}
+
 /** Signed percent change, or null when there's no base to compare with. */
 export function pctChange(current: number, previous: number): number | null {
   return previous > 0 ? Math.round(((current - previous) / previous) * 100) : null;

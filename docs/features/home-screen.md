@@ -26,6 +26,13 @@ uses, so it means "everything on record" rather than an unbounded scan. The KPI
 deltas compare with the window just before this one ("vs previous 30d"); All has
 none.
 
+**The cap is checked, not assumed.** A folder that returned the full 50 has
+nothing older than its oldest loaded session (`completeSince` in `stats.ts`,
+`SESSION_CAP` kept in step with `MAX_SESSIONS`). When the previous window reaches
+past that line the deltas read "earlier history not loaded" instead of comparing
+against a partial count, and when the current window does, a note above the cards
+says its older days are incomplete.
+
 ## What each panel shows
 
 A grid of cards (one column, two at `md`, a 12-column layout at `xl`), in this

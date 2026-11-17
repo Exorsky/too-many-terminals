@@ -3,7 +3,7 @@ import {
   calendarMonthCount, calendarMonths, dayKey, depth, filterRange, formatCompact,
   formatDuration, hourHistogram, modelFamily, modelShare, perProject, streaks,
   summarize, topCommands, previousRange, pctChange, chartDays, dailyTokens, dayTotal,
-  perProjectTokens, largestSessions, recentSessions,
+  perProjectTokens, largestSessions, recentSessions, completeSince, isComplete,
   type CalendarMark, type ProjectStat, type Range,
 } from './stats';
 
@@ -260,5 +260,18 @@ describe('token dashboard', () => {
     ];
     expect(largestSessions(stats, 2).map((s) => s.sessionId)).toEqual(['old-big', 'mid']);
     expect(recentSessions(stats, 2).map((s) => s.sessionId)).toEqual(['new-small', 'mid']);
+  });
+});
+
+describe('the 50-per-folder cap', () => {
+  it('knows since when the loaded history is complete', () => {
+    const capped = Array.from({ length: 3 }, (_, i) => stat({ projectDir: '/a', lastUsedIso: daysAgo(i + 1) }));
+    const small = [stat({ projectDir: '/b', lastUsedIso: daysAgo(100) })];
+    expect(completeSince([...capped, ...small], 3)).toBe(Date.parse(daysAgo(3)));
+    expect(completeSince([...capped, ...small], 4)).toBeNull();
+    const since = completeSince(capped, 3);
+    expect(isComplete(since, 2, NOW)).toBe(true);
+    expect(isComplete(since, 7, NOW)).toBe(false);
+    expect(isComplete(null, 365, NOW)).toBe(true);
   });
 });

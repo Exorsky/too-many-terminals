@@ -7,7 +7,7 @@ import { cn, folderName } from '@/lib/utils';
 import { useUsageStats } from '@/lib/usage-store';
 import { projectHue, type SessionHistoryEntry } from '@/types';
 import {
-  calendarMonthCount, calendarMonths, chartDays, dailyTokens, dayTotal, depth, filterRange, formatCompact,
+  calendarMonthCount, calendarMonths, chartDays, completeSince, isComplete, SESSION_CAP, dailyTokens, dayTotal, depth, filterRange, formatCompact,
   formatDuration, hourHistogram, largestSessions, modelShare, pctChange, perProjectTokens, previousRange,
   recentSessions, sessionTokens, streaks, summarize, topCommands,
   type CalendarMark, type DayTokens, type ModelFamily, type ProjectStat, type Range,
@@ -117,7 +117,8 @@ function Sparkline({ values, labels, format }: {
   );
 }
 
-function Delta({ value, unit = '%', vs }: { value: number | null; unit?: string; vs: string }) {
+function Delta({ value, unit = '%', vs, cut }: { value: number | null; unit?: string; vs: string; cut?: boolean }) {
+  if (cut) return <span className="text-faint" title={`Only the newest ${SESSION_CAP} sessions per folder are read`}>earlier history not loaded</span>;
   if (value === null) return <span className="text-faint">no earlier data</span>;
   // Direction only, in text ink: more tokens isn't good or bad by itself, and
   // the status colours are reserved for sessions.
@@ -263,10 +264,15 @@ export default function HomeScreen({ projects, onAddProject, onOpenSession }: Ho
 
   const scoped = useMemo(() => (stats ? filterRange(stats, range, now) : []), [stats, range, now]);
   const summary = useMemo(() => summarize(scoped), [scoped]);
+  const since = useMemo(() => (stats ? completeSince(stats) : null), [stats]);
+  // A window the 50-per-folder cap cut short would compare against a partial
+  // count — a fake "↑ 300%". No comparison beats a wrong one.
+  const prevComplete = range !== 'all' && isComplete(since, 2 * range, now);
+  const windowComplete = range === 'all' || isComplete(since, range, now);
   const prev = useMemo(() => {
-    const p = stats ? previousRange(stats, range, now) : null;
+    const p = stats && prevComplete ? previousRange(stats, range, now) : null;
     return p && p.length ? summarize(p) : null;
-  }, [stats, range, now]);
+  }, [stats, range, now, prevComplete]);
   const days = useMemo(() => dailyTokens(scoped, chartDays(scoped, range, now), now), [scoped, range, now]);
   const months = useMemo(() => calendarMonths(
     scoped.map((s): CalendarMark => ({ iso: s.lastUsedIso, hue: s.hue, projectName: s.projectName, tokens: sessionTokens(s) })),
@@ -340,13 +346,18 @@ export default function HomeScreen({ projects, onAddProject, onOpenSession }: Ho
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto scrollbar-thin">
+          {!windowComplete && (
+            <p data-window-cut className="m-0 mx-4 mt-4 px-3 py-2 rounded-sm border border-border text-[12px] text-muted-foreground">
+              Only the newest {SESSION_CAP} sessions per folder are read, and this window reaches further back — older days here are incomplete.
+            </p>
+          )}
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-12 gap-3 p-4">
             {/* KPI row */}
             <div className="xl:col-span-3">
               <Kpi
                 label="Total tokens"
                 value={formatCompact(summary.tokens)}
-                delta={vs ? <Delta value={prev ? pctChange(summary.tokens, prev.tokens) : null} vs={vs} /> : `${summary.sessions} sessions`}
+                delta={vs ? <Delta value={prev ? pctChange(summary.tokens, prev.tokens) : null} vs={vs} cut={!prevComplete} /> : `${summary.sessions} sessions`}
                 spark={<Sparkline values={days.map(dayTotal)} labels={labels} format={(v) => `${formatCompact(v)} tokens`} />}
               />
             </div>
@@ -359,6 +370,7 @@ export default function HomeScreen({ projects, onAddProject, onOpenSession }: Ho
                     value={prev?.cacheHitPct != null && summary.cacheHitPct !== null ? summary.cacheHitPct - prev.cacheHitPct : null}
                     unit=" pt"
                     vs={vs}
+                    cut={!prevComplete}
                   />
                 ) : 'cache reads ÷ all input'}
                 spark={(
@@ -378,7 +390,7 @@ export default function HomeScreen({ projects, onAddProject, onOpenSession }: Ho
                 label="Avg / turn"
                 value={formatCompact(perTurn(summary.tokens, summary.turns))}
                 delta={vs ? (
-                  <Delta value={prev ? pctChange(perTurn(summary.tokens, summary.turns), perTurn(prev.tokens, prev.turns)) : null} vs={vs} />
+                  <Delta value={prev ? pctChange(perTurn(summary.tokens, summary.turns), perTurn(prev.tokens, prev.turns)) : null} vs={vs} cut={!prevComplete} />
                 ) : `${summary.turns.toLocaleString()} turns`}
                 spark={(
                   <Sparkline
@@ -393,7 +405,7 @@ export default function HomeScreen({ projects, onAddProject, onOpenSession }: Ho
               <Kpi
                 label="Sessions"
                 value={String(summary.sessions)}
-                delta={vs ? <Delta value={prev ? pctChange(summary.sessions, prev.sessions) : null} vs={vs} /> : `${activeDays} active days`}
+                delta={vs ? <Delta value={prev ? pctChange(summary.sessions, prev.sessions) : null} vs={vs} cut={!prevComplete} /> : `${activeDays} active days`}
                 spark={<Sparkline values={days.map((d) => d.sessions)} labels={labels} format={(v) => `${v} session${v === 1 ? '' : 's'}`} />}
               />
             </div>
