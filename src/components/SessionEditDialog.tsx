@@ -7,6 +7,7 @@ import { projectHue, type Tab } from '@/types';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger,
 } from './ui/dropdown-menu';
+import Switch from './ui/switch';
 import ModalDialog, { DIALOG_BUTTON, DIALOG_PRIMARY, DialogClose } from './ui/dialog';
 
 export interface SessionEdit {
@@ -140,10 +141,10 @@ export default function SessionEditDialog({ tab, projects, onClose, onSave }: {
           </DropdownMenu>
         </div>
 
-        <label className="flex items-center gap-2 text-[13px] text-dim cursor-pointer">
-          <input type="checkbox" checked={pinned} onChange={(e) => setPinned(e.target.checked)} />
-          Pinned
-        </label>
+        <div className="flex items-center justify-between">
+          <span className={LABEL}>Pinned</span>
+          <Switch checked={pinned} onChange={setPinned} label="Pinned" />
+        </div>
 
         <div className="font-mono text-[11px] text-muted-foreground truncate" title={name}>{name || ' '}</div>
       </div>
