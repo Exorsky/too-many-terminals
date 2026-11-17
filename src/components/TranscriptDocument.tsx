@@ -4,6 +4,7 @@ import { roleLabel, transcriptToMarkdown, turnToMarkdown } from '@/lib/transcrip
 import { cn } from '@/lib/utils';
 import CopyButton from './CopyButton';
 import Markdown from './Markdown';
+import PathText from './PathText';
 
 function turnTime(iso: string | null): string {
   if (!iso) return '';
@@ -82,7 +83,7 @@ function TranscriptDocument({ turns, view, fill = false, cwd }: {
                     <div key={j} className="flex items-start gap-2 self-start max-w-full text-[13px] rounded-md border border-border bg-card px-2.5 py-1.5">
                       <span className="text-warning shrink-0 font-semibold">{b.name}</span>
                       {b.detail && (
-                        <pre className="m-0 min-w-0 font-mono text-[12px] leading-[1.5] text-foreground/90 whitespace-pre-wrap break-words">{b.detail}</pre>
+                        <pre className="m-0 min-w-0 font-mono text-[12px] leading-[1.5] text-foreground/90 whitespace-pre-wrap break-words"><PathText text={b.detail} cwd={cwd} /></pre>
                       )}
                     </div>
                   ),

@@ -70,6 +70,10 @@ listed here; see `git log` for the full history.
 
 - **Home's Rate limit panel no longer says "unavailable" while the title-bar meter
   shows your limits.** Both now read the same poll instead of Home fetching once.
+- **Paths in a transcript's tool calls are links.** A Bash command shown in the
+  transcript (`cd /Users/me/repo && cat notes.txt`) links the files and folders it
+  names that exist, with the same hover card, click-to-pin and ⌘-click as the
+  terminal. A leading `cd` sets where the rest of the line resolves.
 
 ## [0.31.1] - 2026-11-06
 

@@ -14,6 +14,7 @@ reads the setting per line, so the switch applies to open terminals.
 |---|---|
 | Terminal (Claude and shell) | An xterm link provider beside the URL and Jira ones. Paths resolve from the session's `cwd` |
 | Transcript (Markdown view, History reader) | An inline code span that is *only* a path (`` `src/app.ts:12` ``) gets the card on hover. A click pins it and ⌘-click opens. Prose and fenced blocks are left alone. Claude writes paths in code spans almost every time |
+| Transcript tool calls (`Bash cd … && cat …`) | `PathText` (`src/components/PathText.tsx`) scans the command line with `findPaths`, line by line, and links what `statPaths` finds on disk — like the terminal. A leading `cd /abs/dir && …` (or `;`) sets where the rest resolves (`commandCwd`), so `cat notes.txt` after it links; a relative or mid-line `cd` falls back to the session's cwd. The blocks of a transcript ask the disk in one batch per tick, not one IPC call each |
 
 ## One detector, checked against the disk
 
