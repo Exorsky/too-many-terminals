@@ -39,9 +39,9 @@ function setup(projects: string[] = [APP, FLOWS]) {
   return { onAddProject, ...utils };
 }
 
-/** The big number rendered next to a headline unit label. */
-function headlineValue(unit: string): string | null | undefined {
-  return screen.getByText(unit).previousElementSibling?.textContent;
+/** The big number on a KPI tile, found by the tile's label. */
+function kpiValue(label: string): string | null | undefined {
+  return screen.getByRole('heading', { name: label }).nextElementSibling?.querySelector('span')?.textContent;
 }
 
 beforeEach(() => {
@@ -55,11 +55,28 @@ afterEach(() => {
 });
 
 describe('HomeScreen dashboard', () => {
-  it('rolls session stats into the headline readout', async () => {
+  it('rolls session stats into the KPI tiles', async () => {
     setup();
-    await screen.findByText('sessions');
-    expect(headlineValue('sessions')).toBe('3');
-    expect(headlineValue('turns')).toBe('20'); // 10 + 6 + 4
+    await screen.findByRole('heading', { name: 'Sessions' });
+    expect(kpiValue('Sessions')).toBe('3');
+    expect(kpiValue('Total tokens')).toBe('100');
+    expect(kpiValue('Avg / turn')).toBe('5'); // 100 tokens over 10 + 6 + 4 turns
+  });
+
+  it('stacks each day\'s tokens and reads the day out on hover', async () => {
+    const { container } = setup();
+    await screen.findByRole('heading', { name: 'Token flow' });
+    const caption = container.querySelector('[data-flow-caption]')!;
+    // Nothing pointed at: the peak day speaks for the chart.
+    expect(caption.textContent).toContain('peak');
+    const days = container.querySelectorAll<HTMLElement>('[data-day]');
+    expect(days).toHaveLength(30);
+    await userEvent.hover(days[days.length - 2]); // yesterday: b1, no tokens
+    await waitFor(() => expect(caption.textContent).toContain('0 tokens'));
+    await userEvent.hover(days[days.length - 1]); // today: a1's 100 output tokens
+    await waitFor(() => expect(caption.textContent).toContain('100 tokens'));
+    expect(caption.textContent).toContain('output 100');
+    expect(caption.textContent).toContain('1 session');
   });
 
   it('ranks shell commands merged across sessions', async () => {
@@ -71,10 +88,11 @@ describe('HomeScreen dashboard', () => {
     expect(value).toBe('6');
   });
 
-  it('counts sessions per folder', async () => {
-    setup();
-    expect(await screen.findByText('claude-terminal')).toBeInTheDocument();
-    expect(screen.getByText('my-flows')).toBeInTheDocument();
+  it('ranks folders by the tokens they used, with their share', async () => {
+    const { container } = setup();
+    await screen.findByRole('heading', { name: 'Project consumption' });
+    const rows = [...container.querySelectorAll('[data-project-tokens]')].map((r) => r.textContent);
+    expect(rows).toEqual(['claude-terminal100100%', 'my-flows00%']);
   });
 
   it('shows the live rate-limit percentages', async () => {
@@ -85,7 +103,7 @@ describe('HomeScreen dashboard', () => {
 
   it('reads out a day\'s totals on hover', async () => {
     const { container } = setup();
-    await screen.findByText('sessions');
+    await screen.findByRole('heading', { name: 'Sessions' });
     const lit = container.querySelectorAll<HTMLElement>('.dash-mark');
     expect(lit.length).toBe(3); // three days, one session each
     // earliest lit day in view is a2, two days ago — 100 output tokens ran on a1 only

@@ -56,6 +56,14 @@ listed here; see `git log` for the full history.
 - **Rename is now Edit session.** Double-click a session (or ⋯ › Edit…) opens a dialog
   with its name, Jira issue, project and pin in one place — link a ticket to a session
   that started without one, or unlink it, without retyping the name.
+### Changed
+
+- **Home is a token dashboard.** KPI tiles (total tokens, cache hit, tokens per
+  turn, sessions) with daily sparklines and a change vs the previous window, a
+  stacked per-day Token flow chart (input / cache / output), tokens per project,
+  the largest and the latest sessions, and a few derived insights — beside the
+  activity calendar, the live rate limit, models, commands and rhythm. A 90-day
+  range joins 7 / 30 / All.
 
 ## [0.31.1] - 2026-11-06
 

@@ -214,6 +214,15 @@
   from { transform: scaleX(0); }
 }
 
+/* Columns grow up from their baseline. */
+.dash-grow-y {
+  transform-origin: center bottom;
+  animation: dash-grow-y 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+@keyframes dash-grow-y {
+  from { transform: scaleY(0); }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .dash-mark, .dash-grow { animation: none; }
+  .dash-mark, .dash-grow, .dash-grow-y { animation: none; }
 }

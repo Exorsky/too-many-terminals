@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   calendarMonthCount, calendarMonths, dayKey, depth, filterRange, formatCompact,
   formatDuration, hourHistogram, modelFamily, modelShare, perProject, streaks,
-  summarize, topCommands,
+  summarize, topCommands, previousRange, pctChange, chartDays, dailyTokens, dayTotal,
+  perProjectTokens, largestSessions, recentSessions,
   type CalendarMark, type ProjectStat, type Range,
 } from './stats';
 
@@ -209,5 +210,55 @@ describe('formatters', () => {
   it('formats durations', () => {
     expect(formatDuration(41 * 60_000)).toBe('41m');
     expect(formatDuration(3 * 3_600_000 + 4 * 60_000)).toBe('3h 04m');
+  });
+});
+
+describe('token dashboard', () => {
+  it('compares with the window just before this one, never for All', () => {
+    const stats = [stat({ lastUsedIso: daysAgo(2) }), stat({ lastUsedIso: daysAgo(10) }), stat({ lastUsedIso: daysAgo(20) })];
+    expect(previousRange(stats, 7, NOW)).toHaveLength(1);
+    expect(previousRange(stats, 'all', NOW)).toBeNull();
+    expect(pctChange(120, 100)).toBe(20);
+    expect(pctChange(5, 0)).toBeNull();
+  });
+
+  it('buckets tokens per local day, oldest first, ending today', () => {
+    const stats = [
+      stat({ lastUsedIso: daysAgo(0), inputTokens: 1, cacheReadTokens: 10, cacheCreationTokens: 5, outputTokens: 2, turns: 3 }),
+      stat({ lastUsedIso: daysAgo(0), inputTokens: 1 }),
+      stat({ lastUsedIso: daysAgo(2), outputTokens: 7 }),
+      stat({ lastUsedIso: daysAgo(40), outputTokens: 99 }),
+    ];
+    const days = dailyTokens(stats, 7, NOW);
+    expect(days).toHaveLength(7);
+    expect(days[6]).toMatchObject({ input: 2, cacheRead: 10, cacheWrite: 5, output: 2, sessions: 2, turns: 3 });
+    expect(dayTotal(days[6])).toBe(19);
+    expect(days[4].output).toBe(7);
+    expect(days.reduce((n, d) => n + dayTotal(d), 0)).toBe(26);
+  });
+
+  it('spans All back to the oldest session, capped at a year', () => {
+    expect(chartDays([], 30, NOW)).toBe(30);
+    expect(chartDays([stat({ lastUsedIso: daysAgo(9) })], 'all', NOW)).toBe(10);
+    expect(chartDays([stat({ lastUsedIso: daysAgo(900) })], 'all', NOW)).toBe(365);
+  });
+
+  it('ranks folders by tokens with their share', () => {
+    const stats = [
+      stat({ projectDir: '/a', projectName: 'a', outputTokens: 30 }),
+      stat({ projectDir: '/b', projectName: 'b', outputTokens: 60 }),
+      stat({ projectDir: '/a', projectName: 'a', outputTokens: 10 }),
+    ];
+    expect(perProjectTokens(stats).map((p) => [p.name, p.tokens, p.sessions, p.pct])).toEqual([['b', 60, 1, 60], ['a', 40, 2, 40]]);
+  });
+
+  it('picks the largest and the most recent sessions', () => {
+    const stats = [
+      stat({ sessionId: 'old-big', lastUsedIso: daysAgo(5), outputTokens: 900 }),
+      stat({ sessionId: 'new-small', lastUsedIso: daysAgo(0), outputTokens: 1 }),
+      stat({ sessionId: 'mid', lastUsedIso: daysAgo(1), outputTokens: 50 }),
+    ];
+    expect(largestSessions(stats, 2).map((s) => s.sessionId)).toEqual(['old-big', 'mid']);
+    expect(recentSessions(stats, 2).map((s) => s.sessionId)).toEqual(['new-small', 'mid']);
   });
 });

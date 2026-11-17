@@ -20,21 +20,38 @@ nothing uploaded.
 
 ## The time range
 
-A **7 days / 30 days / All** switch in the header rescopes every panel at once.
-"All" is bounded by the same 50-newest-per-folder cap the history read uses, so
-it means "everything on record" rather than an unbounded scan.
+A **7 days / 30 days / 90 days / All** switch in the header rescopes every panel
+at once. "All" is bounded by the same 50-newest-per-folder cap the history read
+uses, so it means "everything on record" rather than an unbounded scan. The KPI
+deltas compare with the window just before this one ("vs previous 30d"); All has
+none.
 
 ## What each panel shows
 
+A grid of cards (one column, two at `md`, a 12-column layout at `xl`), in this order:
+
 | Panel | Reads | From the transcript |
 | --- | --- | --- |
-| Headline | sessions · turns · tokens · cache-hit rate | counts + `message.usage` |
-| **Cadence** (hero) | a month grid — one square per day, filled by how many sessions ran, tinted by folder | file mtime + folder |
+| KPI tiles | total tokens · cache hit · avg tokens per turn · sessions — each with a per-day sparkline (hover a day for its value) and a delta vs the previous window | `message.usage` + counts |
+| **Token flow** | stacked columns per day — input, cache (read + write), output — on one axis with round ticks; pointing at a day reads it out in the caption, which otherwise names the peak day | `message.usage` |
+| Project consumption | tokens per folder, biggest first, with its share of the window | `message.usage` + folder |
+| Largest sessions | the five biggest sessions by tokens: when, folder, first prompt, a bar in the folder's hue | `message.usage` |
+| **Activity** | the month grid (`SessionCalendar`) — one square per day, filled by how many sessions ran, tinted by folder | file mtime + folder |
+| Recent activity | the five latest sessions: time, folder, tokens · turns, first prompt | file mtime + counts |
+| Token insights | daily average, peak day, 30-day pace (daily average × 30), tokens per session | derived |
 | Rate limit — live | the official 5h / 7d rate-limit percentages | the `/usage` endpoint, **not** the transcripts — see [usage-meter.md](usage-meter.md) |
 | Top commands | first word of every Bash/PowerShell call, ranked | `tool_use` inputs |
-| Where the time went | sessions per open folder | counts |
 | Rhythm | current & best day streak, busiest hour, a 24-hour histogram | message timestamps |
 | Depth & models | avg/longest turns, avg/longest duration, token share by model | timestamps + `message.usage` |
+
+**The token series colours** (input `#5b8def`, cache `#2fa89e`, output `#a77be0`)
+are identity hues, validated together on the card surface with the dataviz
+palette validator (lightness band, chroma, colour-blind separation, contrast — all
+pass). None is a status colour or `primary`, and each always appears with its
+name in the legend and the caption. **A session lands whole on its last-used
+day**: the scan sums tokens per session, not per message, so a session that ran
+over midnight counts on the day it ended. **Est. cost** from the mock-up isn't
+shown — it needs per-model pricing the app doesn't have.
 
 **Turns** counts the prompts you actually typed — real, non-synthetic user
 messages, the same "is this something the human wrote" test the history preview
@@ -43,9 +60,9 @@ count, unlike the percentage-of-limit estimate the old usage meter derived and
 deleted (see [usage-meter.md](usage-meter.md)). The live rate-limit gauges are
 the only percentages here, and they come from Anthropic's endpoint, not a guess.
 
-## The cadence
+## The activity calendar
 
-The dashboard's hero: a **month grid** (`SessionCalendar`, shared with the
+A **month grid** (`SessionCalendar`, shared with the
 [History panel](session-history.md)) where each day is a square, filled by how
 many sessions ran that day and tinted with the hue of the folder that ran most
 of them ([`projectHue`](../../src/types.ts)). Density is drawn as *alpha over
@@ -53,8 +70,8 @@ that hue* rather than as its own colour ramp — a GitHub-style ramp would have 
 pick a colour, and every candidate green/orange is reserved for the status
 vocabulary (see [design.md](../design.md)). Four steps: 1, 2–3, 4–5, 6+.
 
-The range switch sets how many months are drawn — 1 / 2 / 3 for 7 days / 30 days
-/ All (`calendarMonthCount`). Point at a day and the caption under the grid reads
+The range switch sets how many months are drawn — 1 / 2 / 3 / 3 for 7 days / 30
+days / 90 days / All (`calendarMonthCount`). Point at a day and the caption under the grid reads
 out **date · sessions · tokens · which folders**, so it answers what the square
 is made of rather than quoting one prompt out of context.
 
@@ -97,7 +114,8 @@ puts you into a session leaves Home automatically.
 Quiet, matching the rest of the chrome (the skyline's ambient animation was the
 one sanctioned exception, and it's gone). Calendar squares rise as they appear
 (staggered per day, and only the ones that hold something); bars and gauges grow
-from their leading edge once on mount.
+from their leading edge once on mount, and the token columns grow up from their
+baseline (`.dash-grow-y`).
 Nothing loops. `prefers-reduced-motion` disables all of it — bars simply appear
 at their real width, since the width is the value and the animation only reveals
 it.
@@ -105,13 +123,15 @@ it.
 ## Files
 
 - `src/components/HomeScreen.tsx` — the dashboard component.
-- `src/components/HomeScreen.test.tsx` — headline rollup, command ranking,
-  per-folder counts, live gauges, hover caption, range switch, empty state.
+- `src/components/HomeScreen.test.tsx` — KPI rollup, token-flow columns and their
+  hover caption, per-folder tokens, command ranking, live gauges, calendar hover
+  caption, range switch, empty state.
 - `src/components/SessionCalendar.tsx` (+ test) — the month grid, shared with
   the History panel.
 - `src/lib/stats.ts` (+ `stats.test.ts`) — the pure aggregation (range filter,
-  summary, calendar bucketing, top commands, per-folder, rhythm, streaks, depth,
-  model share, formatters).
+  previous window and % change, per-day token buckets, summary, calendar
+  bucketing, per-folder tokens, largest / recent sessions, top commands, rhythm,
+  streaks, depth, model share, formatters).
 - `src/lib/ipc.ts` — `getSessionStats`.
 - `src-tauri/src/session_stats.rs` (+ tests) — the per-session transcript scan.
 - `src-tauri/src/commands.rs` — `get_session_stats` (async adapter).

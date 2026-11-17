@@ -14,13 +14,29 @@ export interface ProjectStat extends SessionStat {
 }
 
 /** Days back, or the whole (50-per-folder) history. */
-export type Range = 7 | 30 | 'all';
+export type Range = 7 | 30 | 90 | 'all';
 
 const DAY = 86_400_000;
 
 /** How many month grids the calendar draws for each range. */
 export function calendarMonthCount(range: Range): number {
   return range === 7 ? 1 : range === 30 ? 2 : 3;
+}
+
+/** The window just before this one — what "vs previous 30 days" compares
+ *  against. None for All: there is nothing before everything. */
+export function previousRange<T extends SessionStat>(stats: T[], range: Range, now: number): T[] | null {
+  if (range === 'all') return null;
+  const from = now - 2 * range * DAY, to = now - range * DAY;
+  return stats.filter((s) => {
+    const t = ms(s.lastUsedIso);
+    return t !== null && t >= from && t < to;
+  });
+}
+
+/** Signed percent change, or null when there's no base to compare with. */
+export function pctChange(current: number, previous: number): number | null {
+  return previous > 0 ? Math.round(((current - previous) / previous) * 100) : null;
 }
 
 function ms(iso: string | null): number | null {
@@ -271,4 +287,85 @@ export function formatDuration(msVal: number): string {
   const mins = Math.round(msVal / 60000);
   if (mins < 60) return `${mins}m`;
   return `${Math.floor(mins / 60)}h ${String(mins % 60).padStart(2, '0')}m`;
+}
+
+/** Tokens of every session that ended on one local day, split the way the
+ *  token chart stacks them. A session lands whole on its last-used day — the
+ *  transcript scan sums per session, not per message. */
+export interface DayTokens {
+  key: string;
+  /** "Oct 21". */
+  label: string;
+  input: number;
+  cacheRead: number;
+  cacheWrite: number;
+  output: number;
+  sessions: number;
+  turns: number;
+}
+
+export const dayTotal = (d: DayTokens) => d.input + d.cacheRead + d.cacheWrite + d.output;
+
+/** How many days the token chart spans: the range, or for All back to the
+ *  oldest session on record (capped at a year so bars stay bars). */
+export function chartDays(stats: SessionStat[], range: Range, now: number): number {
+  if (range !== 'all') return range;
+  const times = stats.map((s) => ms(s.lastUsedIso)).filter((t): t is number => t !== null);
+  if (times.length === 0) return 30;
+  return Math.min(365, Math.max(1, dayOrdinal(now) - dayOrdinal(Math.min(...times)) + 1));
+}
+
+/** One bucket per local day, oldest first, ending today. Days are stepped by
+ *  calendar date, not by 24h, so a DST change can't skip or double one. */
+export function dailyTokens(stats: SessionStat[], days: number, now: number): DayTokens[] {
+  const base = new Date(now);
+  const out: DayTokens[] = [];
+  const byKey = new Map<string, DayTokens>();
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(base.getFullYear(), base.getMonth(), base.getDate() - i);
+    const day: DayTokens = {
+      key: dayKey(d.getTime()), label: `${MONTHS[d.getMonth()]} ${d.getDate()}`,
+      input: 0, cacheRead: 0, cacheWrite: 0, output: 0, sessions: 0, turns: 0,
+    };
+    out.push(day);
+    byKey.set(day.key, day);
+  }
+  for (const s of stats) {
+    const day = byKey.get(dayKey(s.lastUsedIso));
+    if (!day) continue;
+    day.input += s.inputTokens;
+    day.cacheRead += s.cacheReadTokens;
+    day.cacheWrite += s.cacheCreationTokens;
+    day.output += s.outputTokens;
+    day.sessions += 1;
+    day.turns += s.turns;
+  }
+  return out;
+}
+
+export interface ProjectTokens { projectDir: string; name: string; hue: number; tokens: number; sessions: number; pct: number; }
+
+/** Tokens per folder, biggest first, each with its share of the window. */
+export function perProjectTokens(stats: ProjectStat[]): ProjectTokens[] {
+  const m = new Map<string, ProjectTokens>();
+  let total = 0;
+  for (const s of stats) {
+    const e = m.get(s.projectDir) ?? { projectDir: s.projectDir, name: s.projectName, hue: s.hue, tokens: 0, sessions: 0, pct: 0 };
+    const t = sessionTokens(s);
+    e.tokens += t;
+    e.sessions += 1;
+    total += t;
+    m.set(s.projectDir, e);
+  }
+  return [...m.values()]
+    .map((e) => ({ ...e, pct: total > 0 ? Math.round((e.tokens / total) * 100) : 0 }))
+    .sort((a, b) => b.tokens - a.tokens);
+}
+
+export function largestSessions<T extends SessionStat>(stats: T[], limit = 5): T[] {
+  return [...stats].sort((a, b) => sessionTokens(b) - sessionTokens(a)).slice(0, limit);
+}
+
+export function recentSessions<T extends SessionStat>(stats: T[], limit = 5): T[] {
+  return [...stats].sort((a, b) => (ms(b.lastUsedIso) ?? 0) - (ms(a.lastUsedIso) ?? 0)).slice(0, limit);
 }
