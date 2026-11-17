@@ -71,11 +71,11 @@ Native shells work without it.
 ### Know your limits
 - **Usage meter.** The official 5-hour and 7-day rate-limit windows sit in the title bar,
   with reset countdowns.
-- **Usage dashboard.** Tokens, cache hit rate, consumption per project and daily activity,
-  all built from your own session history.
+- **Token dashboard on Home.** Tokens, cache hit rate, consumption per project and daily
+  activity, all built from your own session history. Click a session to open it.
 
 ### Find and resume any session
-- **Library.** Full-text search across past Claude Code sessions in every open folder.
+- **History.** Full-text search across past Claude Code sessions in every open folder.
   Resume any of them with one click.
 - **Export or import a session** as a single file, or hand it to the Claude Code extension
   in VS Code mid-conversation.
