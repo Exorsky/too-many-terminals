@@ -71,7 +71,8 @@ then on macOS from the login-Keychain item `claude-env` (a JSON object of
 variable name → secret, read with `security find-generic-password -s claude-env -w`),
 then from the `env` block of `~/.claude/settings.json` — wherever a Claude Code
 user already keeps theirs. A GUI app doesn't inherit what a shell hook exports,
-so the Keychain is how it finds a token kept out of files. The token never crosses IPC; Settings only learns "found"
+so the Keychain is how it finds a token kept out of files. The token never crosses IPC; Settings only learns where it
+was found — "found in environment / Keychain (claude-env) / ~/.claude/settings.json" —
 or "not found" (`jira_token_found`).
 
 No token, no card details: keys still link, and the card says how to add one.

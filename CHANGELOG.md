@@ -49,7 +49,8 @@ listed here; see `git log` for the full history.
 - **Jira finds a token kept in the macOS Keychain.** Besides the environment and
   `~/.claude/settings.json`, the token variable is now looked up in the login-Keychain
   item `claude-env` (a JSON object of name → secret), so My issues and hover cards
-  work after moving tokens out of `settings.json`.
+  work after moving tokens out of `settings.json`. Settings now says where the token
+  was found ("found in Keychain (claude-env)").
 
 ## [0.31.1] - 2026-11-06
 

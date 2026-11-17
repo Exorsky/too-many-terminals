@@ -65,19 +65,21 @@ pub fn is_issue_key(key: &str) -> bool {
 /// Keychain item `claude-env` (a JSON object of name → secret), then the `env`
 /// block of Claude Code's global settings file. A GUI app doesn't inherit what
 /// a shell hook exports, so the Keychain is how it sees tokens kept out of files.
-pub fn resolve_token(var: &str, claude_settings: &Path) -> Option<String> {
+/// Returns the token and where it came from, for Settings to show.
+pub fn resolve_token(var: &str, claude_settings: &Path) -> Option<(String, &'static str)> {
     if var.is_empty() {
         return None;
     }
     if let Ok(v) = std::env::var(var) {
         if !v.is_empty() {
-            return Some(v);
+            return Some((v, "environment"));
         }
     }
     if let Some(v) = keychain_env().and_then(|text| string_in(&text, &[var])) {
-        return Some(v);
+        return Some((v, "Keychain (claude-env)"));
     }
-    string_in(&std::fs::read_to_string(claude_settings).ok()?, &["env", var])
+    let v = string_in(&std::fs::read_to_string(claude_settings).ok()?, &["env", var])?;
+    Some((v, "~/.claude/settings.json"))
 }
 
 /// The non-empty string at `path` inside a JSON document.
@@ -324,7 +326,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let path = tmp.path().join("settings.json");
         std::fs::write(&path, r#"{"env":{"TMT_TEST_JIRA_TOKEN_X":"secret"}}"#).unwrap();
-        assert_eq!(resolve_token("TMT_TEST_JIRA_TOKEN_X", &path).as_deref(), Some("secret"));
+        assert_eq!(resolve_token("TMT_TEST_JIRA_TOKEN_X", &path), Some(("secret".into(), "~/.claude/settings.json")));
         assert_eq!(resolve_token("TMT_TEST_MISSING", &path), None);
         assert_eq!(resolve_token("", &path), None);
     }

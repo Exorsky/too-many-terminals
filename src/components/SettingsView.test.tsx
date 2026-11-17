@@ -136,4 +136,19 @@ describe('Settings › Integrations › Jira', () => {
     await userEvent.tab();
     expect(ipc.saveSettings).toHaveBeenLastCalledWith(expect.objectContaining({ jiraPromptTemplates: {} }));
   });
+
+  it('says where the token was found, or that it was not', async () => {
+    vi.mocked(ipc.jiraTokenFound).mockImplementation(async (v) => (v === 'JIRA_API_TOKEN' ? 'Keychain (claude-env)' : null));
+    render(<SettingsView />);
+    await userEvent.click(screen.getByRole('button', { name: /Jira/ }));
+    const field = screen.getByLabelText('Token variable') as HTMLInputElement;
+    await userEvent.clear(field);
+    await userEvent.type(field, 'JIRA_API_TOKEN');
+    field.blur();
+    expect(await screen.findByText('● found in Keychain (claude-env)')).toBeInTheDocument();
+    await userEvent.clear(field);
+    await userEvent.type(field, 'NOPE_TOKEN');
+    field.blur();
+    expect(await screen.findByText('● not found')).toBeInTheDocument();
+  });
 });

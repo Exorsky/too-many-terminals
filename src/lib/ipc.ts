@@ -386,8 +386,8 @@ export function jiraMyIssues(): Promise<JiraIssue[]> {
   return invoke('jira_my_issues');
 }
 
-/** Whether a token variable resolves (env or ~/.claude/settings.json). */
-export function jiraTokenFound(variable: string): Promise<boolean> {
+/** Where a token variable resolves from (environment, Keychain, ~/.claude/settings.json), or null. */
+export function jiraTokenFound(variable: string): Promise<string | null> {
   return invoke('jira_token_found', { var: variable });
 }
 

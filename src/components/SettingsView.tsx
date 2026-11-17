@@ -283,10 +283,11 @@ function PathLinksIntegration() {
 
 function JiraIntegration() {
   const settings = useSettings();
-  const [tokenFound, setTokenFound] = useState<boolean | null>(null);
+  // undefined = not checked yet, null = not found, string = where it was found.
+  const [tokenFound, setTokenFound] = useState<string | null | undefined>(undefined);
   const [tokenVarError, setTokenVarError] = useState(false);
   useEffect(() => {
-    if (!settings.jiraTokenVar) { setTokenFound(null); return; }
+    if (!settings.jiraTokenVar) { setTokenFound(undefined); return; }
     let alive = true;
     ipc.jiraTokenFound(settings.jiraTokenVar).then((f) => { if (alive) setTokenFound(f); }).catch(() => {});
     return () => { alive = false; };
@@ -320,7 +321,7 @@ function JiraIntegration() {
       />
       <TextRow
         title="Token variable"
-        description="The name of an environment variable holding a personal access token — looked up in the app's environment, then in the env block of ~/.claude/settings.json. The app stores the name, never the token. Without one, keys still link, but the hover card can't show the title and status, and My issues stays empty."
+        description="The name of an environment variable holding a personal access token — looked up in the app's environment, then (macOS) in the Keychain item claude-env, then in the env block of ~/.claude/settings.json. The app stores the name, never the token. Without one, keys still link, but the hover card can't show the title and status, and My issues stays empty."
         value={settings.jiraTokenVar}
         placeholder="JIRA_API_TOKEN"
         mono
@@ -333,8 +334,8 @@ function JiraIntegration() {
         }}
         aside={tokenVarError
           ? <span className="text-attention">That looks like the token itself — enter the variable&apos;s name, e.g. JIRA_API_TOKEN</span>
-          : tokenFound === null ? null : tokenFound
-            ? <span className="text-success">● found</span>
+          : tokenFound === undefined ? null : tokenFound
+            ? <span className="text-success">● found in {tokenFound}</span>
             : <span className="text-attention">● not found</span>}
       />
       {settings.jiraProjectKeys.map((key, i) => (

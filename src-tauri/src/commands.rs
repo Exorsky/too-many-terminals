@@ -463,7 +463,7 @@ fn jira_config() -> Result<(AppSettings, Option<String>), String> {
     let root = workspace::config_dir().ok_or("could not resolve config directory")?;
     let s = settings::load_settings(&root);
     crate::jira::check_enabled(s.jira_enabled, &s.jira_base_url)?;
-    let token = claude_settings_path().and_then(|p| crate::jira::resolve_token(&s.jira_token_var, &p));
+    let token = claude_settings_path().and_then(|p| crate::jira::resolve_token(&s.jira_token_var, &p)).map(|(t, _)| t);
     // A variable that's named but doesn't resolve would send an anonymous
     // request — a pointless 401 that then pauses every lookup for 5 minutes.
     if !s.jira_token_var.is_empty() && token.is_none() {
@@ -495,11 +495,11 @@ pub async fn jira_my_issues() -> Result<Vec<crate::jira::JiraIssue>, String> {
     crate::jira::fetch_my_issues(&s.jira_base_url, &token).await
 }
 
-/// Whether a token variable resolves to anything — a yes/no for Settings,
-/// never the value.
+/// Where a token variable resolves from ("environment", "Keychain (claude-env)",
+/// "~/.claude/settings.json"), or None — for Settings, never the value.
 #[tauri::command(async)]
-pub fn jira_token_found(var: String) -> bool {
-    claude_settings_path().and_then(|p| crate::jira::resolve_token(&var, &p)).is_some()
+pub fn jira_token_found(var: String) -> Option<&'static str> {
+    claude_settings_path().and_then(|p| crate::jira::resolve_token(&var, &p)).map(|(_, from)| from)
 }
 
 #[tauri::command(async)]
