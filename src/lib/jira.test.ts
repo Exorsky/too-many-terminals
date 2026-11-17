@@ -156,9 +156,12 @@ describe('starting a session from an issue', () => {
   });
 
   it('finds the open sessions that already carry the key', () => {
-    const tab = (id: string, name: string, archived = false) =>
-      ({ id, name, archived, kind: 'claude', cwd: '/', projectDir: null, shellId: null, resumeSessionId: null, exited: false, status: 'idle' }) as Tab;
-    const sessions = [tab('a', 'ITA-29941 · add tenant'), tab('b', 'ITA-299410 other'), tab('c', 'ITA-29941', true), tab('d', 'fix ITA-29941')];
+    const tab = (id: string, name: string, archived = false, kind: Tab['kind'] = 'claude') =>
+      ({ id, name, archived, kind, cwd: '/', projectDir: null, shellId: null, resumeSessionId: null, exited: false, status: 'idle' }) as Tab;
+    const sessions = [
+      tab('a', 'ITA-29941 · add tenant'), tab('b', 'ITA-299410 other'), tab('c', 'ITA-29941', true), tab('d', 'fix ITA-29941'),
+      tab('e', 'ITA-29941 · logs', false, 'shell'),
+    ];
     expect(sessionsForIssue(sessions, 'ITA-29941').map((t) => t.id)).toEqual(['a', 'd']);
   });
 });

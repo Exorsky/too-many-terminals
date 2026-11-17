@@ -41,6 +41,19 @@ describe('SessionActivity', () => {
     expect(onWritesSeen).toHaveBeenCalledWith(1);
   });
 
+  it('reads the transcript when a turn ends — not when one starts, nor on each write', async () => {
+    vi.mocked(ipc.getSessionActivity).mockResolvedValue(stat());
+    const onWritesSeen = vi.fn();
+    const { rerender } = render(<SessionActivity session={session} onWritesSeen={onWritesSeen} Label={Label} />);
+    await screen.findByText('read-only');
+    expect(ipc.getSessionActivity).toHaveBeenCalledTimes(1);
+    rerender(<SessionActivity session={{ ...session, status: 'working' }} onWritesSeen={onWritesSeen} Label={Label} />);
+    rerender(<SessionActivity session={{ ...session, status: 'working', writes: 1 }} onWritesSeen={onWritesSeen} Label={Label} />);
+    expect(ipc.getSessionActivity).toHaveBeenCalledTimes(1);
+    rerender(<SessionActivity session={{ ...session, status: 'idle', writes: 1 }} onWritesSeen={onWritesSeen} Label={Label} />);
+    await vi.waitFor(() => expect(ipc.getSessionActivity).toHaveBeenCalledTimes(2));
+  });
+
   it('says read-only when nothing was written', async () => {
     vi.mocked(ipc.getSessionActivity).mockResolvedValue(stat());
     render(<SessionActivity session={session} onWritesSeen={vi.fn()} Label={Label} />);

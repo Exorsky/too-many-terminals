@@ -19,15 +19,26 @@ Three pieces, one source each:
 name and its input:
 
 - **Shell** (`Bash`, `PowerShell`): any command segment (split on `&& ; | \n`)
-  that carries a standalone `POST`/`PUT`/`PATCH`/`DELETE` token (`api jira
-  POST …`, `curl -X PUT`, `http DELETE`), or `git push`, `glab`/`gh mr|pr|issue
+  that sends an HTTP write — `POST`/`PUT`/`PATCH`/`DELETE` as an HTTP client's
+  method argument (`api jira POST …`, `http PUT …`, `xh`) or after
+  `-X`/`--request`/`--method` (`curl -X PUT`, `gh api --method PATCH`) — or
+  `git push` (past git's own `-C dir` / `-c k=v`), `glab`/`gh mr|pr|issue
   create|merge|note|comment|approve|close`, `curl -d/--data/--json/-F`,
   `kubectl apply|delete|patch|scale|rollout…`, `terraform|terragrunt
   apply|destroy`, `helm install|upgrade|uninstall`, `aws … create-*/delete-*/
-  put-*/update-*…`, `gcloud`/`az … create|delete|update|deploy|set`.
+  put-*/update-*…`, `gcloud`/`az … create|delete|update|deploy`. A capitalised
+  verb anywhere else is text (`grep -rn DELETE src/`), and `gcloud config set` /
+  `az account set` change local config, so neither counts.
 - **MCP tools**: the tool's name, split on `_`/`-`, contains a verb such as
   create, update, delete, send, reply, assign, revoke, suspend, transfer,
-  upload. `users_suspend` is a write; `users_get` is not.
+  upload — and no read word (get, list, search, view, read, fetch, find, query,
+  describe, status, or `tabs` for the browser extension's own tabs).
+  `users_suspend` is a write; `users_get`, `get_issue_comments` and
+  `tabs_create_mcp` are not.
+- **Subagents' calls** aren't counted by the badge: the hook skips any payload
+  with an `agent_id` (set when it fires inside a subagent — see Claude Code's
+  hooks reference). Those calls live in the subagent's own transcript, not the
+  session's, so Activity couldn't list them.
 - **Local edits** (`Edit`, `Write`) are not writes. They are counted as edits.
   The Changes panel ([git.md](git.md)) is where those are reviewed.
 
@@ -48,10 +59,14 @@ the record.
   `tool_result` comes back. An `is_error` result (denied, failed) drops it, and
   one with no result yet isn't listed.
 
-The badge and the list can briefly disagree after a restart, because the badge
-is a count persisted in `workspace.json`. Opening the inspector reads the
-transcript and raises the badge to the transcript's count (`writesSeen`
-never lowers it).
+The badge is a live count persisted in `workspace.json`, so after a restart or
+a `/clear` it can say something the transcript doesn't. Whenever Activity reads
+the transcript, the badge takes the transcript's count (`writesSeen` — up or
+down), so the two agree.
+
+Activity reads the transcript once when the inspector shows the session, then
+once each time a turn ends — not when a turn starts and not on each write, since
+the transcript is still growing then and the turn's end reads it whole.
 
 ## What a waiting session is asking
 

@@ -30,7 +30,9 @@ pub fn naming_prompt(user_message: &str) -> String {
 
 /// Removes `<tag>…</tag>` blocks (an IDE's `<ide_opened_file>`, system
 /// reminders) that ride along with a prompt — they aren't what the user typed,
-/// and Haiku used to echo them back as the title.
+/// and Haiku used to echo them back as the title. Only tags with a `_` or `-`
+/// in the name, which is how every injected one is spelled: HTML the user typed
+/// (`fix the <title>Home</title> tag`) stays.
 pub fn strip_tagged_blocks(text: &str) -> String {
     let mut out = String::new();
     let mut rest = text;
@@ -39,7 +41,8 @@ pub fn strip_tagged_blocks(text: &str) -> String {
         let tag: String =
             after.chars().take_while(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '-').collect();
         let close = format!("</{tag}>");
-        let end = (!tag.is_empty() && after[tag.len()..].starts_with('>'))
+        let injected = tag.contains('_') || tag.contains('-');
+        let end = (injected && after[tag.len()..].starts_with('>'))
             .then(|| after.find(&close))
             .flatten();
         match end {
@@ -71,11 +74,13 @@ fn looks_like_refusal(name: &str) -> bool {
 /// Trims whitespace/wrapping quotes and caps length; `None` if nothing useful
 /// remains or the reply is a refusal rather than a title.
 pub fn clean_name(raw: &str) -> Option<String> {
+    tidy(raw).filter(|name| !looks_like_refusal(name))
+}
+
+/// First line, without wrapping quotes, capped; `None` if blank.
+fn tidy(raw: &str) -> Option<String> {
     let first_line = raw.trim().lines().next().unwrap_or("");
     let trimmed = first_line.trim().trim_matches(|c| c == '"' || c == '\'').trim();
-    if looks_like_refusal(trimmed) {
-        return None;
-    }
     let truncated: String = trimmed.chars().take(NAME_MAX_CHARS).collect();
     (!truncated.is_empty()).then_some(truncated)
 }
@@ -89,7 +94,8 @@ pub fn fallback_name(user_message: &str) -> Option<String> {
         .filter(|w| !w.starts_with("http://") && !w.starts_with("https://"))
         .take(6)
         .collect();
-    clean_name(&words.join(" "))
+    // Your own words, not the model's: "I can't connect to VPN" is a fine name.
+    tidy(&words.join(" "))
 }
 
 fn naming_flags() -> Vec<String> {
@@ -275,6 +281,8 @@ mod tests {
         assert_eq!(strip_tagged_blocks(msg), "review this file");
         assert_eq!(strip_tagged_blocks("is a < b and b > c"), "is a < b and b > c");
         assert_eq!(strip_tagged_blocks("<unclosed>text"), "<unclosed>text");
+        assert_eq!(strip_tagged_blocks("fix the <title>Home</title> tag"), "fix the <title>Home</title> tag");
+        assert_eq!(strip_tagged_blocks("<system-reminder>x</system-reminder>go"), "go");
         assert!(!naming_prompt(msg).contains("ide_opened_file"));
     }
 
@@ -285,6 +293,7 @@ mod tests {
             Some("read the last message in this".into()),
         );
         assert_eq!(fallback_name("https://example.com"), None);
+        assert_eq!(fallback_name("I can't connect to VPN from office").as_deref(), Some("I can't connect to VPN from"));
         assert_eq!(fallback_name("<ide_selection>x</ide_selection>  "), None);
     }
 

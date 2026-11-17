@@ -129,9 +129,9 @@ with `{key}`, `{summary}` and `{url}` filled in (`issuePrompt` in
 `src/lib/jira.ts`). For example `/inmn-ticket-analysis {key}` makes every INMN
 session start on that skill. It is still pasted, not submitted.
 
-**A ticket that already has a session.** If open sessions already carry the key
-in their name (`sessionsForIssue`, the same match My issues uses for its
-session dot), the dialog lists up to three, newest first, with their write
+**A ticket that already has a session.** If open Claude sessions already carry
+the key in their name (`sessionsForIssue`, the same match My issues uses for its
+session dot — shell tabs named after the ticket don't count), the dialog lists up to three, newest first, with their write
 badge and age. **Enter resumes the latest** and the primary button reads
 *Resume latest*. **⌘↵ / Ctrl+↵**, or *New session anyway*, starts a new one.
 Clicking a listed session opens that one. The same ticket spread over several

@@ -36,7 +36,14 @@ listed here; see `git log` for the full history.
   answers "I can't help with this…" (a prompt that is only a link or a
   screenshot), the session takes the first words of your prompt instead. IDE
   context like `<ide_opened_file>` no longer leaks into names, and a ticket
-  key in the prompt now leads the name.
+  key in the prompt now leads the name. A prompt that itself starts with
+  "I can't…" still names its session, and HTML you typed stays in the prompt.
+- **Fewer false "writes outside the machine".** `get_issue`-style MCP reads,
+  browser tabs, `grep DELETE`, `gcloud config set` and `az account set` no
+  longer count; `git -C dir push` now does. A subagent's calls are left out of
+  the badge, and the badge follows the inspector's Activity count.
+- **New session and My issues offer only Claude sessions for a ticket**, never a
+  shell tab named after it.
 
 ## [0.31.1] - 2026-11-06
 

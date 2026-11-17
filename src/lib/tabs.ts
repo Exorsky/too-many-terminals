@@ -310,8 +310,11 @@ export function tabsReducer(state: TabsState, action: TabsAction): TabsState {
     case 'write':
       return patch(action.tabId, (t) => ({ ...t, writes: (t.writes ?? 0) + 1 }));
 
+    // The transcript is the record: once Activity has read it, the badge says
+    // what Activity lists — down as well as up (a count from before /clear, or
+    // from an older build that counted subagents, doesn't linger).
     case 'writesSeen':
-      return patch(action.tabId, (t) => (action.count > (t.writes ?? 0) ? { ...t, writes: action.count } : t));
+      return patch(action.tabId, (t) => ((t.writes ?? 0) === action.count ? t : { ...t, writes: action.count }));
 
     case 'gitStart':
       // Set once: a session's starting point never moves.

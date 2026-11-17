@@ -294,9 +294,7 @@ pub fn run_hook_client(event_arg: &str) {
         // Only successful calls reach PostToolUse, so this counts writes that
         // happened, not ones you denied. Anything that isn't a write sends nothing.
         "post-tool-use" => {
-            let tool_name = payload.get("tool_name").and_then(Value::as_str).unwrap_or("");
-            crate::activity::write_label(tool_name, payload.get("tool_input"))
-                .map(|label| json!({ "tabId": tab_id, "event": "tab:write", "data": label }))
+            write_from_payload(&payload).map(|label| json!({ "tabId": tab_id, "event": "tab:write", "data": label }))
         }
         "stop" => Some(json!({ "tabId": tab_id, "event": "tab:status:idle", "data": null })),
         // Forward the Notification's `message` so the server can tell a real
@@ -350,6 +348,18 @@ fn send_line(pipe: &str, message: &str) {
     if let Ok(mut stream) = UnixStream::connect(pipe) {
         let _ = writeln!(stream, "{message}");
     }
+}
+
+/// The write a PostToolUse payload reports, if any. A subagent's calls are
+/// left out (`agent_id` is set when the hook fires inside one): they aren't in
+/// the session's own transcript, so the inspector's Activity list — which reads
+/// that transcript — couldn't show what the badge counted.
+fn write_from_payload(payload: &Value) -> Option<String> {
+    if payload.get("agent_id").is_some_and(|v| !v.is_null()) {
+        return None;
+    }
+    let tool_name = payload.get("tool_name").and_then(Value::as_str).unwrap_or("");
+    crate::activity::write_label(tool_name, payload.get("tool_input"))
 }
 
 #[cfg(test)]
@@ -410,6 +420,15 @@ mod tool_summary_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_subagent_write_is_not_counted() {
+        let push = json!({ "tool_name": "Bash", "tool_input": { "command": "git push" } });
+        assert_eq!(write_from_payload(&push).as_deref(), Some("git push"));
+        let mut from_agent = push.clone();
+        from_agent["agent_id"] = json!("a1b2");
+        assert_eq!(write_from_payload(&from_agent), None);
+    }
 
     fn command_of(settings: &Value, event: &str) -> String {
         settings["hooks"][event][0]["hooks"][0]["command"]

@@ -392,13 +392,14 @@ describe('what a session is asking', () => {
 });
 
 describe('writes outside the machine', () => {
-  it('counts live writes and only ever raises the count from the transcript', () => {
+  it('counts live writes, then takes the transcript\'s count as the record', () => {
     let state = tabsReducer(initialTabsState, { type: 'add', tab: makeTab('a', { kind: 'claude' }) });
     state = tabsReducer(state, { type: 'write', tabId: 'a' });
     state = tabsReducer(state, { type: 'write', tabId: 'a' });
     expect(state.tabs[0].writes).toBe(2);
+    // One of the two was a subagent's (or from before /clear): not in the transcript.
     state = tabsReducer(state, { type: 'writesSeen', tabId: 'a', count: 1 });
-    expect(state.tabs[0].writes).toBe(2);
+    expect(state.tabs[0].writes).toBe(1);
     state = tabsReducer(state, { type: 'writesSeen', tabId: 'a', count: 5 });
     expect(state.tabs[0].writes).toBe(5);
   });

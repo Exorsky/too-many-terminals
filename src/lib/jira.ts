@@ -58,10 +58,12 @@ export function parseIssueInput(input: string, projects: string[]): string | nul
   return firstIssueKey(input.trim().toUpperCase(), projects);
 }
 
-/** Open (non-archived) sessions whose name carries `key`, in the order given. */
+/** Open (non-archived) Claude sessions whose name carries `key`, in the order
+ *  given. A shell tab named after the ticket isn't "its session": resuming it
+ *  from New session or My issues would land you in a shell. */
 export function sessionsForIssue(sessions: Tab[], key: string): Tab[] {
   const project = key.split('-')[0];
-  return sessions.filter((s) => !s.archived && findIssueKeys(s.name, [project]).some((m) => m.key === key));
+  return sessions.filter((s) => s.kind === 'claude' && !s.archived && findIssueKeys(s.name, [project]).some((m) => m.key === key));
 }
 
 /** What a session started from an issue is handed: the issue's project

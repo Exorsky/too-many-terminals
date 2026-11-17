@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ArrowUpRight } from 'lucide-react';
 import * as ipc from '@/lib/ipc';
 import { formatCompact, sessionTokens, summarize } from '@/lib/stats';
@@ -21,11 +21,16 @@ export default function SessionActivity({ session, onWritesSeen, Label }: {
 }) {
   const [stat, setStat] = useState<SessionStat | null>(null);
   const sessionId = session.resumeSessionId;
-  // Re-read when a turn ends or a new write lands, not on every tool call.
   const settled = session.status !== 'working';
+  const loadedFor = useRef<string | null>(null);
 
+  // One read when the session is first shown, then one each time a turn ends.
+  // Not at a turn's start, and not on each write: the transcript is still
+  // growing then, and the turn's end reads it whole anyway.
   useEffect(() => {
-    if (!sessionId) { setStat(null); return; }
+    if (!sessionId) { setStat(null); loadedFor.current = null; return; }
+    if (!settled && loadedFor.current === sessionId) return;
+    loadedFor.current = sessionId;
     let live = true;
     ipc.getSessionActivity(session.cwd, sessionId)
       .then((s) => {
@@ -37,7 +42,7 @@ export default function SessionActivity({ session, onWritesSeen, Label }: {
     return () => { live = false; };
     // onWritesSeen is a fresh closure each render; the inputs below are what matter.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session.cwd, sessionId, settled, session.writes]);
+  }, [session.cwd, sessionId, settled]);
 
   if (!stat) return null;
   const { cacheHitPct } = summarize([stat]);
