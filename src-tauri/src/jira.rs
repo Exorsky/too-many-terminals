@@ -1,8 +1,8 @@
 //! Read-only Jira lookups for the issue card: one GET per issue key, nothing
 //! else. The token is never stored by the app — settings hold only the *name*
-//! of an environment variable, resolved here from the app's own environment
-//! and then from `~/.claude/settings.json`'s `env` block, which is where a
-//! Claude Code user already keeps theirs.
+//! of an environment variable, resolved here from the app's own environment,
+//! the macOS Keychain item `claude-env`, or `~/.claude/settings.json`'s `env`
+//! block — wherever a Claude Code user already keeps theirs.
 
 use std::path::Path;
 use std::sync::Mutex;
@@ -61,8 +61,10 @@ pub fn is_issue_key(key: &str) -> bool {
         && num.chars().all(|c| c.is_ascii_digit())
 }
 
-/// The token behind `var`: the process environment first, then the `env`
-/// block of Claude Code's global settings file.
+/// The token behind `var`: the process environment first, then the macOS
+/// Keychain item `claude-env` (a JSON object of name → secret), then the `env`
+/// block of Claude Code's global settings file. A GUI app doesn't inherit what
+/// a shell hook exports, so the Keychain is how it sees tokens kept out of files.
 pub fn resolve_token(var: &str, claude_settings: &Path) -> Option<String> {
     if var.is_empty() {
         return None;
@@ -72,9 +74,32 @@ pub fn resolve_token(var: &str, claude_settings: &Path) -> Option<String> {
             return Some(v);
         }
     }
-    let text = std::fs::read_to_string(claude_settings).ok()?;
-    let json: Value = serde_json::from_str(&text).ok()?;
-    json.get("env")?.get(var)?.as_str().filter(|s| !s.is_empty()).map(str::to_string)
+    if let Some(v) = keychain_env().and_then(|text| string_in(&text, &[var])) {
+        return Some(v);
+    }
+    string_in(&std::fs::read_to_string(claude_settings).ok()?, &["env", var])
+}
+
+/// The non-empty string at `path` inside a JSON document.
+fn string_in(text: &str, path: &[&str]) -> Option<String> {
+    let json: Value = serde_json::from_str(text).ok()?;
+    let v = path.iter().try_fold(&json, |v, key| v.get(key))?;
+    v.as_str().filter(|s| !s.is_empty()).map(str::to_string)
+}
+
+#[cfg(target_os = "macos")]
+fn keychain_env() -> Option<String> {
+    let out = std::process::Command::new("security")
+        .args(["find-generic-password", "-s", "claude-env", "-w"])
+        .stderr(std::process::Stdio::null())
+        .output()
+        .ok()?;
+    out.status.success().then(|| String::from_utf8_lossy(&out.stdout).trim().to_string())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn keychain_env() -> Option<String> {
+    None
 }
 
 fn parse_issue(json: &Value) -> Option<JiraIssue> {
@@ -302,6 +327,15 @@ mod tests {
         assert_eq!(resolve_token("TMT_TEST_JIRA_TOKEN_X", &path).as_deref(), Some("secret"));
         assert_eq!(resolve_token("TMT_TEST_MISSING", &path), None);
         assert_eq!(resolve_token("", &path), None);
+    }
+
+    #[test]
+    fn token_from_a_keychain_style_object() {
+        let text = r#"{"JIRA_API_TOKEN":"secret","EMPTY":""}"#;
+        assert_eq!(string_in(text, &["JIRA_API_TOKEN"]).as_deref(), Some("secret"));
+        assert_eq!(string_in(text, &["EMPTY"]), None);
+        assert_eq!(string_in(text, &["MISSING"]), None);
+        assert_eq!(string_in("not json", &["JIRA_API_TOKEN"]), None);
     }
 
     #[test]

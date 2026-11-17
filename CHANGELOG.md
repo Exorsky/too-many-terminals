@@ -44,6 +44,12 @@ listed here; see `git log` for the full history.
   the badge, and the badge follows the inspector's Activity count.
 - **New session and My issues offer only Claude sessions for a ticket**, never a
   shell tab named after it.
+### Fixed
+
+- **Jira finds a token kept in the macOS Keychain.** Besides the environment and
+  `~/.claude/settings.json`, the token variable is now looked up in the login-Keychain
+  item `claude-env` (a JSON object of name → secret), so My issues and hover cards
+  work after moving tokens out of `settings.json`.
 
 ## [0.31.1] - 2026-11-06
 

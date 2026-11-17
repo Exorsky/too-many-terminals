@@ -67,8 +67,11 @@ Jira here is watched for 429s, so the app asks as little as it can:
 
 Settings store the **name** of an environment variable, never the token. The
 backend (`src-tauri/src/jira.rs`) resolves it from the app's own environment,
-then from the `env` block of `~/.claude/settings.json` — where a Claude Code user
-already keeps theirs. The token never crosses IPC; Settings only learns "found"
+then on macOS from the login-Keychain item `claude-env` (a JSON object of
+variable name → secret, read with `security find-generic-password -s claude-env -w`),
+then from the `env` block of `~/.claude/settings.json` — wherever a Claude Code
+user already keeps theirs. A GUI app doesn't inherit what a shell hook exports,
+so the Keychain is how it finds a token kept out of files. The token never crosses IPC; Settings only learns "found"
 or "not found" (`jira_token_found`).
 
 No token, no card details: keys still link, and the card says how to add one.
