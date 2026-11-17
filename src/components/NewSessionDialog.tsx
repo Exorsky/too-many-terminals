@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Dialog } from 'radix-ui';
-import { History, Inbox, Pencil, Plus, X } from 'lucide-react';
+import ModalDialog, { DIALOG_BUTTON, DIALOG_PRIMARY, DialogClose } from './ui/dialog';
+import { History, Inbox, Pencil, Plus } from 'lucide-react';
 import { projectHue, type Tab } from '@/types';
 import { cn, folderName } from '@/lib/utils';
 import { fetchIssue, issuePrompt, jiraOn, parseIssueInput, sessionsForIssue } from '@/lib/jira';
@@ -155,166 +155,156 @@ export default function NewSessionDialog({
   );
 
   return (
-    <Dialog.Root open={open} onOpenChange={onOpenChange}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/50" />
-        <Dialog.Content
-          className="fixed left-1/2 top-[12%] z-50 flex flex-col w-[680px] max-w-[calc(100vw-32px)] max-h-[76vh] -translate-x-1/2 rounded-md border border-border bg-card shadow-lg"
-          onOpenAutoFocus={(e) => { e.preventDefault(); nameRef.current?.focus(); }}
-          onKeyDown={onKeyDown}
-        >
-          <div className="flex items-center h-11 px-4 border-b border-border shrink-0">
-            <Dialog.Title className="m-0 text-[13px] font-semibold text-foreground">New session</Dialog.Title>
-            <Dialog.Description className="sr-only">Pick where and what to start.</Dialog.Description>
-            <Dialog.Close
-              aria-label="Close"
-              className="ml-auto flex items-center justify-center w-6 h-6 rounded-sm border-none bg-transparent text-muted-foreground cursor-pointer hover:text-foreground hover:bg-hover"
-            >
-              <X size={13} />
-            </Dialog.Close>
-          </div>
-
-          <div className="grid grid-cols-[220px_minmax(0,1fr)] min-h-0 flex-1">
-            <div role="radiogroup" aria-label="Where" className="flex flex-col py-2 border-r border-border overflow-y-auto scrollbar-thin">
-              <div className="px-3 pt-1 pb-1.5 text-[12px] font-semibold text-muted-foreground">Where</div>
-              <button type="button" role="radio" aria-checked={dir === null} className={whereRow(dir === null)} onClick={() => setDir(null)}>
-                <Inbox size={12} className="shrink-0 text-muted-foreground" />
-                <span className="flex-1">Inbox</span>
-                <span className="text-[11px] text-faint">no folder</span>
-              </button>
-              {projects.length > 0 && <div className="h-px mx-3 my-1.5 bg-border" />}
-              {projects.map((p, i) => (
-                <button key={p} type="button" role="radio" aria-checked={dir === p} title={p} className={whereRow(dir === p)} onClick={() => setDir(p)}>
-                  <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: `hsl(${projectHue(i)} 60% 62%)` }} />
-                  <span className="flex-1 truncate">{folderName(p)}</span>
-                  <span className="text-[11px] font-mono tabular-nums text-muted-foreground">{counts.get(p) || ''}</span>
-                </button>
-              ))}
-              <button type="button" className={cn(whereRow(false), 'text-muted-foreground')} onClick={onAddProject}>
-                <Plus size={12} className="shrink-0" />
-                <span>Add a project folder…</span>
-              </button>
-            </div>
-
-            <div className="flex flex-col gap-3 px-4 py-3 min-w-0">
-              <div className="text-[12px] font-semibold text-muted-foreground">What</div>
-              <div role="radiogroup" aria-label="What" className="grid grid-cols-3 gap-2">
-                {KINDS.map((k) => (
-                  <button
-                    key={k.kind}
-                    type="button"
-                    role="radio"
-                    aria-checked={kind === k.kind}
-                    className={cn(
-                      'flex flex-col gap-2 p-2.5 rounded-sm border cursor-pointer font-inherit text-left',
-                      kind === k.kind
-                        ? 'border-primary bg-primary/10 text-foreground'
-                        : 'border-border bg-transparent text-dim hover:border-border-hover',
-                    )}
-                    onClick={() => setKind(k.kind)}
-                  >
-                    <LayoutThumb kind={k.kind} />
-                    <span className="text-[13px] font-semibold text-foreground">{k.label}</span>
-                    <span className="text-[11.5px] leading-snug text-muted-foreground">{k.hint}</span>
-                  </button>
-                ))}
-              </div>
-
-              {jiraOn(settings) && (
-                <label className="flex flex-col gap-1.5">
-                  <span className="text-[12px] font-semibold text-muted-foreground">
-                    Jira issue <span className="font-normal text-faint">— optional, a key or a link</span>
-                  </span>
-                  <input
-                    value={issueInput}
-                    onChange={(e) => setIssueInput(e.target.value)}
-                    placeholder="ABC-123"
-                    spellCheck={false}
-                    autoComplete="off"
-                    className="h-[30px] px-2.5 rounded-sm border border-border bg-background font-mono text-[12px] text-foreground placeholder:text-faint outline-none focus:border-border-hover"
-                  />
-                  {issueKey && (
-                    <span className="text-[11px] leading-snug text-muted-foreground truncate">
-                      {issueTitle || issueError || (jiraTokenVar ? 'Looking it up…' : issueKey)}
-                    </span>
-                  )}
-                </label>
-              )}
-
-              {existing.length > 0 && (
-                <div data-existing-sessions className="rounded-sm border border-border overflow-hidden">
-                  <div className="flex items-center gap-1.5 px-2.5 h-7 border-b border-border text-[12px] text-dim">
-                    <History size={12} className="text-muted-foreground" />
-                    {issueKey} already has {existing.length} session{existing.length === 1 ? '' : 's'}
-                  </div>
-                  {existing.slice(0, 3).map((t, i) => (
-                    <button
-                      key={t.id}
-                      type="button"
-                      onClick={() => resume(t.id)}
-                      className={cn(
-                        'flex items-center gap-2 w-full h-[30px] px-2.5 border-none cursor-pointer font-inherit text-left text-[12.5px]',
-                        i === 0 ? 'bg-selected text-foreground' : 'bg-transparent text-dim hover:bg-hover hover:text-foreground',
-                      )}
-                    >
-                      <span className="flex-1 truncate">{t.name}</span>
-                      {!!t.writes && (
-                        <span className="flex items-center gap-0.5 font-mono tabular-nums text-[10.5px] text-muted-foreground">
-                          <Pencil size={10} />{t.writes}
-                        </span>
-                      )}
-                      <span className="font-mono tabular-nums text-[11px] text-muted-foreground">{compactAge(seenAt(t), now)}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              <label className="flex flex-col gap-1.5">
-                <span className="text-[12px] font-semibold text-muted-foreground">
-                  Name <span className="font-normal text-faint">— optional{kind !== 'shell' && ', Claude names it otherwise'}</span>
-                </span>
-                <input
-                  ref={nameRef}
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Code review session"
-                  spellCheck={false}
-                  autoComplete="off"
-                  className="h-[30px] px-2.5 rounded-sm border border-border bg-background text-[13px] text-foreground placeholder:text-faint outline-none focus:border-border-hover font-inherit"
-                />
-              </label>
-              <div className="font-mono text-[11px] text-muted-foreground truncate" title={dir ?? undefined}>
-                {dir ?? '~/.tmt/scratch/<new>'}
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 h-12 px-4 border-t border-border shrink-0">
-            <span className="text-[11.5px] text-muted-foreground">
-              <kbd className="px-1 rounded-sm border border-border bg-raised font-mono text-[11px] text-dim">⌘N</kbd> again starts Claude in {defaultDir ? folderName(defaultDir) : 'the Inbox'}
-            </span>
-            <Dialog.Close className="ml-auto px-3 h-7 rounded-sm border border-border bg-transparent text-[13px] text-dim cursor-pointer font-inherit hover:bg-hover hover:text-foreground">
-              Cancel
-            </Dialog.Close>
-            {existing.length > 0 && (
-              <button
-                type="button"
-                className="px-3 h-7 rounded-sm border border-border bg-transparent text-[13px] text-dim cursor-pointer font-inherit hover:bg-hover hover:text-foreground"
-                onClick={() => start(true)}
-              >
-                New session anyway <kbd className="ml-1 font-mono text-[11px] text-faint">⌘↵</kbd>
-              </button>
-            )}
+    <ModalDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="New session"
+      description="Pick where and what to start."
+      className="top-[12%] w-[680px] max-h-[76vh]"
+      onOpenAutoFocus={(e) => { e.preventDefault(); nameRef.current?.focus(); }}
+      onKeyDown={onKeyDown}
+      footer={(
+        <>
+          <span className="text-[11.5px] text-muted-foreground">
+            <kbd className="px-1 rounded-sm border border-border bg-raised font-mono text-[11px] text-dim">⌘N</kbd> again starts Claude in {defaultDir ? folderName(defaultDir) : 'the Inbox'}
+          </span>
+          <DialogClose className={cn(DIALOG_BUTTON, 'ml-auto')}>
+            Cancel
+          </DialogClose>
+          {existing.length > 0 && (
             <button
               type="button"
-              className="px-3 h-7 rounded-sm border border-border-hover bg-transparent text-[13px] text-foreground cursor-pointer font-inherit hover:bg-hover"
-              onClick={() => start()}
+              className={DIALOG_BUTTON}
+              onClick={() => start(true)}
             >
-              {existing.length > 0 ? 'Resume latest' : 'Start session'}
+              New session anyway <kbd className="ml-1 font-mono text-[11px] text-faint">⌘↵</kbd>
             </button>
+          )}
+          <button
+            type="button"
+            className={DIALOG_PRIMARY}
+            onClick={() => start()}
+          >
+            {existing.length > 0 ? 'Resume latest' : 'Start session'}
+          </button>
+        </>
+      )}
+    >
+      <div className="grid grid-cols-[220px_minmax(0,1fr)] min-h-0 flex-1">
+        <div role="radiogroup" aria-label="Where" className="flex flex-col py-2 border-r border-border overflow-y-auto scrollbar-thin">
+          <div className="px-3 pt-1 pb-1.5 text-[12px] font-semibold text-muted-foreground">Where</div>
+          <button type="button" role="radio" aria-checked={dir === null} className={whereRow(dir === null)} onClick={() => setDir(null)}>
+            <Inbox size={12} className="shrink-0 text-muted-foreground" />
+            <span className="flex-1">Inbox</span>
+            <span className="text-[11px] text-faint">no folder</span>
+          </button>
+          {projects.length > 0 && <div className="h-px mx-3 my-1.5 bg-border" />}
+          {projects.map((p, i) => (
+            <button key={p} type="button" role="radio" aria-checked={dir === p} title={p} className={whereRow(dir === p)} onClick={() => setDir(p)}>
+              <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: `hsl(${projectHue(i)} 60% 62%)` }} />
+              <span className="flex-1 truncate">{folderName(p)}</span>
+              <span className="text-[11px] font-mono tabular-nums text-muted-foreground">{counts.get(p) || ''}</span>
+            </button>
+          ))}
+          <button type="button" className={cn(whereRow(false), 'text-muted-foreground')} onClick={onAddProject}>
+            <Plus size={12} className="shrink-0" />
+            <span>Add a project folder…</span>
+          </button>
+        </div>
+
+        <div className="flex flex-col gap-3 px-4 py-3 min-w-0">
+          <div className="text-[12px] font-semibold text-muted-foreground">What</div>
+          <div role="radiogroup" aria-label="What" className="grid grid-cols-3 gap-2">
+            {KINDS.map((k) => (
+              <button
+                key={k.kind}
+                type="button"
+                role="radio"
+                aria-checked={kind === k.kind}
+                className={cn(
+                  'flex flex-col gap-2 p-2.5 rounded-sm border cursor-pointer font-inherit text-left',
+                  kind === k.kind
+                    ? 'border-primary bg-primary/10 text-foreground'
+                    : 'border-border bg-transparent text-dim hover:border-border-hover',
+                )}
+                onClick={() => setKind(k.kind)}
+              >
+                <LayoutThumb kind={k.kind} />
+                <span className="text-[13px] font-semibold text-foreground">{k.label}</span>
+                <span className="text-[11.5px] leading-snug text-muted-foreground">{k.hint}</span>
+              </button>
+            ))}
           </div>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+
+          {jiraOn(settings) && (
+            <label className="flex flex-col gap-1.5">
+              <span className="text-[12px] font-semibold text-muted-foreground">
+                Jira issue <span className="font-normal text-faint">— optional, a key or a link</span>
+              </span>
+              <input
+                value={issueInput}
+                onChange={(e) => setIssueInput(e.target.value)}
+                placeholder="ABC-123"
+                spellCheck={false}
+                autoComplete="off"
+                className="h-[30px] px-2.5 rounded-sm border border-border bg-background font-mono text-[12px] text-foreground placeholder:text-faint outline-none focus:border-border-hover"
+              />
+              {issueKey && (
+                <span className="text-[11px] leading-snug text-muted-foreground truncate">
+                  {issueTitle || issueError || (jiraTokenVar ? 'Looking it up…' : issueKey)}
+                </span>
+              )}
+            </label>
+          )}
+
+          {existing.length > 0 && (
+            <div data-existing-sessions className="rounded-sm border border-border overflow-hidden">
+              <div className="flex items-center gap-1.5 px-2.5 h-7 border-b border-border text-[12px] text-dim">
+                <History size={12} className="text-muted-foreground" />
+                {issueKey} already has {existing.length} session{existing.length === 1 ? '' : 's'}
+              </div>
+              {existing.slice(0, 3).map((t, i) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => resume(t.id)}
+                  className={cn(
+                    'flex items-center gap-2 w-full h-[30px] px-2.5 border-none cursor-pointer font-inherit text-left text-[12.5px]',
+                    i === 0 ? 'bg-selected text-foreground' : 'bg-transparent text-dim hover:bg-hover hover:text-foreground',
+                  )}
+                >
+                  <span className="flex-1 truncate">{t.name}</span>
+                  {!!t.writes && (
+                    <span className="flex items-center gap-0.5 font-mono tabular-nums text-[10.5px] text-muted-foreground">
+                      <Pencil size={10} />{t.writes}
+                    </span>
+                  )}
+                  <span className="font-mono tabular-nums text-[11px] text-muted-foreground">{compactAge(seenAt(t), now)}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          <label className="flex flex-col gap-1.5">
+            <span className="text-[12px] font-semibold text-muted-foreground">
+              Name <span className="font-normal text-faint">— optional{kind !== 'shell' && ', Claude names it otherwise'}</span>
+            </span>
+            <input
+              ref={nameRef}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Code review session"
+              spellCheck={false}
+              autoComplete="off"
+              className="h-[30px] px-2.5 rounded-sm border border-border bg-background text-[13px] text-foreground placeholder:text-faint outline-none focus:border-border-hover font-inherit"
+            />
+          </label>
+          <div className="font-mono text-[11px] text-muted-foreground truncate" title={dir ?? undefined}>
+            {dir ?? '~/.tmt/scratch/<new>'}
+          </div>
+        </div>
+      </div>
+
+    </ModalDialog>
   );
 }

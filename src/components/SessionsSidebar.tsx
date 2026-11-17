@@ -14,6 +14,7 @@ import { ACTION_ROW, cn, folderName } from '@/lib/utils';
 import { projectHue, type AppView, type SessionHistoryEntry, type SessionTool, type Tab } from '@/types';
 import IssueChip, { useIssueName } from './IssueChip';
 import GitBranch from './GitBranch';
+import SessionEditDialog from './SessionEditDialog';
 import { useGitStatus } from '@/lib/git';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
@@ -158,21 +159,21 @@ function SessionRow({
   onOpenInWorkspace: (tabId: string, tool: SessionTool) => void;
 }) {
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(tab.name);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (!editing) return;
-    inputRef.current?.focus();
-    inputRef.current?.select();
-  }, [editing]);
-
-  const commit = () => {
-    const trimmed = draft.trim();
-    if (trimmed && trimmed !== tab.name) onRename(tab.id, trimmed);
-    setEditing(false);
-  };
-  const startRename = () => { setDraft(tab.name); setEditing(true); };
+  const startRename = () => setEditing(true);
+  // Outside the row's element: a portal still bubbles React events to its
+  // parent, and clicks in the dialog shouldn't select or drag the row.
+  const editDialog = editing && (
+    <SessionEditDialog
+      tab={tab}
+      projects={projects}
+      onClose={() => setEditing(false)}
+      onSave={(e) => {
+        if (e.name !== tab.name) onRename(tab.id, e.name);
+        if (e.projectDir !== tab.projectDir) onSetProject(tab.id, e.projectDir);
+        if (e.pinned !== !!tab.pinned) onTogglePin(tab.id);
+      }}
+    />
+  );
   const issue = useIssueName(tab.name);
 
   const age = compactAge(recencyOf(tab, lastUsedAt), now);
@@ -196,29 +197,9 @@ function SessionRow({
     (detail || git) && !compact && 'h-[42px]',
   );
 
-  if (editing) {
-    return (
-      <div className={cn(rowClass, 'cursor-text')}>
-        <div className="flex items-center gap-2 w-full">
-          <StatusDot tab={tab} />
-          <input
-            ref={inputRef}
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onBlur={commit}
-            onKeyDown={(e) => {
-              e.stopPropagation();
-              if (e.key === 'Enter') { e.preventDefault(); commit(); }
-              else if (e.key === 'Escape') { e.preventDefault(); setDraft(tab.name); setEditing(false); }
-            }}
-            className="flex-1 min-w-0 bg-transparent border-none outline-none text-[13px] text-foreground font-inherit"
-          />
-        </div>
-      </div>
-    );
-  }
-
   return (
+    <>
+    {editDialog}
     <div
       data-session-row
       data-selected={selected || undefined}
@@ -273,7 +254,7 @@ function SessionRow({
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="min-w-44" onClick={(e) => e.stopPropagation()}>
-            <DropdownMenuItem onSelect={startRename}><Pencil size={13} /><span>Rename</span></DropdownMenuItem>
+            <DropdownMenuItem onSelect={startRename}><Pencil size={13} /><span>Edit…</span></DropdownMenuItem>
             <DropdownMenuSub>
               <DropdownMenuSubTrigger><FolderInput size={13} /><span>Move to project…</span></DropdownMenuSubTrigger>
               <DropdownMenuSubContent>
@@ -336,6 +317,7 @@ function SessionRow({
         </div>
       )}
     </div>
+    </>
   );
 }
 

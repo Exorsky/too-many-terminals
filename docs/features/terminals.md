@@ -318,20 +318,31 @@ The "+" menu opens terminal tabs of two kinds:
   The list is static per platform (a shell may not be installed; spawning then fails and
   the tab is marked exited).
 
-## Renaming a tab
+## Editing a session (rename, Jira issue, project, pin)
 
-Double-click a tab's name — or pick **Rename** from its right-click menu — to rename it in
-place (`Sidebar.tsx` `TabRow`, local `editing` state): Enter commits, Escape reverts, blur
-commits, an empty/whitespace-only name is discarded. Renames go through the same
-`tabsReducer` `rename` action session history used internally, and persist like anything
-else in the workspace (see [workspace persistence](workspace-persistence.md)).
+Double-click a session row — or pick **Edit…** from its ⋯ menu — to open the **Edit
+session** dialog (`SessionEditDialog.tsx`): Name, Jira issue (a key or a link, shown only
+when Jira is on), Project (Inbox or a project folder) and Pinned. Enter or **Save** applies,
+Escape or Cancel discards; a name that ends up empty isn't saved.
+
+The Jira issue isn't a separate field: it's written into the name as `KEY · name`, the same
+shape New session gives a session started from a ticket, so the chip, the hover card and
+"one ticket, one session" keep reading it from the name. Clearing the field unlinks it;
+text that isn't a key from Settings › Jira's projects disables Save rather than being
+dropped. Each changed field goes through the action it always used (`rename`, project move,
+`pin`), and persists like anything else in the workspace (see
+[workspace persistence](workspace-persistence.md)). The session inspector's name field
+still renames in place.
+
+The dialog is built on `src/components/ui/dialog.tsx` (`ModalDialog`), the shell New session
+uses too: overlay, titled header with ✕, body, footer bar and the two footer button styles.
 
 ## Tab context menu
 
 Right-clicking a tab row opens an app-native menu (Radix `ContextMenu`, wrapped in
 `src/components/ui/context-menu.tsx`) with four actions:
 
-- **Rename** — enters the same in-place edit as double-click.
+- **Edit…** — opens the same Edit session dialog as double-click.
 - **Open directory** — opens the tab's `cwd` (its project folder) in the OS file manager,
   via `ipc.openDirectory` → the opener plugin's `openPath`. Needs the
   `opener:allow-open-path` permission in `capabilities/default.json`.
@@ -383,8 +394,10 @@ does nothing — the terminal's old copy-on-select/paste-on-right-click is gone.
   (counts, narrowing, the lens naming the selection, pressed state, per-row folder line
   dropped once one folder deep, falling back to All when the selected folder is removed,
   the context menu, drag-reorder), the "+" menu in all three shapes, footer and rail
-  navigation, double-click rename (commit/cancel/empty-name-discard), `bucketsOf`,
-  `pillLabel` and `matchesQuery`
+  navigation, `bucketsOf`, `pillLabel` and `matchesQuery`
+- `src/components/SessionEditDialog.test.tsx` — the Edit session dialog: linking a Jira
+  issue, moving and pinning in one save, splitting an existing key out of the name and
+  unlinking it, refusing text that isn't a key
 - `cargo test shell::` / `claude::` — per-platform shell lists and claude command shape
 - `cargo test workspace::` — includes the `pinned` field round-tripping and loading as
   unpinned from a workspace file saved before the field existed

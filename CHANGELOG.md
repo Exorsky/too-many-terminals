@@ -51,6 +51,11 @@ listed here; see `git log` for the full history.
   item `claude-env` (a JSON object of name → secret), so My issues and hover cards
   work after moving tokens out of `settings.json`. Settings now says where the token
   was found ("found in Keychain (claude-env)").
+### Changed
+
+- **Rename is now Edit session.** Double-click a session (or ⋯ › Edit…) opens a dialog
+  with its name, Jira issue, project and pin in one place — link a ticket to a session
+  that started without one, or unlink it, without retyping the name.
 
 ## [0.31.1] - 2026-11-06
 
