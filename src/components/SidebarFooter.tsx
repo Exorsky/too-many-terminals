@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
-import * as ipc from '@/lib/ipc';
-import { useSettings } from '@/lib/settings-store';
-import type { SessionUsageStats, UsageWindow } from '@/types';
+import { useUsageStats } from '@/lib/usage-store';
+import type { UsageWindow } from '@/types';
 
 export function formatDuration(totalSeconds: number): string {
   const s = Math.max(0, Math.round(totalSeconds));
@@ -106,20 +105,8 @@ export default function SidebarFooter({ inline = false, onOpen }: {
   /** Clicking the meter opens the logbook — the usage dashboard. */
   onOpen?: () => void;
 } = {}) {
-  const settings = useSettings();
-  const [stats, setStats] = useState<SessionUsageStats | null>(null);
+  const stats = useUsageStats();
   const [now, setNow] = useState(() => Date.now());
-
-  useEffect(() => {
-    let cancelled = false;
-    const fetchStats = () => {
-      ipc.getSessionUsageStats().then((s) => { if (!cancelled) setStats(s); }).catch(() => {});
-    };
-    fetchStats();
-    // Floor of 5s guards against a corrupt/zero setting spinning the timer.
-    const timer = setInterval(fetchStats, Math.max(5, settings.usageRefreshSeconds) * 1000);
-    return () => { cancelled = true; clearInterval(timer); };
-  }, [settings.usageRefreshSeconds]);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);

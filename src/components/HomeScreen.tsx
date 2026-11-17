@@ -4,7 +4,8 @@ import {
 } from 'lucide-react';
 import * as ipc from '@/lib/ipc';
 import { cn, folderName } from '@/lib/utils';
-import { projectHue, type SessionUsageStats } from '@/types';
+import { useUsageStats } from '@/lib/usage-store';
+import { projectHue, type SessionHistoryEntry } from '@/types';
 import {
   calendarMonthCount, calendarMonths, chartDays, dailyTokens, dayTotal, depth, filterRange, formatCompact,
   formatDuration, hourHistogram, largestSessions, modelShare, pctChange, perProjectTokens, previousRange,
@@ -16,7 +17,13 @@ import SessionCalendar from './SessionCalendar';
 interface HomeScreenProps {
   projects: string[];
   onAddProject: () => void;
+  /** Open a session named on the dashboard — the same resume History does:
+   *  the tab it already has, or a new `--resume` one. */
+  onOpenSession?: (dir: string, entry: SessionHistoryEntry) => void;
 }
+
+/** A dashboard row that opens its session. */
+const SESSION_ROW = 'w-full -mx-2 px-2 py-1.5 rounded-sm border-none bg-transparent text-left font-inherit cursor-pointer hover:bg-hover';
 
 const RANGES: { value: Range; label: string }[] = [
   { value: 7, label: '7 days' },
@@ -231,9 +238,9 @@ function Empty({ children }: { children: React.ReactNode }) {
   return <p className="text-[12px] text-muted-foreground m-0 py-1">{children}</p>;
 }
 
-export default function HomeScreen({ projects, onAddProject }: HomeScreenProps) {
+export default function HomeScreen({ projects, onAddProject, onOpenSession }: HomeScreenProps) {
   const [stats, setStats] = useState<ProjectStat[] | null>(null);
-  const [usage, setUsage] = useState<SessionUsageStats | null>(null);
+  const usage = useUsageStats();
   const [range, setRange] = useState<Range>(30);
   // Fixed for the component's life so the day-bucketing memos stay stable;
   // Home remounts whenever you leave and come back, so it's always fresh.
@@ -253,12 +260,6 @@ export default function HomeScreen({ projects, onAddProject }: HomeScreenProps) 
     ).then((all) => { if (!cancelled) setStats(all.flat()); });
     return () => { cancelled = true; };
   }, [projects]);
-
-  useEffect(() => {
-    let cancelled = false;
-    ipc.getSessionUsageStats().then((u) => { if (!cancelled) setUsage(u); }).catch(() => {});
-    return () => { cancelled = true; };
-  }, []);
 
   const scoped = useMemo(() => (stats ? filterRange(stats, range, now) : []), [stats, range, now]);
   const summary = useMemo(() => summarize(scoped), [scoped]);
@@ -291,6 +292,7 @@ export default function HomeScreen({ projects, onAddProject }: HomeScreenProps) 
   const largestMax = largest[0] ? sessionTokens(largest[0]) : 1;
   const hourMax = Math.max(1, ...hours);
   const peakHour = hours.some((h) => h > 0) ? hours.indexOf(Math.max(...hours)) : null;
+  const open = (s: ProjectStat) => onOpenSession?.(s.projectDir, { sessionId: s.sessionId, preview: s.preview, lastUsedIso: s.lastUsedIso });
   const windows = usage?.available
     ? ([['Session · 5h', usage.session], ['Week · 7d', usage.week]] as const).filter(([, w]) => w)
     : [];
@@ -396,86 +398,6 @@ export default function HomeScreen({ projects, onAddProject }: HomeScreenProps) 
               />
             </div>
 
-            {/* token flow + where it went */}
-            <Card
-              title="Token flow"
-              icon={BarChart3}
-              className="md:col-span-2 xl:col-span-8"
-              aside={SERIES.map((s) => (
-                <span key={s.key} className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full" style={{ background: s.color }} />
-                  {s.label}
-                </span>
-              ))}
-            >
-              <TokenFlow days={days} />
-            </Card>
-            <Card title="Project consumption" icon={Folders} className="md:col-span-2 xl:col-span-4">
-              <div className="flex flex-col gap-3">
-                {projectTokens.length === 0 ? <Empty>Nothing in this window.</Empty> : projectTokens.slice(0, 7).map((p) => (
-                  <div key={p.projectDir} data-project-tokens className="flex flex-col gap-1.5">
-                    <div className="flex items-center gap-2 text-[12.5px]">
-                      <span className="w-2 h-2 rounded-full shrink-0" style={{ background: hue(p.hue) }} />
-                      <span className="flex-1 truncate text-dim">{p.name}</span>
-                      <span className="font-mono tabular-nums text-foreground">{formatCompact(p.tokens)}</span>
-                      <span className="w-9 text-right font-mono tabular-nums text-muted-foreground">{p.pct}%</span>
-                    </div>
-                    <span className="ml-4 h-[5px] rounded-full bg-raised overflow-hidden">
-                      <span className="dash-grow block h-full rounded-full" style={{ width: `${p.pct}%`, background: hue(p.hue, 50) }} />
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </Card>
-
-            {/* sessions: biggest, when, latest */}
-            <Card title="Largest sessions" icon={Trophy} className="xl:col-span-4">
-              <div className="flex flex-col gap-2.5">
-                {largest.length === 0 ? <Empty>Nothing in this window.</Empty> : largest.map((s, i) => (
-                  <div key={s.sessionId} className="grid grid-cols-[14px_minmax(0,1fr)_56px] items-center gap-x-2.5 gap-y-1">
-                    <span className="text-[12px] font-mono tabular-nums text-muted-foreground">{i + 1}</span>
-                    <span className="flex items-baseline gap-2 min-w-0 text-[12.5px]">
-                      <span className="shrink-0 font-mono tabular-nums text-dim">{when(s.lastUsedIso)}</span>
-                      <span className="truncate text-muted-foreground" title={s.preview}>{s.projectName}{s.preview && ` · ${s.preview}`}</span>
-                    </span>
-                    <span className="text-right text-[12px] font-mono tabular-nums text-foreground">{formatCompact(sessionTokens(s))}</span>
-                    <span className="col-start-2 col-span-2 h-[5px] rounded-full bg-raised overflow-hidden">
-                      <span className="dash-grow block h-full rounded-full" style={{ width: `${(sessionTokens(s) / largestMax) * 100}%`, background: hue(s.hue, 50) }} />
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </Card>
-            <Card
-              title="Activity"
-              icon={CalendarDays}
-              className="xl:col-span-4"
-              aside={range === 'all' ? 'last 3 months' : range === 90 ? 'last 3 months' : `${range} days`}
-            >
-              <SessionCalendar months={months} now={now} />
-            </Card>
-            <Card title="Recent activity" icon={Zap} className="md:col-span-2 xl:col-span-4">
-              <div className="flex flex-col gap-3">
-                {recent.length === 0 ? <Empty>Nothing in this window.</Empty> : recent.map((s) => (
-                  <div key={s.sessionId} className="grid grid-cols-[44px_minmax(0,1fr)] gap-x-2.5">
-                    <span className="text-[12px] font-mono tabular-nums text-muted-foreground pt-px">
-                      {new Date(s.lastUsedIso).toDateString() === new Date(now).toDateString() ? clock(s.lastUsedIso) : when(s.lastUsedIso).split(',')[0]}
-                    </span>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-1.5 text-[12.5px]">
-                        <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: hue(s.hue) }} />
-                        <span className="truncate text-dim">{s.projectName}</span>
-                      </div>
-                      <div className="text-[11.5px] font-mono tabular-nums text-muted-foreground">
-                        {formatCompact(sessionTokens(s))} tokens · {s.turns} turn{s.turns === 1 ? '' : 's'}
-                      </div>
-                      {s.preview && <div className="text-[11.5px] text-faint truncate" title={s.preview}>{s.preview}</div>}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </Card>
-
             {/* readouts */}
             <Card title="Token insights" icon={Lightbulb} className="xl:col-span-4">
               <div className="flex flex-col divide-y divide-border">
@@ -531,6 +453,98 @@ export default function HomeScreen({ projects, onAddProject }: HomeScreenProps) 
                   </div>
                 </>
               )}
+            </Card>
+
+            {/* token flow + where it went */}
+            <Card
+              title="Token flow"
+              icon={BarChart3}
+              className="md:col-span-2 xl:col-span-8"
+              aside={SERIES.map((s) => (
+                <span key={s.key} className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full" style={{ background: s.color }} />
+                  {s.label}
+                </span>
+              ))}
+            >
+              <TokenFlow days={days} />
+            </Card>
+            <Card title="Project consumption" icon={Folders} className="md:col-span-2 xl:col-span-4">
+              <div className="flex flex-col gap-3">
+                {projectTokens.length === 0 ? <Empty>Nothing in this window.</Empty> : projectTokens.slice(0, 7).map((p) => (
+                  <div key={p.projectDir} data-project-tokens className="flex flex-col gap-1.5">
+                    <div className="flex items-center gap-2 text-[12.5px]">
+                      <span className="w-2 h-2 rounded-full shrink-0" style={{ background: hue(p.hue) }} />
+                      <span className="flex-1 truncate text-dim">{p.name}</span>
+                      <span className="font-mono tabular-nums text-foreground">{formatCompact(p.tokens)}</span>
+                      <span className="w-9 text-right font-mono tabular-nums text-muted-foreground">{p.pct}%</span>
+                    </div>
+                    <span className="ml-4 h-[5px] rounded-full bg-raised overflow-hidden">
+                      <span className="dash-grow block h-full rounded-full" style={{ width: `${p.pct}%`, background: hue(p.hue, 50) }} />
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </Card>
+
+            {/* sessions: biggest, when, latest */}
+            <Card title="Largest sessions" icon={Trophy} className="xl:col-span-4">
+              <div className="flex flex-col gap-0.5">
+                {largest.length === 0 ? <Empty>Nothing in this window.</Empty> : largest.map((s, i) => (
+                  <button
+                    key={s.sessionId}
+                    type="button"
+                    data-open-session={s.sessionId}
+                    onClick={() => open(s)}
+                    className={cn(SESSION_ROW, 'grid grid-cols-[14px_minmax(0,1fr)_56px] items-center gap-x-2.5 gap-y-1')}
+                  >
+                    <span className="text-[12px] font-mono tabular-nums text-muted-foreground">{i + 1}</span>
+                    <span className="flex items-baseline gap-2 min-w-0 text-[12.5px]">
+                      <span className="shrink-0 font-mono tabular-nums text-dim">{when(s.lastUsedIso)}</span>
+                      <span className="truncate text-muted-foreground" title={s.preview}>{s.projectName}{s.preview && ` · ${s.preview}`}</span>
+                    </span>
+                    <span className="text-right text-[12px] font-mono tabular-nums text-foreground">{formatCompact(sessionTokens(s))}</span>
+                    <span className="col-start-2 col-span-2 h-[5px] rounded-full bg-raised overflow-hidden">
+                      <span className="dash-grow block h-full rounded-full" style={{ width: `${(sessionTokens(s) / largestMax) * 100}%`, background: hue(s.hue, 50) }} />
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </Card>
+            <Card
+              title="Activity"
+              icon={CalendarDays}
+              className="xl:col-span-4"
+              aside={range === 'all' ? 'last 3 months' : range === 90 ? 'last 3 months' : `${range} days`}
+            >
+              <SessionCalendar months={months} now={now} />
+            </Card>
+            <Card title="Recent activity" icon={Zap} className="md:col-span-2 xl:col-span-4">
+              <div className="flex flex-col gap-0.5">
+                {recent.length === 0 ? <Empty>Nothing in this window.</Empty> : recent.map((s) => (
+                  <button
+                    key={s.sessionId}
+                    type="button"
+                    data-open-session={s.sessionId}
+                    onClick={() => open(s)}
+                    className={cn(SESSION_ROW, 'grid grid-cols-[44px_minmax(0,1fr)] gap-x-2.5')}
+                  >
+                    <span className="text-[12px] font-mono tabular-nums text-muted-foreground pt-px">
+                      {new Date(s.lastUsedIso).toDateString() === new Date(now).toDateString() ? clock(s.lastUsedIso) : when(s.lastUsedIso).split(',')[0]}
+                    </span>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 text-[12.5px]">
+                        <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: hue(s.hue) }} />
+                        <span className="truncate text-dim">{s.projectName}</span>
+                      </div>
+                      <div className="text-[11.5px] font-mono tabular-nums text-muted-foreground">
+                        {formatCompact(sessionTokens(s))} tokens · {s.turns} turn{s.turns === 1 ? '' : 's'}
+                      </div>
+                      {s.preview && <div className="text-[11.5px] text-faint truncate" title={s.preview}>{s.preview}</div>}
+                    </div>
+                  </button>
+                ))}
+              </div>
             </Card>
 
             <Card

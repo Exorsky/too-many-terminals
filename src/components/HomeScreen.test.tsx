@@ -6,6 +6,7 @@ import type { SessionStat, SessionUsageStats } from '@/types';
 vi.mock('@/lib/ipc');
 
 import * as ipc from '@/lib/ipc';
+import { resetUsageForTest } from '@/lib/usage-store';
 import HomeScreen from './HomeScreen';
 
 const APP = 'C:\\code\\claude-terminal';
@@ -35,8 +36,9 @@ const USAGE: SessionUsageStats = {
 
 function setup(projects: string[] = [APP, FLOWS]) {
   const onAddProject = vi.fn();
-  const utils = render(<HomeScreen projects={projects} onAddProject={onAddProject} />);
-  return { onAddProject, ...utils };
+  const onOpenSession = vi.fn();
+  const utils = render(<HomeScreen projects={projects} onAddProject={onAddProject} onOpenSession={onOpenSession} />);
+  return { onAddProject, onOpenSession, ...utils };
 }
 
 /** The big number on a KPI tile, found by the tile's label. */
@@ -51,6 +53,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  resetUsageForTest();
   vi.clearAllMocks();
 });
 
@@ -93,6 +96,16 @@ describe('HomeScreen dashboard', () => {
     await screen.findByRole('heading', { name: 'Project consumption' });
     const rows = [...container.querySelectorAll('[data-project-tokens]')].map((r) => r.textContent);
     expect(rows).toEqual(['claude-terminal100100%', 'my-flows00%']);
+  });
+
+  it('opens a session named on the dashboard', async () => {
+    const { container, onOpenSession } = setup();
+    await screen.findByRole('heading', { name: 'Largest sessions' });
+    // a1 is both the biggest and the latest; the largest list names it first.
+    const rows = container.querySelectorAll<HTMLElement>('[data-open-session="a1"]');
+    expect(rows).toHaveLength(2);
+    await userEvent.click(rows[0]);
+    expect(onOpenSession).toHaveBeenCalledWith(APP, { sessionId: 'a1', preview: 'split the terminal', lastUsedIso: expect.any(String) });
   });
 
   it('shows the live rate-limit percentages', async () => {

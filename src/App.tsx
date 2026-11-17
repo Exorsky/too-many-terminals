@@ -1140,7 +1140,7 @@ export default function App() {
               edge to put another session beside this one. */}
           {onSessions && onLogbook && (
             <div className="absolute inset-0 z-10 bg-background">
-              <HomeScreen projects={projects} onAddProject={handleAddProject} />
+              <HomeScreen projects={projects} onAddProject={handleAddProject} onOpenSession={handleResumeSession} />
             </div>
           )}
           <div
@@ -1192,7 +1192,7 @@ export default function App() {
                   <div className="relative flex-1 min-h-0">
                     {pane.contents.length === 0 ? (
                       <div className="absolute inset-0">
-                        <HomeScreen projects={projects} onAddProject={handleAddProject} />
+                        <HomeScreen projects={projects} onAddProject={handleAddProject} onOpenSession={handleResumeSession} />
                       </div>
                     ) : (
                       // Every tab stays mounted and the inactive ones hide:

@@ -64,6 +64,12 @@ listed here; see `git log` for the full history.
   the largest and the latest sessions, and a few derived insights — beside the
   activity calendar, the live rate limit, models, commands and rhythm. A 90-day
   range joins 7 / 30 / All.
+  Sessions in Largest sessions and Recent activity open on click.
+
+### Fixed
+
+- **Home's Rate limit panel no longer says "unavailable" while the title-bar meter
+  shows your limits.** Both now read the same poll instead of Home fetching once.
 
 ## [0.31.1] - 2026-11-06
 

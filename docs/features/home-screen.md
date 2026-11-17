@@ -28,18 +28,21 @@ none.
 
 ## What each panel shows
 
-A grid of cards (one column, two at `md`, a 12-column layout at `xl`), in this order:
+A grid of cards (one column, two at `md`, a 12-column layout at `xl`), in this
+order — the KPI tiles, then the readouts row (Token insights · Rate limit · Depth &
+models), then Token flow + Project consumption, then the session lists and the
+calendar, then Top commands · Rhythm:
 
 | Panel | Reads | From the transcript |
 | --- | --- | --- |
 | KPI tiles | total tokens · cache hit · avg tokens per turn · sessions — each with a per-day sparkline (hover a day for its value) and a delta vs the previous window | `message.usage` + counts |
 | **Token flow** | stacked columns per day — input, cache (read + write), output — on one axis with round ticks; pointing at a day reads it out in the caption, which otherwise names the peak day | `message.usage` |
 | Project consumption | tokens per folder, biggest first, with its share of the window | `message.usage` + folder |
-| Largest sessions | the five biggest sessions by tokens: when, folder, first prompt, a bar in the folder's hue | `message.usage` |
+| Largest sessions | the five biggest sessions by tokens: when, folder, first prompt, a bar in the folder's hue — click one to open it | `message.usage` |
 | **Activity** | the month grid (`SessionCalendar`) — one square per day, filled by how many sessions ran, tinted by folder | file mtime + folder |
-| Recent activity | the five latest sessions: time, folder, tokens · turns, first prompt | file mtime + counts |
+| Recent activity | the five latest sessions: time, folder, tokens · turns, first prompt — click one to open it | file mtime + counts |
 | Token insights | daily average, peak day, 30-day pace (daily average × 30), tokens per session | derived |
-| Rate limit — live | the official 5h / 7d rate-limit percentages | the `/usage` endpoint, **not** the transcripts — see [usage-meter.md](usage-meter.md) |
+| Rate limit — live | the official 5h / 7d rate-limit percentages — the same read the title-bar meter shows (`useUsageStats`, `src/lib/usage-store.ts`: one poll for the whole app, on the Settings refresh interval) | the `/usage` endpoint, **not** the transcripts — see [usage-meter.md](usage-meter.md) |
 | Top commands | first word of every Bash/PowerShell call, ranked | `tool_use` inputs |
 | Rhythm | current & best day streak, busiest hour, a 24-hour histogram | message timestamps |
 | Depth & models | avg/longest turns, avg/longest duration, token share by model | timestamps + `message.usage` |
@@ -75,8 +78,10 @@ days / 90 days / All (`calendarMonthCount`). Point at a day and the caption unde
 out **date · sessions · tokens · which folders**, so it answers what the square
 is made of rather than quoting one prompt out of context.
 
-Days here are a readout, not buttons: to reopen a past session, use the
-[History panel](session-history.md) or the sidebar. Home passes no
+Days here are a readout, not buttons: to reopen a past session, click it in
+Largest sessions or Recent activity (the same resume the
+[History panel](session-history.md) does — the tab it already has, or a new
+`--resume` one), or use History or the sidebar. Home passes no
 `onSelectDay`, and that absent prop is the whole difference between the two
 surfaces — History's grid is the same component with days you can click.
 

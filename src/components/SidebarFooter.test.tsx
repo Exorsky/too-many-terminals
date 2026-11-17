@@ -5,6 +5,7 @@ import type { SessionUsageStats } from '@/types';
 vi.mock('@/lib/ipc');
 
 import * as ipc from '@/lib/ipc';
+import { resetUsageForTest } from '@/lib/usage-store';
 import SidebarFooter, { formatDuration, paceFraction } from './SidebarFooter';
 
 const IN_2H = new Date(Date.now() + 2 * 60 * 60 * 1000 + 60 * 1000).toISOString();
@@ -24,7 +25,7 @@ function mockStats(stats: SessionUsageStats) {
   vi.mocked(ipc.getSessionUsageStats).mockResolvedValue(stats);
 }
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); resetUsageForTest(); });
 
 describe('formatDuration', () => {
   it('shows hours and minutes under a day, days and hours beyond it', () => {

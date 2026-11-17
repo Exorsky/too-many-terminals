@@ -113,6 +113,9 @@ percentage as live.
 - `src-tauri/Cargo.toml` — `reqwest` with **rustls** rather than the default
   native-tls, so the one network call needs no system OpenSSL on Linux.
 - `src-tauri/src/settings.rs` — `usage_refresh_seconds` (default 300).
+- `src/lib/usage-store.ts` (+ test) — `useUsageStats()`: one poll for the whole
+  app on the `usage_refresh_seconds` interval, shared by this meter and Home's
+  Rate limit panel, so the two always show the same read.
 - `src/components/SidebarFooter.tsx` (+ `SidebarFooter.test.tsx`) — the trigger
   button, `UsageRow`, and the History/Settings menu items. The reset
   countdown ticks locally every second so it doesn't stall between polls. The
