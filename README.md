@@ -63,10 +63,24 @@ Native shells work without it.
   text, an image or a folder listing.
 - **Jump to it.** Open the file in a tab or an app, show it in your file manager, or copy the
   path. A built-in file explorer and editor stay in step with what your sessions write.
-- **Jira keys become links** with hover cards. There is a My issues list, and you can start a
-  session straight from a ticket.
 - **Git at a glance.** Each session shows its branch and dirty state, and a Changes panel
   has diffs and a branch graph.
+
+### Jira, built in
+- **Issue keys are links everywhere.** A key like `PROJ-4821` links in session names and
+  tabs, the title-bar breadcrumb, terminal output and transcripts. Hover it for a card with
+  the status, assignee, priority, dates and the sessions that already mention it.
+- **My issues.** Your open issues, grouped In progress and To do, with a marker when someone
+  else wrote the latest comment.
+- **Start a session from a ticket.** Its first prompt comes from a template you set per
+  project key (`{key}`, `{summary}`, `{url}`). If a session for that ticket is already open,
+  the app offers it instead.
+- **Light on your Jira.** Read-only, no polling: one request when a card opens, cached for
+  ten minutes, and it backs off when Jira rate-limits.
+- **Setup:** Settings › Integrations › Jira. Add the server URL, your project keys and the
+  name of the environment variable holding a personal access token. The app finds the token
+  in its environment, the macOS Keychain item `claude-env` or `~/.claude/settings.json`, and
+  never stores it. Works with Jira Server and Data Center; Jira Cloud isn't supported yet.
 
 ### Know your limits
 - **Usage meter.** The official 5-hour and 7-day rate-limit windows sit in the title bar,
