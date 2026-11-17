@@ -11,6 +11,8 @@ listed here; see `git log` for the full history.
 
 ## [Unreleased]
 
+## [0.32.0] - 2026-11-17
+
 ### Added
 
 - **See what a session changed outside your machine.** A session that posted
@@ -29,6 +31,23 @@ listed here; see `git log` for the full history.
   prompt per project key, e.g. `/inmn-ticket-analysis {key}`, pasted into
   every session started from that project's issues. `{key}`, `{summary}` and
   `{url}` are filled in.
+- **Paths in a transcript's tool calls are links.** A Bash command shown in the
+  transcript (`cd /Users/me/repo && cat notes.txt`) links the files and folders it
+  names that exist, with the same hover card, click-to-pin and ⌘-click as the
+  terminal. A leading `cd` sets where the rest of the line resolves.
+
+### Changed
+
+- **Home is a token dashboard.** KPI tiles (total tokens, cache hit, tokens per
+  turn, sessions) with daily sparklines and a change vs the previous window, a
+  stacked per-day Token flow chart (input / cache / output), tokens per project,
+  the largest and the latest sessions, and a few derived insights — beside the
+  activity calendar, the live rate limit, models, commands and rhythm. A 90-day
+  range joins 7 / 30 / All.
+  Sessions in Largest sessions and Recent activity open on click.
+- **Rename is now Edit session.** Double-click a session (or ⋯ › Edit…) opens a dialog
+  with its name, Jira issue, project and pin in one place — link a ticket to a session
+  that started without one, or unlink it, without retyping the name.
 
 ### Fixed
 
@@ -44,36 +63,13 @@ listed here; see `git log` for the full history.
   the badge, and the badge follows the inspector's Activity count.
 - **New session and My issues offer only Claude sessions for a ticket**, never a
   shell tab named after it.
-### Fixed
-
 - **Jira finds a token kept in the macOS Keychain.** Besides the environment and
   `~/.claude/settings.json`, the token variable is now looked up in the login-Keychain
   item `claude-env` (a JSON object of name → secret), so My issues and hover cards
   work after moving tokens out of `settings.json`. Settings now says where the token
   was found ("found in Keychain (claude-env)").
-### Changed
-
-- **Rename is now Edit session.** Double-click a session (or ⋯ › Edit…) opens a dialog
-  with its name, Jira issue, project and pin in one place — link a ticket to a session
-  that started without one, or unlink it, without retyping the name.
-### Changed
-
-- **Home is a token dashboard.** KPI tiles (total tokens, cache hit, tokens per
-  turn, sessions) with daily sparklines and a change vs the previous window, a
-  stacked per-day Token flow chart (input / cache / output), tokens per project,
-  the largest and the latest sessions, and a few derived insights — beside the
-  activity calendar, the live rate limit, models, commands and rhythm. A 90-day
-  range joins 7 / 30 / All.
-  Sessions in Largest sessions and Recent activity open on click.
-
-### Fixed
-
 - **Home's Rate limit panel no longer says "unavailable" while the title-bar meter
   shows your limits.** Both now read the same poll instead of Home fetching once.
-- **Paths in a transcript's tool calls are links.** A Bash command shown in the
-  transcript (`cd /Users/me/repo && cat notes.txt`) links the files and folders it
-  names that exist, with the same hover card, click-to-pin and ⌘-click as the
-  terminal. A leading `cd` sets where the rest of the line resolves.
 
 ## [0.31.1] - 2026-11-06
 
@@ -703,7 +699,8 @@ listed here; see `git log` for the full history.
 - The transcript reader now renders pipe tables, nested/checkbox lists,
   italics, autolinks, and horizontal rules.
 
-[Unreleased]: https://github.com/Exorsky/too-many-terminals/compare/v0.30.0...HEAD
+[Unreleased]: https://github.com/Exorsky/too-many-terminals/compare/v0.32.0...HEAD
+[0.32.0]: https://github.com/Exorsky/too-many-terminals/compare/v0.31.1...v0.32.0
 [0.31.1]: https://github.com/Exorsky/too-many-terminals/compare/v0.31.0...v0.31.1
 [0.31.0]: https://github.com/Exorsky/too-many-terminals/compare/v0.30.0...v0.31.0
 [0.30.0]: https://github.com/Exorsky/too-many-terminals/compare/v0.29.0...v0.30.0
