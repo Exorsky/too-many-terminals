@@ -32,7 +32,8 @@ describe('SessionEditDialog', () => {
     const onClose = vi.fn();
     render(<SessionEditDialog tab={tab()} projects={['/work/api']} onClose={onClose} onSave={onSave} />);
     await userEvent.type(screen.getByPlaceholderText('ABC-123'), 'https://jira.example.com/browse/PROJ-7');
-    await userEvent.selectOptions(screen.getByLabelText('Project'), '/work/api');
+    await userEvent.click(screen.getByRole('button', { name: 'Project' }));
+    await userEvent.click(await screen.findByRole('menuitemradio', { name: 'api' }));
     await userEvent.click(screen.getByLabelText('Pinned'));
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     expect(onSave).toHaveBeenCalledWith({ name: 'PROJ-7 · Fix alert noise', projectDir: '/work/api', pinned: true });

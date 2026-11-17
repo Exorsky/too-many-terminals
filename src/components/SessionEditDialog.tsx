@@ -1,8 +1,12 @@
 import { useState } from 'react';
+import { ChevronDown, Inbox } from 'lucide-react';
 import { firstIssueKey, jiraOn, parseIssueInput, stripIssueKey } from '@/lib/jira';
 import { useSettings } from '@/lib/settings-store';
 import { folderName } from '@/lib/utils';
-import type { Tab } from '@/types';
+import { projectHue, type Tab } from '@/types';
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger,
+} from './ui/dropdown-menu';
 import ModalDialog, { DIALOG_BUTTON, DIALOG_PRIMARY, DialogClose } from './ui/dialog';
 
 export interface SessionEdit {
@@ -17,6 +21,12 @@ export function composeSessionName(label: string, key: string | null): string {
   const l = label.trim();
   if (!key) return l;
   return l ? `${key} · ${l}` : key;
+}
+
+/** Inbox icon or the project's colour dot — the marks New session's list uses. */
+function ProjectMark({ dir, projects }: { dir: string | null; projects: string[] }) {
+  if (!dir) return <Inbox size={12} className="shrink-0 text-muted-foreground" />;
+  return <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: `hsl(${projectHue(projects.indexOf(dir))} 60% 62%)` }} />;
 }
 
 const FIELD = 'h-[30px] px-2.5 rounded-sm border border-border bg-background text-foreground placeholder:text-faint outline-none focus:border-border-hover';
@@ -105,17 +115,30 @@ export default function SessionEditDialog({ tab, projects, onClose, onSave }: {
           </label>
         )}
 
-        <label className="flex flex-col gap-1.5">
-          <span className={LABEL}>Project</span>
-          <select
-            value={projectDir ?? ''}
-            onChange={(e) => setProjectDir(e.target.value || null)}
-            className={`${FIELD} text-[13px] cursor-pointer font-inherit`}
-          >
-            <option value="">Inbox</option>
-            {projects.map((p) => <option key={p} value={p}>{folderName(p)}</option>)}
-          </select>
-        </label>
+        <div className="flex flex-col gap-1.5">
+          <span id="session-edit-project" className={LABEL}>Project</span>
+          {/* The app's own menu, not the OS select: same look as ⋯ › Move to project. */}
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              aria-labelledby="session-edit-project"
+              className={`${FIELD} flex items-center gap-2 text-[13px] text-left cursor-pointer font-inherit`}
+            >
+              <ProjectMark dir={projectDir} projects={projects} />
+              <span className="flex-1 truncate">{projectDir ? folderName(projectDir) : 'Inbox'}</span>
+              <ChevronDown size={13} className="shrink-0 text-muted-foreground" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-(--radix-dropdown-menu-trigger-width) max-h-64">
+              <DropdownMenuRadioGroup value={projectDir ?? ''} onValueChange={(v) => setProjectDir(v || null)}>
+                {[null, ...projects].map((p) => (
+                  <DropdownMenuRadioItem key={p ?? ''} value={p ?? ''} className="text-[13px]" title={p ?? undefined}>
+                    <ProjectMark dir={p} projects={projects} />
+                    <span className="truncate">{p ? folderName(p) : 'Inbox'}</span>
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
 
         <label className="flex items-center gap-2 text-[13px] text-dim cursor-pointer">
           <input type="checkbox" checked={pinned} onChange={(e) => setPinned(e.target.checked)} />
